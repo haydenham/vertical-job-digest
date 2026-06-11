@@ -7,7 +7,8 @@ of a small, bounded employer universe (~40 companies per vertical), diffs postin
 daily, and delivers a digest of new/closed roles with LLM-written match rationale
 against the user's resume. NOT a live chat agent. NOT a horizontal job board.
 
-Launch verticals (both from day one):
+Launch verticals (both planned day one; **grid/power is built first** — it's the seeded/verified one. Aviation is
+the Week-4 architecture-test add. See Build sequence + D-022):
 1. **Aviation software** — airline ops/tech arms (United, Delta, JetBlue, Southwest,
    Alaska), platforms (Sabre, Amadeus, Navitaire), data/tracking (FlightAware,
    Cirium, Flightradar24), startups (FLYR, Volantio). Scope: early-career
@@ -41,8 +42,10 @@ Builder (Hayden) is the first user — actively recruiting into both verticals.
   per day TOTAL regardless of user count.
 - Pipeline order: fetch → diff → extract → match → verify → send digests.
 - **Matching is push, not pull**: nightly batch keyed on (new posting, active
-  resume) pairs. Cheap pre-filter (level/location/citizenship) before the strong
-  model writes rationale.
+  resume) pairs. **Two cheap gates precede the strong model (D-023):** a free
+  Layer-1 scope gate on the title (in-scope role/geo/level at all — drops
+  out-of-scope postings before any LLM cost), then a cheap level/location/work-auth
+  pre-filter that decides which survivors earn the rationale model.
 - On-demand matching path reserved for exactly three cases: new-user backfill
   (match resume vs all open postings at signup), resume updates (re-match;
   store resume_version per match), and per-posting deep-dive (later, paid tier).
@@ -99,14 +102,15 @@ dashboard.
 
 ## Build sequence
 
-- **Weeks 1–2**: Layer 1 skeleton, aviation only. Employer table,
+- **Weeks 1–2**: Layer 1 skeleton, **grid/power (energy) only** — this is the first-built vertical and the one
+  already seeded/verified (D-022). Employer table,
   Greenhouse/Lever/Ashby fetchers, postings table, diff job, bare-bones daily
   email. NO LLM yet. First diff in inbox = proof-of-loop milestone.
 - **Week 3**: LLM extraction + matching (incl. negative-case rationale +
   verification step). Minimal dashboard ships here: four-column table
   (title, company, apply link, match quality) — the match column requires
   the matching engine, hence the timing.
-- **Week 4**: Add energy vertical. This is the architecture test — must cost
+- **Week 4**: Add **aviation vertical**. This is the architecture test — must cost
   only a weekend of curation + a config file. Any forced code change is a defect.
 - **After**: Workday fetchers, HN extraction, discovery agent, dashboard polish.
 
@@ -117,6 +121,11 @@ dashboard.
 - Per-fetcher health checks with loud alerts; every pipeline run writes a
   summary record. A digest that fails to send is itself an alert.
 - API keys in env config, never in the repo. DB never publicly exposed.
+- **Testing is policy, not preference (this code is model-written).** No behavior is "done" until a test pins it at
+  the right level; bug fixes start with a failing regression test. Default `pytest` (unit+integration+system) stays
+  fast/offline/free; `live`/`eval`/`e2e` are opt-in markers. Full rules: `docs/08-testing-strategy.md`.
+- **Definition of Done + gates:** green tests + lint/format/types + a human-read diff + updated docs, before merge.
+  See `docs/09-dev-workflow.md`.
 - See `docs/` for full planning context: business concept, technical write-up,
   and open-questions ledger.
 
@@ -137,6 +146,8 @@ dashboard.
 - `docs/05-fetcher-interface-spec.md` — the common Fetcher contract + per-ATS modules.
 - `docs/06-vertical-config-spec.md` — "a vertical is config"; the Week-4 test.
 - `docs/07-ats-routing.md` — ATS platform distribution + fetcher build priority (no per-company scrapers).
+- `docs/08-testing-strategy.md` — the four test levels (unit→integration→system→e2e) in this project's terms + when each applies.
+- `docs/09-dev-workflow.md` — Definition of Done, branch/PR/review gate, CI + pre-commit gates, conventions. The "Claude writes it, gates + review make it trustworthy" playbook.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

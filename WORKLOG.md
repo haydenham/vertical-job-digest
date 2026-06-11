@@ -5,6 +5,61 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-11 (end of day) — corrected vertical order + logged two-stage filter
+
+**Did:** Two small but real corrections before code starts.
+- **Energy is the first-built vertical, not aviation (D-022).** The repo was quietly contradicting itself — CLAUDE.md's
+  build sequence said "weeks 1–2 aviation / week-4 energy" while the seed data is grid/power and `docs/06` already
+  treated *aviation* as the week-4 add. Hayden confirmed energy-first. Fixed CLAUDE.md (build sequence + verticals
+  intro), the stray "week-4 energy" references in `docs/08`/`docs/09`, and the D-002 why-line.
+- **Logged the two-stage cheap filter (D-023).** Hayden flagged that the LLM resume-match should sit on top of a
+  cheaper, free filtering layer. Captured the shape: **Stage A** = free scope/relevance gate on the L1 title
+  (in-scope role/geo/level at all) *before any LLM extraction*; **Stage B** = the existing cheap level/location/
+  work-auth pre-filter → `matches.score`; only Stage-B survivors reach the strong rationale model. The concept was
+  already implied (CLAUDE.md pre-filter, `04.score`, `08` unit test) but the *free title-level Stage A* wasn't
+  specified. Full mechanics deferred to the week-3 matching spec. Updated CLAUDE.md execution model to match.
+
+**Readiness check:** confirmed nothing blocks code. The Greenhouse fetcher's inputs are fully specced (`05` contract +
+endpoint, `04` schema + diff lifecycle, D-019 fixtures). Open: aviation seed (week-4), and the eval/matching specs
+(week-3) — neither blocks week-1.
+
+**Next session:** start building. Scaffold the uv project → freeze `Fetcher`/`RawPosting` from `docs/05` → capture one
+real Greenhouse response into `tests/fixtures/` → write the mapping + its unit test. First fetch runs over the verified
+**grid/power** Greenhouse slugs (`amperon`, `camusenergy`, `janestreet`, `yesenergy`).
+
+---
+
+## 2026-06-11 (later still) — testing strategy + dev workflow docs
+
+**Context:** Hayden verified most seed links (a few problematic ones to filter later) and flagged that since
+~all code here is Claude-written, testing must be rigorous. Asked for testing docs (unit→integration→system→e2e),
+a when-to-use protocol, and any other standard dev protocols worth adopting.
+
+**Wrote:**
+- `docs/08-testing-strategy.md` — the four levels in this project's own terms (fetcher mapping + `content_hash`
+  + diff arithmetic as units; fetch→diff→persist, the **no-mass-close-on-failure** guard, extraction-cache reuse,
+  `matches` versioning as integration; whole-pipeline run + idempotency + verification gate as system; live ATS
+  smoke + full real send as opt-in e2e). Plus a dedicated **LLM-as-evals** section (mock the SDK in L1–3; pin model
+  behavior with property assertions + an "obvious no" case, graded with tolerance, metered) and a when-to-write
+  table. Builds on D-019, doesn't contradict it.
+- `docs/09-dev-workflow.md` — Definition of Done, branch/small-PR flow, the human-read-the-diff review gate,
+  CI+pre-commit gates (ruff/mypy/pytest/secret-scan/uv-lock), config-not-code as a checkable rule, and an explicit
+  "what we deliberately skip for now" list.
+
+**Decisions:** D-020 (four-level taxonomy; fast/offline default suite; regression-test-first; LLM evals as a
+**path-filtered merge gate** — structural props block hard, behavioral "obvious-no" cases gate on a threshold, and
+the whole eval job only runs in CI when a PR touches prompt/matching/extraction code), D-021 (DoD + automated gates +
+mandatory human diff review; **mypy** chosen over pyright). Updated CLAUDE.md doc map + a testing/DoD policy bullet.
+
+**Hayden's calls this session:** fine with evals as a real merge gate (token cost ≈ one normal query, worth it to
+catch a prompt regression before it ships in a digest); picked mypy. Design answer to the flake worry = path-filter
+the gate + threshold/majority on behavioral cases, not weaken it.
+
+**Next:** unchanged from prior session — scaffold the uv project and freeze the `Fetcher` interface; first real tests
+land with the GH/Lever/Ashby fetchers (unit mapping tests against captured fixtures = the first thing built under D-020).
+
+---
+
 ## 2026-06-11 (later) — ATS-identification pass
 
 **Did:** Classified all 54 grid/power employers by ATS platform (live endpoint probes → careers-page signature

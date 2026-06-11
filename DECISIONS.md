@@ -20,7 +20,7 @@ L1 ATS spine (deterministic JSON) → L2 LLM extraction (unstructured only, on d
 
 ### D-004 · Nothing vertical-specific in code · accepted
 A vertical is data: employer list + niche sources + matching profile. Adding a vertical must cost only curation + config.
-**Why:** the whole expansion playbook depends on it; week-4 energy add is the test. (CLAUDE.md, Memo 02)
+**Why:** the whole expansion playbook depends on it; the week-4 **aviation** add is the test (energy is built first — D-022). (CLAUDE.md, Memo 02)
 
 ### D-005 · Server-side nightly pipeline; users only read precomputed results · accepted
 All fetching/keys/LLM calls run in the nightly batch. Each ATS endpoint hit once/day total regardless of user count.
@@ -83,3 +83,45 @@ Then iCIMS/Workable/SmartRecruiters/Oracle. Tier-C singletons opportunistically.
 Capture each verified endpoint's response once → golden JSON in `tests/fixtures/`; unit tests assert field
 mappings against fixtures (fast, offline, polite). A separate opt-in `live` smoke test hits real endpoints to catch ATS drift.
 **Why:** live calls in the normal test loop are flaky, slow, and hammer the ATS.
+
+### D-020 · Four-level test taxonomy; default suite is fast/offline/free; LLM evals are a path-filtered merge gate · accepted · 2026-06-11
+Tests are organized unit → integration → system → e2e, pushed down the pyramid. Default `pytest` runs
+unit+integration+system (deterministic, no network, no LLM cost); `live`/`e2e` are opt-in, never block a merge.
+LLM behavior (match/extraction) is mocked in levels 1–3 and pinned by a small **eval** suite: structural properties
+(verdict enum, non-empty fits AND gaps per D-007, level enum) block hard and need no live call; behavioral cases
+(the "obvious no" must return `no`) call the real model and gate on a threshold/majority over a small golden set.
+The eval suite **is a CI merge gate, but only runs on PRs touching prompt/matching/extraction code** — so it guards
+the one trust-critical output (the digest) without taxing unrelated PRs with tokens or flake. Bug fixes start with a
+failing regression test. Full spec: `docs/08`.
+**Why:** the code is model-written, so tests are how we trust it; fast deterministic tests stay green and get run,
+slow/flaky ones rot; LLM output can't be asserted by string equality but its contracts can be, and a prompt
+regression that ships bad rationale costs more trust than the cents the gate costs to catch it.
+
+### D-021 · Definition of Done + automated gates + mandatory human diff review · accepted · 2026-06-11
+Nothing merges to `main` (always-releasable) without: green default suite, `ruff` format+lint, `mypy` (chosen over
+pyright), secret-scan, `uv lock --check`, and — on prompt/matching/extraction PRs only — the path-filtered `eval`
+gate (D-020) — run identically as pre-commit and CI (evals CI-only) — **plus** an automated `/code-review` and a
+human reading the full diff. Small single-idea PRs; docs (`WORKLOG` always, `DECISIONS`/specs as touched) updated as
+part of DoD. Deliberately skipped for now: staging envs, coverage-% gate, gitflow, formal issue tracker. Full spec: `docs/09`.
+**Why:** with a model writing nearly all code, the human's leverage is the review gate + machine-enforced bars, not
+the typing; unreviewed AI code is the project's top risk, and a small diff is the only reviewable one.
+
+### D-022 · Grid/power (energy) is the first-built vertical; aviation is the week-4 architecture-test add · accepted · 2026-06-11
+Build order is energy-first: weeks 1–2 stand up Layer 1 against the grid/power universe (the seeded, ATS-verified
+one — D-015/D-017). Aviation is **not yet seeded** and becomes the week-4 "vertical = config" exam (D-004 / `docs/06`).
+Supersedes the earlier CLAUDE.md build-sequence wording that said "weeks 1–2 aviation only / week-4 add energy" —
+that contradicted the seed data and `docs/06`, which already treated aviation as the added vertical.
+**Why:** you build against the data you actually have verified; energy is curated and endpoint-checked today, aviation
+isn't. The fetcher is vertical-agnostic (D-004), so "first vertical" only picks which seed the week-1 fetch runs over.
+
+### D-023 · Two-stage cheap filtering precedes the LLM match rationale · accepted · 2026-06-11
+Before the strong model writes any resume-match rationale, two cheap, deterministic gates run:
+- **Stage A — scope/relevance gate (free, at Layer 1 on the title):** is this posting even in-scope for the vertical
+  (e.g. software/data role, US, early-career)? Runs on the fetched **title/keywords before any LLM extraction**, so
+  out-of-scope roles (senior, non-eng, wrong geo) are dropped at zero token cost. Resume-independent.
+- **Stage B — match pre-filter (cheap, post-extraction):** for postings that pass Stage A, a level/location/work-auth
+  gate decides which are worth spending the strong model on for a given resume → writes `matches.score`. Resume-aware.
+- Only Stage-B survivors reach the strong-model rationale (which must still state fits/gaps/verdict — D-007).
+Full mechanics deferred to the week-3 matching spec; this entry fixes the **shape** so it isn't re-litigated.
+**Why:** the strong model is the one real cost (D-005); spend it only on postings already known to be in-scope and
+plausibly-matched. The free title-level gate is the cheapest filter and was previously only implied, not specified.
