@@ -136,6 +136,7 @@ dashboard.
 - `docs/04-data-model-spec.md` — concrete schema; the diff keys on `external_id`, not fuzzy match.
 - `docs/05-fetcher-interface-spec.md` — the common Fetcher contract + per-ATS modules.
 - `docs/06-vertical-config-spec.md` — "a vertical is config"; the Week-4 test.
+- `docs/07-ats-routing.md` — ATS platform distribution + fetcher build priority (no per-company scrapers).
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

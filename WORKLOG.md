@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-11 (later) — ATS-identification pass
+
+**Did:** Classified all 54 grid/power employers by ATS platform (live endpoint probes → careers-page signature
+detection → web-search reading ATS domains from result URLs → live endpoint verification incl. the Workday `cxs` API).
+
+**Result — 22 verified / 16 detected / 16 layer2:**
+- **Workday is dominant (15).** The generic `cxs` POST API is **live-verified** for 12 (AES 111, Vistra 193, S&P 234,
+  Shell 174, Duke 96, Xcel 123, CME 69, Trafigura 97, Wood Mac 68, Macquarie 25, PJM 13, Stem 12). One generic fetcher.
+- **Greenhouse 5** (incl. DRW slug `drweng`=147), **Lever 3** (Kraken/Octopus slug `octoenergy`=162, corrects earlier suspect),
+  **Ashby 1** — all verified.
+- **Tier B:** iCIMS 4, Workable 2 (Energy Aspects API valid), Oracle HCM 2, SmartRecruiters 1.
+- **Tier C singletons:** Jobvite, SuccessFactors, Avature, UKG, Eightfold (1 each).
+- **Layer 2 (16):** 3 Radancy/Phenom enterprise portals + 13 custom sites.
+- **Deterministic ceiling ≈ 70%** via ~8 platform fetchers; ~30% → Layer 2. Vindicates "no per-company scrapers."
+
+**Wrote:** `docs/07-ats-routing.md` (distribution + build priority); rewrote `employers_seed.csv` with full
+classification (Workday endpoints encoded as `tenant:dc:site` + full cxs URL); updated seed README, CLAUDE.md doc map,
+and DECISIONS (D-017 no-custom-scrapers, D-018 build order, D-019 fixture-based tests).
+
+**Open fixups:** GE Vernova / BP Workday site-path; Castleton tenant prefix; Vortexa Workable slug; double-check
+Fluence/Enverus/Aurora before defaulting them to Layer 2.
+
+**Next:** scaffold uv project, freeze the `Fetcher` interface, build GH/Lever/Ashby with captured fixtures.
+
+---
+
 ## 2026-06-11 — Planning kickoff + grid/power seed data
 
 **Decided (see DECISIONS.md for the durable record):**

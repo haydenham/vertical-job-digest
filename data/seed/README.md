@@ -16,9 +16,11 @@ It is the input to the Layer 1 ATS spine. Nothing vertical-specific lives in cod
 ## `verification` column — what each value means
 | value | meaning | action needed |
 |---|---|---|
-| `verified` | ATS endpoint was hit live and returned a plausible job list (jobs > 0, right company). | none — trust it |
-| `suspect` | A slug resolved, but the board looks wrong (0 jobs, or likely a different company sharing the name). | confirm the real ATS/slug |
-| `unverified` | No ATS endpoint resolved by slug-probing; `ats_type`/`careers_url` are domain-knowledge best-guesses (mostly Workday/custom portals). | research + confirm |
+| `verified` | ATS endpoint hit live and returned jobs / a valid API. | none — trust it |
+| `detected` | Platform identified (from careers-page signature or search result URL), but the exact endpoint isn't live-confirmed yet. | confirm endpoint when building that fetcher |
+| `layer2` | No clean API; routed to Layer 2 LLM-read-the-page. | none (handled by Layer 2) |
+
+See `docs/07-ats-routing.md` for the full platform distribution and fetcher build priority.
 
 ## Columns
 | column | who fills | values | notes |
@@ -29,21 +31,24 @@ It is the input to the Layer 1 ATS spine. Nothing vertical-specific lives in cod
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
 | `key_cities` | Hayden | free text | US hubs; useful for the location pre-filter |
 | `role_tilt` | Hayden | free text | tech flavor / what kind of roles to expect |
-| `ats_type` | Claude | `greenhouse` \| `lever` \| `ashby` \| `workday` \| `raw_html` \| `unknown` | which fetcher handles this employer |
-| `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). Empty for `workday`/`raw_html`/`unknown`. |
+| `ats_type` | Claude | `greenhouse` \| `lever` \| `ashby` \| `workday` \| `icims` \| `workable` \| `oracle_hcm` \| `smartrecruiters` \| `jobvite` \| `successfactors` \| `avature` \| `ukg` \| `eightfold` \| `radancy` \| `custom` | which fetcher (or Layer 2) handles this employer |
+| `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). For Workday: `tenant:dc:site` (e.g. `aes:wd1:AES_US`). Empty for portal-detected/custom rows. |
 | `careers_url` | Claude | URL | the company's job board / careers page ("the job domain"). Required for `workday`/`raw_html`. |
 | `endpoint` | derived | URL | constructed in code from `ats_type` + `ats_slug` for GH/Lever/Ashby. Filled by hand for `workday`. |
 | `source` | default | `manual` \| `agent_discovered` | how the employer entered the universe. Seed rows are `manual`. |
 | `status` | default | `proposed` \| `approved` \| `active` \| `retired` | seed rows default to `active`. |
-| `verification` | Claude | `verified` \| `suspect` \| `unverified` | confidence in the ATS resolution (see table above). |
+| `verification` | Claude | `verified` \| `detected` \| `layer2` | confidence in the ATS resolution (see table above). |
 | `notes` | optional | free text | anything useful (parent company, ATS quirks, why included). |
 
-For Greenhouse/Lever/Ashby the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`,
-so those rows do not need a full URL. Only Workday and raw-HTML employers need `careers_url`/`endpoint`.
+For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`.
+For Workday, `endpoint` holds the full `cxs` jobs URL. Portal-detected (iCIMS/Oracle/etc.) and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)
-- **7 verified** (live ATS): Amperon, Arcadia, Camus Energy, Jane Street, Voltus, Yes Energy, WeaveGrid.
-- **3 suspect** (slug resolved but board looks wrong): Constellation Energy, Koch Industries, Kraken (Octopus).
-- **44 unverified** (Workday/custom guesses): the big utilities, banks, quant funds, exchanges, and a few startups.
+After the ATS-identification pass (see `docs/07-ats-routing.md`):
+- **22 verified** (live endpoint): all Greenhouse (5), Lever (3), Ashby (1), 12 Workday, 1 Workable.
+- **16 detected** (platform known, endpoint TBD): remaining Workday (3), iCIMS (4), Oracle HCM (2), SmartRecruiters, Jobvite, Workable, SuccessFactors, Avature, UKG, Eightfold.
+- **16 layer2** (no clean API → LLM-read): 3 Radancy/Phenom portals + 13 custom sites.
+
+**Deterministic ceiling ≈ 70%** of the universe via ~8 generic platform fetchers; ~30% routes to Layer 2.
 
 Aviation vertical is not yet seeded.

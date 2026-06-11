@@ -66,3 +66,20 @@ Hayden owns `name` + priority columns; Claude probes Greenhouse/Lever/Ashby to m
 ### D-016 · Diff identity = ATS `external_id`, NOT fuzzy title-match · accepted · 2026-06-11
 The daily diff keys on a stable per-employer external id from the ATS. Fuzzy title+company+location matching is a *separate, later* concern for cross-source dedup only.
 **Why:** conflating the two makes the daily diff noisy and wrong. See `docs/04-data-model-spec.md`.
+
+### D-017 · No per-company scrapers; route to generic platform fetchers, else Layer 2 · accepted · 2026-06-11
+The ATS-identification pass showed the 54-company universe collapses into ~8 platforms, not 54 bespoke sites.
+Build generic fetchers per *platform* (Workday/Greenhouse/Lever/Ashby cover 44%; +iCIMS/Workable/Oracle/SmartRecruiters → ~61%);
+the ~30% custom/portal tail goes to **Layer 2 LLM-read**, not hand-written scrapers.
+**Why:** N custom scrapers is the documented #1 maintenance/abandonment risk (Memo 01/07). Per-*platform* fetchers
+are deterministic AND low-maintenance; the LLM fallback handles the bespoke tail with zero per-company code.
+A hand scraper is a deliberate, logged exception reserved for a must-have, high-volume, otherwise-unreachable employer. See `docs/07-ats-routing.md`.
+
+### D-018 · Fetcher build order: Greenhouse/Lever/Ashby → Workday → Tier-B → Layer 2 · accepted · 2026-06-11
+Weeks 1–2 ship GH/Lever/Ashby (9 companies, verified). Workday next (15 companies, `cxs` API live-verified).
+Then iCIMS/Workable/SmartRecruiters/Oracle. Tier-C singletons opportunistically. Layer 2 absorbs the rest.
+
+### D-019 · Tests run against captured fixtures, not live ATS endpoints · accepted · 2026-06-11
+Capture each verified endpoint's response once → golden JSON in `tests/fixtures/`; unit tests assert field
+mappings against fixtures (fast, offline, polite). A separate opt-in `live` smoke test hits real endpoints to catch ATS drift.
+**Why:** live calls in the normal test loop are flaky, slow, and hammer the ATS.
