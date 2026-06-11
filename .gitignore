@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / virtualenv
+.venv/
+venv/
+.python-version
+
+# Environment & secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Pipeline state (databases are generated, not source)
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Jupyter
+.ipynb_checkpoints/

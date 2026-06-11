@@ -1,0 +1,35 @@
+**Vertical Job Intelligence Agent**
+
+*Future Directions and Open Questions*
+
+Internal planning memo — Hayden Hamilton — June 2026
+
+# 1. Growth
+
+Distribution is the least-developed part of the plan and should be treated as a hypothesis under test, not a settled channel. The working theory is that each vertical comes with a watering hole — a subreddit, a Slack or Discord, a forum — where the audience already gathers, and that a genuinely useful free digest earns its way into those communities through word of mouth. Energy has strong watering holes (Work on Climate, the power-markets corner of Twitter, r/energy); aviation software’s community skews toward pilots rather than software people, which makes it the weaker distribution story despite being the stronger founder-fit story. The honest unknown: posting a tool into a community once is not growth, and there is no second move sketched yet.
+
+Expansion to a third vertical is gated, not scheduled. The gates are operational (the pipeline runs itself with minimal weekly babysitting) and behavioral (users in existing verticals retain — starting with the founder reading his own digest past week six). Vertical three candidates, in rough order: defense tech and dual-use startups, sports analytics, maritime tech. A standing idea worth keeping warm: the discovery agent’s technique of walking VC portfolios and conference sponsor lists is itself a vertical-bootstrapping tool, meaning new verticals could eventually be semi-automated to spin up — the playbook becoming software.
+
+Open growth questions: Is the digest shareable in a way that creates referral loops, or is it inherently private? Do employers in a niche ever become the customer (sponsored visibility to a perfectly targeted audience) and does that corrupt the trust the product depends on? Is there a community or content angle — a weekly “state of aviation software hiring” post generated from corpus trends — that doubles as marketing? And what is the actual name of this product?
+
+# 2. Security, Legal, and Ethics
+
+The legal posture differs sharply by mode. As a personal tool, polite ingestion of public job postings is benign and nobody is coming after it. As a product with users, three exposures need real answers before launch: the terms-of-service status of undocumented ATS endpoints (public but not promised), the scraping posture for long-tail HTML pages (robots.txt respect, rate limits, identifiable user agent — politeness as policy, not just etiquette), and whether any source explicitly prohibits aggregation. The aggregator-startup graveyard is full of companies that deferred this question. A useful norm regardless of mode: the tool sends users to the employer’s own apply page rather than reproducing or intermediating the posting, which keeps it firmly in the traffic-referral category employers generally like.
+
+Security and privacy concerns center on the resume. The matching engine holds the most sensitive artifact a job seeker has, and a multi-user future means storing resumes (PII), match histories, and email addresses. Decisions needed before any second user: where resumes live, how long they are retained, whether match rationales are stored or regenerated, and what the deletion story is. Operationally: API keys in environment configuration and never in the repository, the database not exposed publicly, and email delivery through a reputable transactional provider both for deliverability and to avoid the digest landing in spam — a digest nobody sees is a product that does not exist. One ethical line worth writing down now: the tool surfaces and reasons about postings; it does not auto-apply. Automated application submission is a different product with a different consent model and a good way to burn trust with the small employer community the verticals depend on.
+
+# 3. Cost and Pricing
+
+Cost structure by layer, in rough shape rather than precise numbers: Layer 1 is effectively free — HTTP requests and a small database, pennies per month per vertical. Layer 2 is the meterable cost: extraction calls on new and changed postings only, on a cheap model, with caching against content hashes; matching calls on the strongest model, but only for postings that survive extraction and dedup. For a forty-employer vertical producing a handful of new postings a day, single-user costs should land in the dollars-per-month range, but this is an estimate that needs measuring, which is why metering is a week-one feature rather than a someday feature. Layer 3 runs weekly and is bounded by design. The cost question that actually matters for the future is marginal cost per additional user, since Layer 1 is shared across all users of a vertical while matching is per-user — meaning the expensive layer and the personalized layer are the same layer, which is exactly the pricing seam.
+
+Pricing remains exploratory. The working hypothesis is a free tier (daily digest, one vertical, generic relevance) and a paid tier (resume-matched rationale, multiple verticals, discovery-agent coverage of the long tail), with active-seeker price anchors in the ten-to-twenty-dollar monthly range. Unresolved questions: whether job seekers — a transient population by definition — will pay at all, or whether the durable customer is someone else (career coaches, university career centers, recruiters wanting niche-market visibility); whether churn-on-success (the user gets hired and leaves) is fatal to subscription economics or fine because the audience replenishes; and whether per-vertical pricing or all-access pricing fits a user who is usually targeting exactly one industry.
+
+# 4. Open Questions Ledger
+
+**Product. **What is the name? Does the digest live in email forever or does the dashboard become primary? What does the feedback loop look like — thumbs up or down on matches feeding back into the matching prompt? Should closed-posting data (lifespan per company) be surfaced to users as apply-speed guidance?
+
+**Technical. **How is the Workday problem actually solved per company, and is it worth it before the dashboard exists? What is the dedup precision target, and when does LLM adjudication get invoked? When, if ever, does the discovery agent earn auto-approval? What is the migration trigger from SQLite to Postgres? How is match quality measured — founder spot-checks now, but what is the metric when there are users?
+
+**Strategic. **Is energy actually the founder’s recruiting market by fall 2026, and does the answer change vertical priority? If a funded competitor enters the vertical-job-intelligence lane, is the response to compete, to niche down further, or to fold the learning into the job search and walk away satisfied? And the standing kill criterion, restated so it cannot be quietly forgotten: if the founder stops reading his own digest by week three, the product hypothesis is falsified and the project reverts to what it always was at minimum — a portfolio piece and a story.
+
+Page
