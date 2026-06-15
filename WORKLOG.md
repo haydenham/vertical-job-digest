@@ -5,6 +5,29 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 3: content_hash canonicalization
+
+**Did:** Built the extraction cache's correctness primitive (`docs/04` §3).
+- `src/vja/hashing.py`: `content_hash(*, title, location, description) -> str` — hex SHA-256 over a canonical,
+  sorted-key JSON object of the **stable fields only**. `_normalize` collapses whitespace runs + strips (so reflowed
+  HTML / trailing newlines don't churn the hash) while keeping case. Volatile junk (view counts, "updated X ago",
+  tracking params, request timestamps) is excluded *by construction* — it's never passed in.
+- `tests/unit/test_hashing.py`: 9 unit tests — determinism + 64-char hex shape; a **golden-value regression lock** on
+  the canonical form (so any normalization change is a deliberate, reviewed decision rather than a silent cache-wide
+  invalidation); whitespace-invariance; None≡empty; sensitivity to each of title/location/description; case-significance;
+  and a volatile-payload-exclusion test documenting intended caller usage.
+
+**Note:** `content_hash` is the pure function only. Wiring it to each ATS's description field (Greenhouse `content`,
+Lever/Ashby `descriptionPlain`) lives in the fetcher/persist chunks — `RawPosting` carries the description inside
+`raw`, so extraction of the stable description is per-ATS and comes later.
+
+**Gates:** ruff format/check, mypy (strict), pytest (**17 passed**) all green.
+
+**Next:** Chunk 4 — endpoint construction + the Greenhouse fetcher + a captured fixture (`tests/fixtures/greenhouse.json`)
++ mapping unit test + opt-in `-m live` smoke. On a fresh `feat/greenhouse-fetcher` branch.
+
+---
+
 ## 2026-06-15 — Chunk 2: domain models + Fetcher contract
 
 **Did:** Froze the contract everything builds on (`docs/04`/`05`).
