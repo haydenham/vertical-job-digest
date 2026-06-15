@@ -5,6 +5,43 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 1b: CI workflow + pre-commit (gates machine-enforced)
+
+**Did:** Made the D-021 gate suite enforceable, not just locally runnable. Bundled with Chunk 1 as one
+"project setup" change (CI has nothing to gate until the scaffold exists).
+- `.github/workflows/ci.yml`: two jobs on `pull_request` + push-to-`main` — `gates` (`uv lock --check` →
+  `uv sync --locked` → ruff format/check → mypy → pytest) and `secrets` (gitleaks, full-history). Pinned actions
+  (`checkout@v4`, `astral-sh/setup-uv@v5` w/ cache, `gitleaks-action@v2`); `concurrency` cancels superseded runs.
+- `.pre-commit-config.yaml`: local-repo hooks that shell out to `uv run` (single source of truth for tool versions)
+  — ruff format, ruff check, mypy, pytest. Mirrors CI (`docs/09` "same checks, two moments").
+- Added `pre-commit` to the dev group; re-locked.
+
+**Deferred on purpose:** the path-filtered `eval` gate (D-020/D-021) — no prompt/matching code exists to evaluate
+yet; it lands with the Week-3 matching engine, the change it actually guards.
+
+**Gates:** `uv lock --check`, ruff format/check, mypy (strict), pytest all green; `pre-commit run --all-files`
+passes all four hooks; both YAML files parse. CI's own proof is the first PR running green on GitHub.
+
+**Next:** push this branch → open the "project setup" PR (scaffold + CI) → confirm CI green. Then resume
+branch-per-chunk with **Chunk 2** (domain models + Fetcher contract) on a fresh `feat/domain-models`.
+
+---
+
+## 2026-06-15 — Chunk 1: uv scaffold + tooling (first code)
+
+**Did:** Stood up the Python project. Code starts here.
+- Installed `uv` (0.11.21) via the standalone installer — Homebrew couldn't resolve `formulae.brew.sh` in this env; the standalone installer worked. uv lives at `~/.local/bin` (D-014).
+- `pyproject.toml`: package `vja` (src layout, hatchling build), runtime dep `httpx`; dev group `pytest`/`ruff`/`mypy`/`respx`/`freezegun`. Ruff (E,F,I,UP,B,SIM, line-length 100), `mypy --strict`, pytest config with the opt-in markers `live`/`e2e`/`eval` excluded from the default run (D-020/`docs/08`).
+- `src/vja/__init__.py` (carries the D-004 "no vertical-specific code" rule as a module docstring), `tests/unit/test_scaffold.py` smoke test, `uv.lock` committed.
+
+**Gates:** `ruff format --check`, `ruff check`, `mypy` (strict), `pytest` all green off a clean tree.
+
+**Decisions:** none re-litigable; import package named `vja` (Hayden-approved). No DECISIONS entry needed.
+
+**Next:** Chunk 2 — freeze the domain models + Fetcher contract (`models.py`: `RawPosting`/`Employer`/enums per `docs/05`; `fetchers/base.py`: `Fetcher` Protocol + `FetchError`), with a `RawPosting` immutability unit test. Pause for diff review before Chunk 3.
+
+---
+
 ## 2026-06-11 (end of day) — corrected vertical order + logged two-stage filter
 
 **Did:** Two small but real corrections before code starts.

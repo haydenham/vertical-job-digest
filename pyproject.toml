@@ -1,0 +1,54 @@
+[project]
+name = "vja"
+version = "0.0.1"
+description = "Vertical Job Intelligence Agent — scheduled pipeline that diffs a bounded employer universe and emails a reasoned digest."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28",
+]
+
+[project.scripts]
+# CLI entry points get wired here as the pipeline grows (fetch, diff, send).
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "respx>=0.22",
+    "freezegun>=1.5",
+    "pre-commit>=4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vja"]
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# A pragmatic, strict-enough default. Expand deliberately, not reflexively.
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Opt-in tiers (docs/08): default run is unit+integration+system only.
+# `live`/`e2e`/`eval` never run in the inner loop or block a merge unless asked.
+addopts = "-m 'not live and not e2e and not eval'"
+markers = [
+    "live: hits real ATS endpoints (opt-in; catches ATS drift, not logic)",
+    "e2e: full real pipeline incl. network/LLM/email (opt-in, milestone-only)",
+    "eval: pins LLM match/extraction behavior (opt-in; path-filtered CI merge gate)",
+]
