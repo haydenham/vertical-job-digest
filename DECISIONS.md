@@ -125,3 +125,19 @@ Before the strong model writes any resume-match rationale, two cheap, determinis
 Full mechanics deferred to the week-3 matching spec; this entry fixes the **shape** so it isn't re-litigated.
 **Why:** the strong model is the one real cost (D-005); spend it only on postings already known to be in-scope and
 plausibly-matched. The free title-level gate is the cheapest filter and was previously only implied, not specified.
+
+### D-024 · Freshness: digest relies on the diff; backfill caps at 2 weeks · accepted · 2026-06-15
+Application success drops sharply ~1–2 weeks after a role is posted, so output must skew fresh. Policy:
+- **Nightly digest needs no staleness expiry** — because it's a *diff*, each posting is surfaced **once, the night
+  it's first detected** (it enters the `new` set), never re-shown while it stays open. Freshness is automatic; a job
+  open for weeks does not reappear or clutter the digest. This is the strict-daily behavior (D-009 / `docs/04` lifecycle).
+- **New-user backfill caps at ~2 weeks** — backfill matches the resume against *all currently-open* postings (D-006),
+  where every open role is "new to us" even if posted months ago. Cap to postings within ~14 days, preferring the
+  ATS `posted_at` (Greenhouse `first_published`/`updated_at`, Ashby `publishedAt`, Lever `createdAt`) and falling back
+  to `first_seen_at`. The 14-day figure is a starting default, tunable against the per-company **lifespan data** the
+  diff already collects (`closed_at − first_seen_at`).
+- **Dashboard ages out / flags old open postings** — the one pull surface that shows the full open set, so it (unlike
+  the digest) needs an explicit recency treatment.
+Full mechanics deferred to the **week-3 digest/matching spec**; this entry fixes the **policy** so it isn't re-litigated.
+**Why:** the diff gives daily freshness for free, so a cap only matters where we present the whole open set (backfill,
+dashboard); a hard flood of months-old roles at signup would bury the timely ones and falsify the "apply fast" value.
