@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 5: Lever + Ashby fetchers (Tier-A complete)
+
+**Did:** Added the two remaining clean-JSON fetchers, same pattern as Greenhouse — completing all 9 verified
+GH/Lever/Ashby companies.
+- `src/vja/fetchers/lever.py`: `LeverFetcher`. Lever returns a bare JSON **array** (no wrapper). Mapping
+  (`docs/05`): `external_id = id`, `title = text`, `apply_url = applyUrl or hostedUrl`,
+  `location = categories.location`. `createdAt` is epoch-millis (int) → stringified into `updated_at` to keep the
+  `RawPosting` type contract. Loud `FetchError` on non-array / no apply link / the usual transport+parse paths.
+- `src/vja/fetchers/ashby.py`: `AshbyFetcher`. Returns `{"jobs":[…]}`. Mapping: `external_id = id`,
+  `title = title`, `apply_url = applyUrl or jobUrl`, `location = location` (non-string → None),
+  `updated_at = publishedAt`.
+- Both reuse `build_endpoint` (added in Chunk 4) — no new endpoint code.
+- Fixtures: real captures trimmed to 3 jobs each — `tests/fixtures/lever.json` (`voltus`),
+  `tests/fixtures/ashby.json` (`weave-grid`) (D-019).
+- Tests: 7 Lever + 7 Ashby units via respx (mapping, apply-URL fallback, missing-location → None, empty board,
+  shape-mismatch + transport + no-apply-link FetchError paths); 2 opt-in `-m live` smokes.
+
+**Verified:** default suite **46 passed, 3 deselected**; mypy strict clean; ruff clean. Ran `-m live` —
+**all 3 fetchers (GH/Lever/Ashby) pass against real endpoints.**
+
+**Next:** Chunk 6 — diff set arithmetic (pure `compute_diff(fetched_ids, stored_open_ids) → new/still_present/closed`,
+all empty cases), the last pure-logic piece before DB/persist. Fresh `feat/diff-arithmetic` branch.
+
+---
+
 ## 2026-06-15 — Chunk 4: endpoint construction + Greenhouse fetcher (first real fetch)
 
 **Did:** Stood up the first Layer-1 fetcher — the loop now pulls real postings.
