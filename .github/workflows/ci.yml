@@ -1,0 +1,52 @@
+name: CI
+
+# The D-021 gate suite, machine-enforced. Mirrors the pre-commit hooks
+# (docs/09: "same checks, two moments"). A PR cannot merge red.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Lockfile in sync (D-014)
+        run: uv lock --check
+
+      - name: Install deps
+        run: uv sync --locked
+
+      - name: Format (ruff)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Types (mypy)
+        run: uv run mypy
+
+      - name: Tests (unit + integration + system)
+        run: uv run pytest
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans full history on PRs
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

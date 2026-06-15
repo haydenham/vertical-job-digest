@@ -5,6 +5,28 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 1b: CI workflow + pre-commit (gates machine-enforced)
+
+**Did:** Made the D-021 gate suite enforceable, not just locally runnable. Bundled with Chunk 1 as one
+"project setup" change (CI has nothing to gate until the scaffold exists).
+- `.github/workflows/ci.yml`: two jobs on `pull_request` + push-to-`main` — `gates` (`uv lock --check` →
+  `uv sync --locked` → ruff format/check → mypy → pytest) and `secrets` (gitleaks, full-history). Pinned actions
+  (`checkout@v4`, `astral-sh/setup-uv@v5` w/ cache, `gitleaks-action@v2`); `concurrency` cancels superseded runs.
+- `.pre-commit-config.yaml`: local-repo hooks that shell out to `uv run` (single source of truth for tool versions)
+  — ruff format, ruff check, mypy, pytest. Mirrors CI (`docs/09` "same checks, two moments").
+- Added `pre-commit` to the dev group; re-locked.
+
+**Deferred on purpose:** the path-filtered `eval` gate (D-020/D-021) — no prompt/matching code exists to evaluate
+yet; it lands with the Week-3 matching engine, the change it actually guards.
+
+**Gates:** `uv lock --check`, ruff format/check, mypy (strict), pytest all green; `pre-commit run --all-files`
+passes all four hooks; both YAML files parse. CI's own proof is the first PR running green on GitHub.
+
+**Next:** push this branch → open the "project setup" PR (scaffold + CI) → confirm CI green. Then resume
+branch-per-chunk with **Chunk 2** (domain models + Fetcher contract) on a fresh `feat/domain-models`.
+
+---
+
 ## 2026-06-15 — Chunk 1: uv scaffold + tooling (first code)
 
 **Did:** Stood up the Python project. Code starts here.
