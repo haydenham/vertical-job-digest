@@ -33,7 +33,7 @@ The curated universe. One row per company. Mirrors `data/seed/employers_seed.csv
 | `category` | TEXT | e.g. Utility / IPP, Quant Fund |
 | `key_cities` | TEXT | US hubs (location pre-filter hint) |
 | `role_tilt` | TEXT | expected role flavor |
-| `ats_type` | TEXT NOT NULL | `greenhouse` \| `lever` \| `ashby` \| `workday` \| `raw_html` \| `unknown` |
+| `ats_type` | TEXT NOT NULL | L1: `greenhouse` \| `lever` \| `ashby` \| `workday`; future fetchers: `icims` \| `workable` \| `oracle_hcm` \| `smartrecruiters` \| `jobvite` \| `successfactors` \| `avature` \| `ukg` \| `eightfold`; Layer 2: `radancy` \| `custom` \| `raw_html`; `unknown`. Mirrors the seed CSV + `docs/07`; enum source of truth is `vja.models.AtsType`. |
 | `ats_slug` | TEXT | company token for GH/Lever/Ashby; NULL otherwise |
 | `careers_url` | TEXT | for workday/raw_html (and human reference) |
 | `endpoint` | TEXT | constructed from type+slug for GH/Lever/Ashby; hand-set for workday |

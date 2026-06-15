@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 2: domain models + Fetcher contract
+
+**Did:** Froze the contract everything builds on (`docs/04`/`05`).
+- `src/vja/models.py`: `RawPosting` and `Employer` as frozen, slotted dataclasses (value objects — a fetcher is a
+  pure read and never mutates them); schema enums `AtsType`, `Level`, `RemoteType`, `Verdict` as `StrEnum` so a
+  member's `.value` is exactly the string the DB stores. `RawPosting.external_id` documented as THE diff key (D-016),
+  never synthesized from the title.
+- `src/vja/fetchers/base.py`: the `Fetcher` `Protocol` (`runtime_checkable`) + `FetchError`, whose docstring pins the
+  highest-stakes rule — a raised `FetchError` must never be read as "zero open jobs" (no mass-close on failure).
+- `tests/unit/test_models.py`: 7 unit tests — field mapping, `None`-optionals, immutability (frozen raises), enum
+  `.value` strings + value→member round-trip (used by the later seed import), Protocol conformance, `FetchError` type.
+
+**Spec reconciliation:** `docs/04` §1's `ats_type` list was narrower than the seed CSV (missing `icims`, `radancy`,
+`custom`, etc.). Modeled `AtsType` as the full superset (grouped by build tier per `docs/07`) and updated `docs/04`
+to match, naming `vja.models.AtsType` as the enum source of truth. **Open:** the `verification` enum has the same
+drift (`docs/04` says verified/suspect/unverified; seed uses verified/detected/layer2) — defer to the DB-import chunk
+where it's consumed.
+
+**Gates:** ruff format/check, mypy (strict), pytest (8 passed) all green.
+
+**Next:** Chunk 3 — `content_hash` canonicalization (pure fn + hard unit tests: invariant under volatile junk + key
+order; changes with description). On a fresh `feat/content-hash` branch.
+
+---
+
 ## 2026-06-15 — Chunk 1b: CI workflow + pre-commit (gates machine-enforced)
 
 **Did:** Made the D-021 gate suite enforceable, not just locally runnable. Bundled with Chunk 1 as one
