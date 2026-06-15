@@ -5,6 +5,34 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 4: endpoint construction + Greenhouse fetcher (first real fetch)
+
+**Did:** Stood up the first Layer-1 fetcher — the loop now pulls real postings.
+- `src/vja/fetchers/endpoints.py`: `build_endpoint(employer)` — derives the URL from `ats_slug` for
+  Greenhouse/Lever/Ashby; uses the explicit `endpoint` column for Workday/others; raises `ValueError`
+  (a *config* defect, distinct from a runtime `FetchError`) when neither is possible.
+- `src/vja/fetchers/greenhouse.py`: `GreenhouseFetcher` (satisfies the `Fetcher` Protocol). GET
+  `…/boards/{slug}/jobs?content=true`, maps each job per `docs/05` (`external_id = str(id)` — D-016 string
+  key; `title`; `apply_url = absolute_url`; `location = location.name`; `updated_at`; full job → `raw`).
+  Every failure mode is loud: non-200, network error, non-JSON, missing `jobs` list, non-object job, and
+  missing required field all raise `FetchError` — never a silent empty/garbage result. Injectable httpx
+  client; identifiable User-Agent (politeness, `docs/05`).
+- `tests/fixtures/greenhouse.json`: captured real `camusenergy` response (3 jobs, full structure — D-019 golden).
+- Tests: 6 endpoint-construction units (each ATS + the two raise paths); 9 Greenhouse units via respx against the
+  fixture (mapping, int→str id, missing location → None, empty board → `[]`, + 5 FetchError paths); 1 opt-in
+  `-m live` smoke that pins Greenhouse's *response shape* (catches ATS drift), in new `tests/live/`.
+
+**Verified:** default suite **32 passed, 1 deselected**; mypy strict clean; ruff clean. Ran `-m live` once —
+real fetch against camusenergy **passed** (first proof the fetch path works end-to-end).
+
+**Note:** wiring `content_hash` (Chunk 3) to the Greenhouse description (`content`) happens at persist time, not in
+the fetcher — comes with the diff/persist chunk.
+
+**Next:** Chunk 5 — Lever + Ashby fetchers (same pattern, fixtures from `voltus` / `weave-grid`), completing the 9
+verified GH/Lever/Ashby companies. Fresh `feat/lever-ashby-fetchers` branch.
+
+---
+
 ## 2026-06-15 — Chunk 3: content_hash canonicalization
 
 **Did:** Built the extraction cache's correctness primitive (`docs/04` §3).

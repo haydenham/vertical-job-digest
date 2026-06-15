@@ -1,0 +1,141 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://www.camus.energy/careers/job-openings?gh_jid=5990198004",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 5151361004,
+      "location": {
+        "name": "Remote"
+      },
+      "metadata": null,
+      "id": 5990198004,
+      "updated_at": "2026-05-15T17:31:09-04:00",
+      "requisition_id": "44",
+      "title": "Infrastructure Software Engineer",
+      "company_name": "Camus Energy",
+      "first_published": "2026-05-08T19:16:36-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;h3&gt;&lt;strong&gt;Overview Camus&lt;/strong&gt;&lt;/h3&gt;\n&lt;p&gt;Camus Energy builds software solutions that help new load and generation connect to the grid faster—without sacrificing reliability.&lt;/p&gt;\n&lt;p&gt;As electricity demand accelerates and clean energy scales, traditional interconnection processes are becoming the bottleneck. Utilities and developers face growing queues, long timelines, and costly upgrades that slow progress across the grid.&lt;/p&gt;\n&lt;p&gt;Camus enables flexible grid connections that allow new load and generation to connect sooner by planning for and operating within real system constraints. Our platform bridges the gap between grid operators and large load developers, providing a view of time-varying grid capacity for any given new interconnection point.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;We combine high-reliability software experience from companies like Google and Meta with deep power systems expertise across the utility sector. If you’re excited to work at the intersection of infrastructure, software, and climate, we’d love to hear from you.&lt;/p&gt;\n&lt;h3&gt;Role Overview&lt;/h3&gt;\n&lt;p&gt;We&#39;re looking for an &lt;strong&gt;Infrastructure Software Engineer&lt;/strong&gt; to sit at the intersection of software development and site reliability. Our software stack is cloud-native, built on active collaboration with popular open source technologies from developer tooling through production. You&#39;ll spend roughly half your time writing production code for product platform and core systems infrastructure and the other half driving reliability, observability, and operational health of these systems with the rest of the engineering team.&lt;/p&gt;\n&lt;p&gt;On the software side, you&#39;ll contribute to the full backend of our product — building and shipping features while also helping to define and build the platform and infrastructure layers those features run on. That means writing production-quality services and APIs and thinking carefully about what it means for a system to be maintainable, observable, and operable at scale. You&#39;ll bring an infrastructure-aware perspective to product development, helping the team build things that are designed to run well in production from the start. On the reliability side, you&#39;ll take the lead on how we build, deploy, monitor, and alert on our systems — but this isn&#39;t a sole-ownership role. You&#39;ll work alongside the broader engineering team, building the culture and practices around reliability as much as the tooling itself. That means driving postmortems and remediations collaboratively, establishing the frameworks that help everyone participate meaningfully in on-call and incident response, and closing the loop by improving internal tooling and systems.&lt;/p&gt;\n&lt;p&gt;Our platform sits at the heart of how utilities and energy providers manage an increasingly complex grid. The systems you build and operate need to be fast, correct, and available — grid operators make real-time decisions based on the data and interfaces we provide, and reliability has consequences that extend well beyond our codebase. We take that responsibility seriously, and we want someone who does too.&lt;/p&gt;\n&lt;h3&gt;What You&#39;ll Do&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;Design and build backend services, APIs, and platform infrastructure that power our platform&lt;/li&gt;\n&lt;li&gt;Contribute to product features end to end — from backend logic and data pipelines to the deployment and operational scaffolding that ships them reliably&lt;/li&gt;\n&lt;li&gt;Lead the development of our observability stack — metrics, logging, and alerting — and establish the practices that keep the whole team engaged in production health&lt;/li&gt;\n&lt;li&gt;Own and evolve our CI/CD pipelines, deployment tooling, and release processes to make shipping software faster and safer&lt;/li&gt;\n&lt;li&gt;Drive incident response and postmortems collaboratively, and follow through by building the automation and tooling that closes the loop on recurring issues&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h3&gt;What you’ll bring&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;Minimum 3 years of experience in a software engineering role with a strong infrastructure or platform focus&lt;/li&gt;\n&lt;li&gt;Experience working with Python 3 — you&#39;re comfortable owning backend services and APIs end to end, not just writing scripts&lt;/li&gt;\n&lt;li&gt;Hands-on experience with Kubernetes and GCP (or comparable cloud), ideally in production environments&lt;/li&gt;\n&lt;li&gt;Experience working with CI/CD pipelines&lt;/li&gt;\n&lt;li&gt;Familiarity with observability tooling such as Prometheus and Grafana, and an instinct for what good monitoring looks like&lt;/li&gt;\n&lt;li&gt;A collaborative approach to reliability — you know how to bring a team along, not just fix things yourself&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h3&gt;Nice to have&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;Experience with energy, utilities, or other regulated/critical infrastructure domains&lt;/li&gt;\n&lt;li&gt;Familiarity with the Bazel build tool&lt;/li&gt;\n&lt;li&gt;Familiarity with Go, Node.js and Python packaging&lt;/li&gt;\n&lt;li&gt;Experience with SQL, databases or data warehouses&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h3&gt;&lt;strong&gt;What We Offer&lt;/strong&gt;&lt;/h3&gt;\n&lt;ul&gt;\n&lt;li&gt;Competitive base salary&lt;/li&gt;\n&lt;li&gt;Comprehensive benefits, including FSA and 401k for full time employees&lt;/li&gt;\n&lt;li&gt;Fully remote workplace with options for in office work in the Bay Area&lt;/li&gt;\n&lt;li&gt;Flexible PTO, which we encourage you to use!&lt;/li&gt;\n&lt;li&gt;A real impact on climate change - we’re building the world we want to live in and we want you to join us!&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;The expected base salary for this role is $180,000 - $230,000 annually, depending on experience, skills, and qualifications.&amp;nbsp;&lt;/p&gt;",
+      "departments": [
+        {
+          "id": 4020599004,
+          "name": "Engineering",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4010844004,
+          "name": "Remote",
+          "location": null,
+          "child_ids": [],
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "absolute_url": "https://www.camus.energy/careers/job-openings?gh_jid=5990203004",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "education": "education_optional",
+      "internal_job_id": 5151557004,
+      "location": {
+        "name": "Remote"
+      },
+      "metadata": null,
+      "id": 5990203004,
+      "updated_at": "2026-05-15T17:31:30-04:00",
+      "requisition_id": "46",
+      "title": "Machine Learning Software Engineer",
+      "company_name": "Camus Energy",
+      "first_published": "2026-05-08T20:13:55-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;h2&gt;&lt;strong&gt;About Us&lt;/strong&gt;&lt;/h2&gt;\n&lt;p&gt;Camus Energy builds software solutions that help new load and generation connect to the grid faster—without sacrificing reliability.&lt;/p&gt;\n&lt;p&gt;As electricity demand accelerates and clean energy scales, traditional interconnection processes are becoming the bottleneck. Utilities and developers face growing queues, long timelines, and costly upgrades that slow progress across the grid.&lt;/p&gt;\n&lt;p&gt;Camus enables flexible grid connections that allow new load and generation to connect sooner by planning for and operating within real system constraints. Our platform bridges the gap between grid operators and large load developers, providing a view of time-varying grid capacity for any given new interconnection point.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;We combine high-reliability software experience from companies like Google and Meta with deep power systems expertise across the utility sector. If you’re excited to work at the intersection of infrastructure, software, and climate, we’d love to hear from you.&lt;/p&gt;\n&lt;h2&gt;&lt;strong&gt;The Role&lt;/strong&gt;&lt;/h2&gt;\n&lt;p&gt;We&#39;re looking for a &lt;strong&gt;Machine Learning Engineer&lt;/strong&gt; to own and advance the forecasting and predictive modeling capabilities at the heart of the Camus platform. This is an individual contributor role with real technical depth and product influence; you&#39;ll be responsible for the full lifecycle of ML model development, from exploratory analysis and model design through to production deployment and monitoring.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;This is not a role where the problem statements are handed to you. You&#39;ll work directly with Camus’ teams and external stakeholders to understand their data, define the right questions, and translate messy real-world signals into reliable, production-grade data driven analytics. You&#39;ll bring that ground-truth perspective back into product decisions, and work closely within the Engineering team to integrate ML models into our planning and operational workflows.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;The forecasting and predictive modeling problems we&#39;re solving often don&#39;t have off-the-shelf answers. We work as a tight, technical team that moves with urgency but builds with the discipline that production-grade software demands. If you want to do the most technically interesting ML work in the clean energy space while directly shaping how it becomes a product, this is the role.&lt;/p&gt;\n&lt;h2&gt;&lt;strong&gt;What You&#39;ll Do&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Design, train, and evaluate predictive ML models with a focus on forecasting and time-series applications&lt;/li&gt;\n&lt;li&gt;Conduct exploratory data analysis, feature engineering, and statistical modeling across large structured and unstructured datasets&lt;/li&gt;\n&lt;li&gt;Collaborate with Engineering to define ML infrastructure requirements, and deploy and integrate ML models into operational workflows and decision-support tools&lt;/li&gt;\n&lt;li&gt;Work cross-functionally with Camus teams to define problem statements and translate business objectives into ML solutions&lt;/li&gt;\n&lt;li&gt;Communicate model performance, uncertainty, and limitations clearly to both technical and non-technical audiences&lt;/li&gt;\n&lt;li&gt;Champion ML best practices around reproducibility, versioning, and testing&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;What You&#39;ll Bring&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;PhD with 3+ years of industry experience, Masters with 5+ years, or Bachelors with 8+ years in Machine Learning, Statistics, Computer Science, Applied Mathematics, or a related quantitative field&lt;/li&gt;\n&lt;li&gt;Demonstrated track record of delivering ML models into production environments&lt;/li&gt;\n&lt;li&gt;Experience with time-series forecasting methods — including classical approaches (e.g. ARIMA) and modern ML-based methods (e.g. gradient boosting or temporal neural networks)&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Strong proficiency in Python and core ML/data science libraries (PyTorch, scikit-learn, statsmodels, pandas, etc.)&lt;/li&gt;\n&lt;li&gt;Experience with probabilistic forecasting, uncertainty quantification and backtesting&lt;/li&gt;\n&lt;li&gt;Ability to translate ambiguous business problems into well-scoped ML projects&lt;/li&gt;\n&lt;li&gt;Comfortable operating with autonomy in a small team, balancing speed of delivery with the engineering discipline that production-grade software demands.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;Nice to Have&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Experience in the energy sector — e.g. load forecasting, renewable generation prediction, price modeling or grid operations&lt;/li&gt;\n&lt;li&gt;Experience with MLOps tooling and infrastructure: cloud platforms, containerization, and model serving patterns&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Experience with data pipeline tooling, e.g. Airflow, Spark, or Databricks&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Able to leverage AI code development tools to accelerate development&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;What We Offer&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Competitive base salary&lt;/li&gt;\n&lt;li&gt;Comprehensive benefits, including FSA and 401k for full time employees&lt;/li&gt;\n&lt;li&gt;Fully remote workplace with options for in office work in the Bay Area&lt;/li&gt;\n&lt;li&gt;Flexible PTO, which we encourage you to use!&lt;/li&gt;\n&lt;li&gt;A real impact on climate change - we’re building the world we want to live in and we want you to join us!&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;The expected base salary for this role is $180,000 - $230,000 annually, depending on experience, skills, and qualifications.&lt;/p&gt;",
+      "departments": [
+        {
+          "id": 4020599004,
+          "name": "Engineering",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4010844004,
+          "name": "Remote",
+          "location": null,
+          "child_ids": [],
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "absolute_url": "https://www.camus.energy/careers/job-openings?gh_jid=5989919004",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "education": "education_optional",
+      "internal_job_id": 5151410004,
+      "location": {
+        "name": "Remote"
+      },
+      "metadata": null,
+      "id": 5989919004,
+      "updated_at": "2026-05-08T20:23:43-04:00",
+      "requisition_id": "45",
+      "title": "Power Systems Software Engineer",
+      "company_name": "Camus Energy",
+      "first_published": "2026-05-08T20:18:45-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;h2&gt;&lt;strong&gt;About Us&lt;/strong&gt;&lt;/h2&gt;\n&lt;p&gt;Camus Energy builds software solutions that help new load and generation connect to the grid faster—without sacrificing reliability.&lt;/p&gt;\n&lt;p&gt;As electricity demand accelerates and clean energy scales, traditional interconnection processes are becoming the bottleneck. Utilities and developers face growing queues, long timelines, and costly upgrades that slow progress across the grid.&lt;/p&gt;\n&lt;p&gt;Camus enables flexible grid connections that allow new load and generation to connect sooner by planning for and operating within real system constraints. Our platform bridges the gap between grid operators and large load developers, providing a view of time-varying grid capacity for any given new interconnection point.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;We combine high-reliability software experience from companies like Google and Meta with deep power systems expertise across the utility sector. If you’re excited to work at the intersection of infrastructure, software, and climate, we’d love to hear from you.&lt;/p&gt;\n&lt;h2&gt;&lt;strong&gt;The Role&lt;/strong&gt;&lt;/h2&gt;\n&lt;p&gt;We&#39;re looking for a &lt;strong&gt;Power Systems Software Engineer&lt;/strong&gt; to own and advance the power systems modeling capabilities at the heart of the Camus platform. This is an individual contributor role with real technical depth and product influence; you&#39;ll be responsible for the full stack of power systems work, from developing and validating high-fidelity models to driving the architecture that makes these models run reliably at scale.&lt;/p&gt;\n&lt;p&gt;This is not a role where the product requirements are handed to you. You will work directly with utility customers to understand their data and validate model outputs against real system measurements, bringing that ground-truth perspective back into product decisions. You&#39;ll also work closely within the Engineering team to deploy power flow models in our cloud-native architecture, and unlock large-scale planning studies and real-time orchestration of DERs.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;The problems we&#39;re solving don&#39;t have off-the-shelf answers. We work as a tight, technical team that moves with urgency but builds with the discipline that production-grade software demands. If you want to do the most technically interesting power systems modeling work in the industry while directly shaping how it becomes a product, this is the role.&lt;/p&gt;\n&lt;h2&gt;&lt;strong&gt;What You&#39;ll Do&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Develop and maintain high-fidelity power flow &amp;amp; optimal power flow models&lt;/li&gt;\n&lt;li&gt;Write and maintain automated tests and validation pipelines that verify model accuracy, catch regressions and ensure solver reliability&lt;/li&gt;\n&lt;li&gt;Drive the architecture of solvers that balance accuracy with computational performance&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Build tooling that visualizes and translates model outputs into actionable insights, for internal and client-facing applications&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Partner with our utility customers to understand their datasets and validate model outputs against their system measurements&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Collaborate with Camus’ internal teams to integrate utility models (GIS, ADMS, and time series data) into the Camus platform&lt;/li&gt;\n&lt;li&gt;Identify and resolve computational bottlenecks in large-scale grid simulations&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;What You&#39;ll Bring&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Masters/Ph.D. in Electrical Engineering, Computer Science, or related discipline with 5+ years of industry experience deploying power systems models for real world applications&lt;/li&gt;\n&lt;li&gt;Strong foundations in power systems concepts, methods and convex/non-convex optimization solvers for distribution grids&lt;/li&gt;\n&lt;li&gt;Experience working with large utility datasets (GIS, SCADA, AMI, network models)&lt;/li&gt;\n&lt;li&gt;Experience with OpenDSS or other open source or commercial power flow modeling software&lt;/li&gt;\n&lt;li&gt;Ability to translate complex mathematical formulations into production-ready code&lt;/li&gt;\n&lt;li&gt;Strong Python skills: you write clean, maintainable, production-ready code, not just analysis scripts&lt;/li&gt;\n&lt;li&gt;Excellent problem-solving, communication, and collaboration skills&lt;/li&gt;\n&lt;li&gt;Comfortable operating with autonomy in a small team, balancing speed of delivery with the engineering discipline that production-grade software demands.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;Nice to Have&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Experience with hosting capacity and interconnection studies&lt;/li&gt;\n&lt;li&gt;Experience with transmission grid planning or operations software&lt;/li&gt;\n&lt;li&gt;Experience with time-series forecasting, or other AI applications in grid analytics&lt;/li&gt;\n&lt;li&gt;Experience with GCP or other cloud platforms&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Able to leverage AI code development tools to accelerate development.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;h2&gt;&lt;strong&gt;What We Offer&lt;/strong&gt;&lt;/h2&gt;\n&lt;ul&gt;\n&lt;li&gt;Competitive base salary&lt;/li&gt;\n&lt;li&gt;Comprehensive benefits, including FSA and 401k for full time employees&lt;/li&gt;\n&lt;li&gt;Fully remote workplace with options for in office work in the Bay Area&lt;/li&gt;\n&lt;li&gt;Flexible PTO, which we encourage you to use!&lt;/li&gt;\n&lt;li&gt;A real impact on climate change - we’re building the world we want to live in and we want you to join us!&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;The expected base salary for this role is $180,000 - $230,000 annually, depending on experience, skills, and qualifications.&lt;/p&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;",
+      "departments": [
+        {
+          "id": 4020599004,
+          "name": "Engineering",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4010844004,
+          "name": "Remote",
+          "location": null,
+          "child_ids": [],
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}
