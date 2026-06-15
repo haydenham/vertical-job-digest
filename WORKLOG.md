@@ -5,6 +5,30 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-15 — Chunk 6: diff set arithmetic (last pure-logic piece)
+
+**Did:** Built the daily diff — pure set logic over `external_id`s (`docs/04` lifecycle, D-016/D-009).
+- `src/vja/diff.py`: `compute_diff(fetched_ids, stored_open_ids) -> DiffResult(new, still_present, closed)`.
+  `new = fetched − stored`, `still_present = fetched ∩ stored`, `closed = stored − fetched`. Accepts any
+  iterables (dedups via set semantics); returns `frozenset`s in a frozen `DiffResult`.
+- The docstring pins the **no-mass-close guard** as a *caller* responsibility: `compute_diff` can't tell a
+  genuinely-empty board from a failed fetch, so the pipeline must skip the diff when a fetch raised `FetchError`.
+  (Enforcing that is a Chunk-7+ integration test; here we just compute correctly.)
+- `tests/unit/test_diff.py`: 8 units — typical mix, all-new, all-closed (the dangerous empty-fetch case),
+  both-empty, no-change, fully-disjoint, iterable/dedup input, and a disjoint-partitions + full-coverage invariant.
+
+**Verified:** default suite **54 passed, 3 deselected**; mypy strict clean; ruff clean (caught a pointless
+duplicate set literal `{"b","b"}` → switched to a list to actually test input dedup).
+
+**Milestone:** all pure-logic primitives done (models, content_hash, fetchers ×3, diff). Next chunks introduce I/O
+(SQLite) — per the plan, this is where we drop into **plan mode** first to settle DB-access design before coding.
+
+**Next:** Chunk 7 — DB schema + migrations + employer seed-CSV import (the first integration-tested chunk). Will
+plan-mode the DB-access approach (raw SQL vs. thin query module vs. SQLAlchemy) before writing. Fresh
+`feat/db-schema` branch.
+
+---
+
 ## 2026-06-15 — Chunk 5: Lever + Ashby fetchers (Tier-A complete)
 
 **Did:** Added the two remaining clean-JSON fetchers, same pattern as Greenhouse — completing all 9 verified
