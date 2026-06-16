@@ -5,11 +5,14 @@ description = "Vertical Job Intelligence Agent — scheduled pipeline that diffs
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.18.4",
     "httpx>=0.28",
+    "sqlalchemy>=2.0.51",
 ]
 
 [project.scripts]
 # CLI entry points get wired here as the pipeline grows (fetch, diff, send).
+vja-import-employers = "vja.db.employers:main"
 
 [dependency-groups]
 dev = [
@@ -32,6 +35,8 @@ packages = ["src/vja"]
 src = ["src", "tests"]
 line-length = 100
 target-version = "py312"
+# Alembic's env.py / versions are generated boilerplate — don't lint-gate them.
+extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 # A pragmatic, strict-enough default. Expand deliberately, not reflexively.
@@ -41,6 +46,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.12"
 strict = true
 files = ["src", "tests"]
+# Alembic's generated env.py / versions are excluded from strict type-checking.
+exclude = ["^migrations/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
