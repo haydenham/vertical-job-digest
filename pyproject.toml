@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 # CLI entry points get wired here as the pipeline grows (fetch, diff, send).
 vja-import-employers = "vja.db.employers:main"
+vja-run = "vja.pipeline:run_main"
 
 [dependency-groups]
 dev = [
