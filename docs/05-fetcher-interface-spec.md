@@ -14,6 +14,9 @@ class RawPosting:
     location: str | None    # raw location string if present
     updated_at: str | None  # source's last-updated, if exposed
     raw: dict               # full untouched payload for this posting (stored as raw_payload)
+    description: str | None = None  # best-available description text → feeds content_hash + Layer 2
+                            # (Greenhouse `content` HTML; Lever `descriptionPlain`→`description`;
+                            # Ashby `descriptionPlain`→`descriptionHtml`). May be plain or HTML.
 
 class Fetcher(Protocol):
     ats_type: str

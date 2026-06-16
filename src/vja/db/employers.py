@@ -19,7 +19,8 @@ from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin, get_engine
 from vja.db.schema import employers
-from vja.models import AtsType, EmployerSource, EmployerStatus, Verification
+from vja.fetchers.registry import SUPPORTED_ATS_TYPES
+from vja.models import AtsType, Employer, EmployerSource, EmployerStatus, Verification
 
 
 @dataclass
@@ -150,6 +151,42 @@ def count_employers(engine: Engine, vertical: str | None = None) -> int:
         stmt = stmt.where(employers.c.vertical == vertical)
     with engine.connect() as conn:
         return int(conn.execute(stmt).scalar_one())
+
+
+def active_fetchable_employers(engine: Engine, vertical: str | None = None) -> list[Employer]:
+    """Active employers whose ATS has a Layer-1 fetcher, as lean fetch-facing `Employer`s.
+
+    This is the read side that drives the nightly fetch: only `status = active` rows with a
+    `SUPPORTED_ATS_TYPES` ATS are returned (others await Workday/Tier-B/Layer-2).
+    """
+    stmt = select(
+        employers.c.id,
+        employers.c.vertical,
+        employers.c.name,
+        employers.c.ats_type,
+        employers.c.ats_slug,
+        employers.c.endpoint,
+        employers.c.careers_url,
+    ).where(
+        employers.c.status == EmployerStatus.ACTIVE.value,
+        employers.c.ats_type.in_([t.value for t in SUPPORTED_ATS_TYPES]),
+    )
+    if vertical is not None:
+        stmt = stmt.where(employers.c.vertical == vertical)
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [
+        Employer(
+            id=row["id"],
+            vertical=row["vertical"],
+            name=row["name"],
+            ats_type=AtsType(row["ats_type"]),
+            ats_slug=row["ats_slug"],
+            endpoint=row["endpoint"],
+            careers_url=row["careers_url"],
+        )
+        for row in rows
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

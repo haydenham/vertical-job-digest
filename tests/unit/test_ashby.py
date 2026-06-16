@@ -48,6 +48,7 @@ def test_fetch_maps_every_fixture_job() -> None:
     assert first.apply_url == job0["applyUrl"]
     assert first.location == job0["location"]
     assert first.raw == job0
+    assert first.description == job0["descriptionPlain"]
 
 
 @respx.mock

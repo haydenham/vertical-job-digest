@@ -5,8 +5,13 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from vja.db.employers import count_employers, import_employers_from_csv
+from vja.db.employers import (
+    active_fetchable_employers,
+    count_employers,
+    import_employers_from_csv,
+)
 from vja.db.schema import employers
+from vja.fetchers.registry import SUPPORTED_ATS_TYPES
 from vja.models import Verification
 
 _SEED = Path(__file__).resolve().parents[2] / "data" / "seed" / "employers_seed.csv"
@@ -76,3 +81,14 @@ def test_unrecognized_ats_type_coerces_to_unknown(migrated_engine: Engine, tmp_p
         )
     assert row is not None
     assert row["ats_type"] == "unknown"
+
+
+def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine) -> None:
+    import_employers_from_csv(migrated_engine, _SEED)
+
+    fetchable = active_fetchable_employers(migrated_engine)
+
+    # Seed has 5 Greenhouse + 3 Lever + 1 Ashby = 9 verified Layer-1 employers.
+    assert len(fetchable) == 9
+    assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
+    assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
