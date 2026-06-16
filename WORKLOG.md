@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-16 — Phase 3 · Block 1: digest assembly + verification gate
+
+**Did:** Built the *contents* of the digest + the trust gate in front of it — no sending yet (that's P3B2).
+- `src/vja/digest/verification.py`: `verify_apply_url(url, client)` — HEAD (follow redirects) → GET fallback on
+  405/501 → pass if final status < 400; any httpx error/timeout = fail (D-008: don't ship a link you can't resolve).
+- `src/vja/digest/assembly.py`: `build_digest(engine, vertical, *, now, since, verify) -> DigestContents`
+  (`new`/`closed`/`quarantined` lists of `DigestPosting`). Window = `since` last successfully-sent digest
+  (`last_sent_at`, normalized to aware UTC); first digest (`since is None`) = baseline (all open → `new`, `closed`
+  empty). New postings run the verification gate; dead/missing links → `quarantined`, never shipped. `verify`
+  injected (default builds an httpx client) so tests are offline.
+
+**Decisions (this session):** window = since-last-sent-digest (robust to a missed run / failed send); first digest =
+baseline of all currently-open. Verification stateless (re-checked each digest; no schema change) — known limitation
+logged in the plan (a transient-dead link past the window won't reappear; revisit with a retry flag if it bites).
+
+**Tests:** +12 — `test_verification.py` (respx: HEAD200, HEAD405→GET, redirect, 404, conn-error, 500) and
+`test_digest_assembly.py` (baseline; window boundary; auto-resolve `since` from a seeded sent digest; dead-link
+quarantine; vertical isolation; `last_sent_at` ignores pending/other-vertical).
+
+**Verified:** ruff + mypy(strict) clean; **92 passed, 3 deselected**. Live e2e: real Camus fetch (3 postings) →
+`build_digest` with the **real** verifier → new=3, quarantined=0 (all links resolved live).
+
+**Next:** Phase 3 · Block 2 — render (HTML/text) + Resend send + the `digests` row lifecycle (pending→sent/failed).
+
+---
+
 ## 2026-06-16 — Phase 2 · Block 3: orchestration loop + pipeline_runs (Phase 2 complete)
 
 **Did:** Ran `sync_employer` over the whole universe and recorded a run summary — the nightly diff job as one pass.
