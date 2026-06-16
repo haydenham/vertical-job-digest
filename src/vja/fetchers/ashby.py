@@ -72,6 +72,9 @@ def _map_job(job: dict[str, Any], employer: Employer) -> RawPosting:
     if not isinstance(location, str):
         location = None
 
+    # Prefer the plain-text description; fall back to the HTML variant.
+    description = job.get("descriptionPlain") or job.get("descriptionHtml")
+
     return RawPosting(
         external_id=external_id,
         title=title,
@@ -79,4 +82,5 @@ def _map_job(job: dict[str, Any], employer: Employer) -> RawPosting:
         location=location,
         updated_at=job.get("publishedAt"),
         raw=job,
+        description=description,
     )

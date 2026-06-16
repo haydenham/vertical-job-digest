@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-16 — Phase 2 · Block 2: fetch → diff → persist (per-employer) + no-mass-close guard
+
+**Did:** Wired the existing fetchers (Ch 4–5) + `compute_diff` (Ch 6) + `content_hash` (Ch 3) to the DB so one
+employer's postings get stored, refreshed, and closed each run. Modular by design: single employer only; the
+all-employer loop + `pipeline_runs` summary is Block 3.
+- `RawPosting.description` added (last field, default None); each fetcher populates it — Greenhouse `content`,
+  Lever `descriptionPlain`→`description`, Ashby `descriptionPlain`→`descriptionHtml` (verified present across all
+  fixtures; format may be plain/HTML — fine, the hash compares a posting to its own past).
+- `src/vja/fetchers/registry.py`: `get_fetcher(ats_type)` for the 3 Layer-1 ATSs + `SUPPORTED_ATS_TYPES`.
+- `src/vja/db/employers.py`: `active_fetchable_employers()` — active GH/Lever/Ashby rows as lean `Employer`s.
+- `src/vja/db/postings.py`: repo on a `Connection` — `open_index` (`{external_id: content_hash}`), `insert_posting`,
+  `bump_last_seen`, `update_changed`, `close_posting` (never delete — D-009).
+- `src/vja/pipeline.py`: `sync_employer(engine, employer, fetcher) -> SyncResult`. Fetch → on `FetchError` return
+  `failed` **touching nothing** (THE GUARD) → else `compute_diff` → in one txn: insert new (hash from
+  title+location+description), update-or-bump still-present, close vanished.
+
+**Tests:** +11 (registry ×3; Lever description-fallback; `active_fetchable_employers`=9; pipeline ×6 incl. insert/
+idempotent/close-not-delete/content-change/hash-includes-description/**the guard: FetchError → 0 closed**). Fetcher
+unit tests extended to assert `description`.
+
+**Verified:** ruff+mypy(strict) clean; **73 passed, 3 deselected**. Live e2e: synced real `camusenergy` → 3 postings
+persisted with hashes + apply_urls; re-run → 0 new / 3 unchanged (idempotent).
+
+**Docs:** `docs/05` RawPosting contract updated (+`description`). No new DECISIONS (settled-spec implementation).
+
+**Next:** Phase 2 · Block 3 — orchestrate the loop over all active employers (per-employer failure isolation) +
+write the `pipeline_runs` run-summary. Plan-mode it.
+
+---
+
 ## 2026-06-15 — Phase 2 · Block 1: DB foundation + employer seed import
 
 **Did:** First persistence. Stood up the database so later blocks can store postings + run the diff against state.

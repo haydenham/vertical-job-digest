@@ -173,3 +173,6 @@ class RawPosting:
     location: str | None
     updated_at: str | None
     raw: dict[str, Any]
+    # Best-available description text for content_hash + later Layer-2 extraction.
+    # May be plain text or HTML depending on the ATS; populated by each fetcher.
+    description: str | None = None

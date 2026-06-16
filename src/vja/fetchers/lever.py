@@ -75,6 +75,9 @@ def _map_job(job: dict[str, Any], employer: Employer) -> RawPosting:
     created_at = job.get("createdAt")
     updated_at = str(created_at) if created_at is not None else None
 
+    # Prefer the plain-text description; some postings only populate the HTML `description`.
+    description = job.get("descriptionPlain") or job.get("description")
+
     return RawPosting(
         external_id=external_id,
         title=title,
@@ -82,4 +85,5 @@ def _map_job(job: dict[str, Any], employer: Employer) -> RawPosting:
         location=location,
         updated_at=updated_at,
         raw=job,
+        description=description,
     )

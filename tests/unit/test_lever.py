@@ -48,6 +48,21 @@ def test_fetch_maps_every_fixture_job() -> None:
     assert first.apply_url == job0["applyUrl"]
     assert first.location == job0["categories"]["location"]
     assert first.raw == job0
+    assert first.description == job0["descriptionPlain"]
+
+
+@respx.mock
+def test_description_falls_back_to_html_when_plain_is_empty() -> None:
+    # Some Lever postings leave descriptionPlain empty but populate `description` (HTML).
+    job = {
+        "id": "abc",
+        "text": "Engineer",
+        "applyUrl": "https://x/abc/apply",
+        "descriptionPlain": "",
+        "description": "<p>Real body</p>",
+    }
+    respx.get(_URL).mock(return_value=httpx.Response(200, json=[job]))
+    assert LeverFetcher().fetch(_employer())[0].description == "<p>Real body</p>"
 
 
 @respx.mock

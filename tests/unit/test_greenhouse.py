@@ -50,6 +50,7 @@ def test_fetch_maps_every_fixture_job() -> None:
     assert first.location == job0["location"]["name"]
     assert first.updated_at == job0["updated_at"]
     assert first.raw == job0
+    assert first.description == job0["content"]  # inline HTML from ?content=true
 
 
 @respx.mock

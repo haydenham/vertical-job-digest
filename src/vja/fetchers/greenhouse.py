@@ -83,4 +83,6 @@ def _map_job(job: dict[str, Any], employer: Employer) -> RawPosting:
         location=location,
         updated_at=job.get("updated_at"),
         raw=job,
+        # `?content=true` returns the description inline as HTML.
+        description=job.get("content"),
     )
