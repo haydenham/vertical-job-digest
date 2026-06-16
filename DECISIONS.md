@@ -141,3 +141,14 @@ Application success drops sharply ~1–2 weeks after a role is posted, so output
 Full mechanics deferred to the **week-3 digest/matching spec**; this entry fixes the **policy** so it isn't re-litigated.
 **Why:** the diff gives daily freshness for free, so a cap only matters where we present the whole open set (backfill,
 dashboard); a hard flood of months-old roles at signup would bury the timely ones and falsify the "apply fast" value.
+
+### D-025 · DB access = SQLAlchemy Core + Alembic; SQLite now → Postgres at first hosted deploy · accepted · 2026-06-15
+The persistence layer is **SQLAlchemy Core** (not ORM) with **Alembic** migrations. Schema lives in
+`vja.db.schema` as Core `Table`s; engine/URL in `vja.db.engine` (`VJA_DATABASE_URL`, default local SQLite, with a
+`PRAGMA foreign_keys=ON` listener). Enums are `VARCHAR`+`CHECK` on both dialects (`native_enum=False`). Run **SQLite
+locally and in tests**; cut over to **Postgres at the first hosted/demo-user deploy** (~2 weeks out — 2 demo users
+incoming), which is just a URL swap + `alembic upgrade` because Core is dialect-portable. Refines D-011 (stack) /
+D-012 (local runtime → VPS).
+**Why:** Core keeps the actual SQL legible for the review gate (D-021) while giving near-free dialect portability, so
+the imminent Postgres move (driven by *hosting* for demo users, not load) costs a config change, not a rewrite. ORM
+rejected: too much abstraction for a single-writer 7-table schema, and it hides the SQL we most need to review.

@@ -69,6 +69,74 @@ class Verdict(StrEnum):
     NO = "no"
 
 
+class Verification(StrEnum):
+    """Confidence in an employer's ATS resolution (`docs/04` §1, seed README, `docs/07`).
+
+    Note: these are the values actually used by the seed CSV + the ATS-identification pass
+    (`detected`/`layer2`), reconciling `docs/04`'s earlier verified/suspect/unverified wording.
+    """
+
+    VERIFIED = "verified"  # endpoint hit live and returned jobs / a valid API
+    DETECTED = "detected"  # platform known, endpoint not yet live-confirmed
+    LAYER2 = "layer2"  # no clean API → routed to Layer-2 LLM-read
+
+
+class EmployerStatus(StrEnum):
+    """Lifecycle of an employer in the universe (`docs/04` §1). Only `active` is fetched."""
+
+    PROPOSED = "proposed"  # discovery-agent output awaiting human approval
+    APPROVED = "approved"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class EmployerSource(StrEnum):
+    """How an employer entered the universe (`docs/04` §1)."""
+
+    MANUAL = "manual"
+    AGENT_DISCOVERED = "agent_discovered"
+
+
+class PostingStatus(StrEnum):
+    """Posting lifecycle — vanished postings go `closed`, never deleted (D-009)."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class SourceKind(StrEnum):
+    """Type of a non-employer feed (`docs/04` §2)."""
+
+    HN_WHOISHIRING = "hn_whoishiring"
+    NICHE_BOARD = "niche_board"
+    NEWSLETTER = "newsletter"
+
+
+class MatchTrigger(StrEnum):
+    """What caused a match to be computed (`docs/04` §5, D-006)."""
+
+    NIGHTLY = "nightly"
+    BACKFILL = "backfill"
+    REFRESH = "refresh"
+
+
+class DigestStatus(StrEnum):
+    """Delivery state of a digest — a failed send is itself an alert (`docs/04` §6)."""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class PipelineRunStatus(StrEnum):
+    """Outcome of a nightly run (`docs/04` §7)."""
+
+    RUNNING = "running"
+    OK = "ok"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True, slots=True)
 class Employer:
     """The fetch-facing view of an employer row (`docs/04` §1).
