@@ -51,13 +51,19 @@ data/
 Python pipeline · `uv` toolchain · FastAPI (read-only dashboard API) · SQLite → Postgres ·
 Anthropic SDK for model calls · Resend for the email digest · cron/launchd scheduling (local, week 1) · React dashboard (later).
 
-## Build sequence
+## Build sequence (phases)
 
-- **Weeks 1–2:** Layer 1 skeleton, grid vertical only — employer table, Greenhouse/Lever/Ashby
-  fetchers, postings table, diff job, bare daily email. No LLM yet. First diff in the inbox = proof of loop.
-- **Week 3:** LLM extraction + matching (with negative-case rationale + verification) and a minimal dashboard.
-- **Week 4:** Add the aviation vertical — the architecture test (config + curation only).
-- **After:** Workday/known-ATS fetchers, HN extraction, discovery agent, dashboard polish.
+A **phase** is a milestone; a **block** is one PR-sized unit inside it. Order set by D-026 (Workday pulled ahead of
+matching/dashboard — biggest coverage win, and pure Layer 1). Phases 0–2 are built; 2 is finishing.
+
+1. **Phase 0–1:** docs/prep, then core logic (models, `content_hash`, GH/Lever/Ashby fetchers, diff). ✅
+2. **Phase 2:** persistence + Layer-1 implementation — DB, fetch→diff→persist, orchestration.
+3. **Phase 3:** bare daily digest (no LLM) — verify links, email via Resend, schedule. *First diff in the inbox = proof of loop.*
+4. **Phase 4:** Workday fetcher — coverage ~9→24 of 54 (the high-volume employers).
+5. **Phase 5:** LLM extraction + matching (negative-case rationale + verification; two-stage cheap filter).
+6. **Phase 6:** minimal read-only dashboard.
+7. **Phase 7:** aviation vertical — the architecture test (config + curation only).
+8. **Phase 8+:** remaining ATS coverage (Tier-B, HN/niche), then the discovery agent. Postgres/host cutover when demo users land.
 
 ## Documentation discipline
 
