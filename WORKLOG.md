@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-16 — Phase 2 · Block 3: orchestration loop + pipeline_runs (Phase 2 complete)
+
+**Did:** Ran `sync_employer` over the whole universe and recorded a run summary — the nightly diff job as one pass.
+- `src/vja/db/pipeline_runs.py`: `start_run` (insert `running` + `started_at`) / `finish_run` (finalize status +
+  counts + `finished_at`). Written in separate committed transactions so a `running` row is durable before the loop.
+- `src/vja/pipeline.py`: `RunSummary` + `run_pipeline(engine, vertical=None, *, now, resolve_fetcher=get_fetcher)`.
+  Writes the `running` tombstone → loops `active_fetchable_employers` → per-employer **broad try/except isolation**
+  (records `{employer_id,name,error}` in `pipeline_runs.errors`, continues) → finalizes. Status: `ok`/`partial`/
+  `failed` (`failed` only if all attempted failed; zero employers = `ok`). `resolve_fetcher` injected for testability.
+  Console script **`vja-run`** added (`--vertical`).
+- Test fixtures: promoted `migrated_engine`/`alembic_config` to root `tests/conftest.py` (shared by integration +
+  the new system tier); fixed the one import.
+
+**Decisions (this session):** running-row-then-finalize (traceable failures — a crash leaves a `running` tombstone);
+isolate every employer (one bad employer can't abort the night). Both recorded in the plan; no new D-xxx (they
+implement the `docs/04` §7 / `docs/05` health-check / `docs/08` system-tier specs).
+
+**Tests:** +7 — `test_pipeline_runs.py` (running tombstone, finalize) and **system tier** `tests/system/
+test_run_pipeline.py` (all-ok; partial on FetchError + run-level no-close guard; partial on *unexpected* exception
+isolation; all-failed; idempotent + one run row per run).
+
+**Verified:** ruff + mypy(strict) clean; **80 passed, 3 deselected**. Live e2e: import seed → `vja-run` over the 9
+real GH/Lever/Ashby employers → **586 postings persisted, status ok**; re-run → 0 new (idempotent); 2 `pipeline_runs`
+rows. The full fetch→diff→persist machine works against real ATS data end-to-end.
+
+**Phase 2 complete.** Next: **Phase 3 — bare digest (proof of loop)**: assemble what changed → verify apply links
+(D-008) → email via Resend → schedule. Plan-mode it. (Phase 4 = Workday, per D-026.)
+
+---
+
 ## 2026-06-16 — Phase 2 · Block 2: fetch → diff → persist (per-employer) + no-mass-close guard
 
 **Did:** Wired the existing fetchers (Ch 4–5) + `compute_diff` (Ch 6) + `content_hash` (Ch 3) to the DB so one

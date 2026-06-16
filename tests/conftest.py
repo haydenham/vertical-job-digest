@@ -1,8 +1,9 @@
-"""Integration-test fixtures: a fresh SQLite DB built from the real Alembic migrations.
+"""Shared test fixtures: a fresh SQLite DB built from the real Alembic migrations.
 
-Per `docs/08`, the test schema is created the same way prod's is — `alembic upgrade head`
-against a throwaway `tmp_path` database — so the migrations themselves are exercised, not
-just `metadata.create_all`.
+Lives at the tests root so both `tests/integration` and `tests/system` use it. Per
+`docs/08`, the test schema is created the same way prod's is — `alembic upgrade head`
+against a throwaway `tmp_path` database — so the migrations themselves are exercised,
+not just `metadata.create_all`.
 """
 
 from collections.abc import Iterator
@@ -15,7 +16,7 @@ from sqlalchemy import Engine
 
 from vja.db.engine import get_engine
 
-_ROOT = Path(__file__).resolve().parents[2]
+_ROOT = Path(__file__).resolve().parents[1]
 
 
 def alembic_config() -> Config:

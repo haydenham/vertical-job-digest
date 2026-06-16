@@ -3,7 +3,7 @@
 from alembic import command
 from sqlalchemy import Engine, inspect
 
-from tests.integration.conftest import alembic_config
+from tests.conftest import alembic_config
 
 _EXPECTED_TABLES = {
     "employers",
