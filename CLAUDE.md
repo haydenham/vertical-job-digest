@@ -100,19 +100,30 @@ dashboard.
   pipeline — no live fetching, no logic of its own, just a window onto the DB.
   Deliberately minimal in v1; polish is post-week-4.
 
-## Build sequence
+## Build sequence (phase roadmap)
 
-- **Weeks 1–2**: Layer 1 skeleton, **grid/power (energy) only** — this is the first-built vertical and the one
-  already seeded/verified (D-022). Employer table,
-  Greenhouse/Lever/Ashby fetchers, postings table, diff job, bare-bones daily
-  email. NO LLM yet. First diff in inbox = proof-of-loop milestone.
-- **Week 3**: LLM extraction + matching (incl. negative-case rationale +
-  verification step). Minimal dashboard ships here: four-column table
-  (title, company, apply link, match quality) — the match column requires
-  the matching engine, hence the timing.
-- **Week 4**: Add **aviation vertical**. This is the architecture test — must cost
-  only a weekend of curation + a config file. Any forced code change is a defect.
-- **After**: Workday fetchers, HN extraction, discovery agent, dashboard polish.
+Terminology: a **Phase** is a themed milestone; a **Block** is one reviewable PR-sized unit inside a phase
+(earlier work called these "chunks" — same thing). Grid/power (energy) is the first-built vertical (D-022).
+Order revised by **D-026** (Workday moved up ahead of Layer 2 + dashboard — it's the biggest coverage win and the
+high-volume meaningful jobs live there; it's pure Layer 1 and independent of matching).
+
+- **Phase 0 — Docs/prep.** ✅ Specs, decisions, seed.
+- **Phase 1 — Core logic & scaffolding.** ✅ models, `content_hash`, GH/Lever/Ashby fetchers, diff arithmetic.
+- **Phase 2 — Persistence + Layer-1 implementation.** DB foundation + employer import ✅; fetch→diff→persist ✅;
+  orchestration loop + `pipeline_runs` (in progress).
+- **Phase 3 — Bare digest (proof of loop).** Assemble what changed → verify apply links (D-008) → email via Resend
+  → schedule (cron/launchd). NO LLM. **First diff in the inbox = proof-of-loop milestone** (and the kill-criterion test).
+- **Phase 4 — Workday fetcher.** One generic `cxs` fetcher + per-tenant config → coverage ~9→24 of 54 (D-026/D-018).
+  Pure Layer 1; rides on Phase 2's failure isolation + Phase 3's verification gate.
+- **Phase 5 — Layer 2: extraction + matching.** Profiles (resume), LLM extraction (cached by `content_hash`),
+  two-stage filter (D-023), matching with fits/gaps/verdict (D-007) + eval gate (D-020); digest gains rationale.
+- **Phase 6 — Dashboard.** Read-only FastAPI API + minimal React four-column table (needs the match column).
+- **Phase 7 — Aviation vertical.** The architecture test — config + curation only, **any forced code change is a defect** (D-004).
+- **Phase 8 — Remaining coverage.** Tier-B fetchers (iCIMS/Workable/Oracle/SmartRecruiters), then Layer-2 LLM-read
+  for the custom tail + HN/niche sources.
+- **Phase 9 — Layer 3: discovery agent.** Weekly agent finds new *employers* → `proposed` rows in a review queue.
+- **Cross-cutting — Hosting & Postgres cutover (D-025).** Triggered by demo users (~2 weeks): VPS + Postgres URL swap
+  + `alembic upgrade`. Slot relative to Phases 3–5 per demo-readiness.
 
 ## Conventions for this repo
 

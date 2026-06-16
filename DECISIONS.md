@@ -152,3 +152,18 @@ D-012 (local runtime → VPS).
 **Why:** Core keeps the actual SQL legible for the review gate (D-021) while giving near-free dialect portability, so
 the imminent Postgres move (driven by *hosting* for demo users, not load) costs a config change, not a rewrite. ORM
 rejected: too much abstraction for a single-writer 7-table schema, and it hides the SQL we most need to review.
+
+### D-026 · Phase/Block terminology + Workday pulled ahead of Layer 2 & dashboard · accepted · 2026-06-16
+Two things. **(1) Terminology:** work is organized as **Phases** (themed milestones) made of **Blocks** (PR-sized
+units); "chunk" is retired (Phase-1 chunks 1–6 were blocks). **(2) Build order:** the **Workday fetcher moves up** to
+**Phase 4 — right after the bare digest (Phase 3) and before Layer-2 matching (Phase 5) and the dashboard (Phase 6)**.
+Phase roadmap of record: P0 docs ✅ · P1 core logic ✅ · P2 persistence/L1 (finishing) · P3 bare digest (proof of
+loop) · **P4 Workday** · P5 extraction+matching · P6 dashboard · P7 aviation vertical · P8 remaining coverage
+(Tier-B, HN/niche) · P9 discovery agent · cross-cutting hosting/Postgres cutover (D-025).
+Supersedes the week-based CLAUDE.md/README build sequence that placed Workday "after" matching/dashboard. Consistent
+with D-018 (Workday already ranked second among fetchers).
+**Why:** the digest's value is coverage, and Workday is the single biggest bucket (15/54) holding the high-volume,
+meaningful employers (Vistra/S&P/Shell/Duke/PJM…) — adding it ~doubles coverage to 24/54. It's pure Layer 1 and
+independent of the LLM, so it has no reason to wait behind matching; building it right after the digest also de-risks
+the gnarliest fetcher early and lets it ride on Phase-2 failure isolation + Phase-3 link verification. The bare digest
+(P3) still ships first on the 9 easy fetchers so the riskiest fetcher never gates the proof-of-loop milestone.
