@@ -6,13 +6,14 @@ and `docs/08` integration tests build their DB from those migrations. Convention
 - Enums are stored as VARCHAR + CHECK on **both** dialects (`native_enum=False`),
   keyed to the `.value`s of the `StrEnum`s in `vja.models` — no Postgres native-enum
   migration pain, and the DB CHECK always matches the code enum.
-- Timestamps we own are `DateTime(timezone=True)` (UTC). Source-provided date strings
+- Timestamps we own are `UTCDateTime()` (UTC). Source-provided date strings
   (`postings.posted_at`) stay `Text` — ATS formats vary; don't fail on them.
 - JSON payloads use `sa.JSON` (portable across SQLite/Postgres).
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -33,6 +34,8 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
+from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.types import TypeDecorator
 
 from vja.models import (
     AtsType,
@@ -48,6 +51,30 @@ from vja.models import (
     Verdict,
     Verification,
 )
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """A `DateTime` that always stores/returns tz-aware UTC, on every dialect.
+
+    SQLite has no real datetime type and drops `tzinfo` on read (returning naive values);
+    Postgres' `timestamptz` keeps it. This normalizes both ends — inbound values are
+    converted to UTC, outbound naive values get UTC re-attached — so application code never
+    juggles naive-vs-aware datetimes. The underlying column type is unchanged
+    (`DateTime(timezone=True)`), so there's no DDL/migration change.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _enum_values(enum_cls: type[StrEnum]) -> list[str]:
@@ -97,8 +124,8 @@ employers = Table(
     Column("verification", _enum(Verification, "verification")),
     Column("early_career_volume_estimate", Integer),
     Column("notes", Text),
-    Column("created_at", DateTime(timezone=True), nullable=False),
-    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", UTCDateTime(), nullable=False),
+    Column("updated_at", UTCDateTime(), nullable=False),
     UniqueConstraint("vertical", "name", name="uq_employers_vertical_name"),
     Index("ix_employers_vertical_status", "vertical", "status"),
 )
@@ -114,7 +141,7 @@ sources = Table(
     Column("url", String),
     Column("ingestion_method", String, nullable=False),
     Column("status", String, nullable=False, server_default=EmployerStatus.ACTIVE.value),
-    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", UTCDateTime(), nullable=False),
 )
 
 
@@ -134,9 +161,9 @@ postings = Table(
         nullable=False,
         server_default=PostingStatus.OPEN.value,
     ),
-    Column("first_seen_at", DateTime(timezone=True), nullable=False),
-    Column("last_seen_at", DateTime(timezone=True), nullable=False),
-    Column("closed_at", DateTime(timezone=True)),
+    Column("first_seen_at", UTCDateTime(), nullable=False),
+    Column("last_seen_at", UTCDateTime(), nullable=False),
+    Column("closed_at", UTCDateTime()),
     # --- extracted fields (Layer 2 fills these; NULL until extracted) ---
     Column("title", String),
     Column("level", _enum(Level, "level")),
@@ -149,7 +176,7 @@ postings = Table(
     Column("comp_raw", String),
     Column("posted_at", Text),
     Column("extraction_model", String),
-    Column("extracted_at", DateTime(timezone=True)),
+    Column("extracted_at", UTCDateTime()),
     UniqueConstraint("employer_id", "external_id", name="uq_postings_employer_external"),
     UniqueConstraint("source_id", "external_id", name="uq_postings_source_external"),
     # A posting belongs to exactly one of employer / source.
@@ -172,7 +199,7 @@ profiles = Table(
     Column("resume_text", Text, nullable=False),
     Column("domain_vocabulary", JSON),
     Column("active", Integer, nullable=False, server_default="1"),
-    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", UTCDateTime(), nullable=False),
 )
 
 
@@ -190,7 +217,7 @@ matches = Table(
     Column("rationale", Text),
     Column("model_version", String, nullable=False),
     Column("trigger", _enum(MatchTrigger, "match_trigger"), nullable=False),
-    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", UTCDateTime(), nullable=False),
     UniqueConstraint(
         "posting_id",
         "profile_id",
@@ -206,7 +233,7 @@ digests = Table(
     Column("id", Integer, primary_key=True),
     Column("recipient", String, nullable=False),
     Column("vertical", String, nullable=False),
-    Column("sent_at", DateTime(timezone=True)),
+    Column("sent_at", UTCDateTime()),
     Column(
         "status",
         _enum(DigestStatus, "digest_status"),
@@ -222,8 +249,8 @@ pipeline_runs = Table(
     "pipeline_runs",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("started_at", DateTime(timezone=True)),
-    Column("finished_at", DateTime(timezone=True)),
+    Column("started_at", UTCDateTime()),
+    Column("finished_at", UTCDateTime()),
     Column("status", _enum(PipelineRunStatus, "pipeline_run_status"), nullable=False),
     Column("employers_fetched", Integer),
     Column("fetch_failures", Integer),

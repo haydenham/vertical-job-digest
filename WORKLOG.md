@@ -5,6 +5,29 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-16 — Fix: UTCDateTime type (tz-aware timestamps on every dialect)
+
+**Did:** Replaced the localized `last_sent_at` tz patch (P3B1) with a root-cause fix. Added `UTCDateTime`
+(a `TypeDecorator` over `DateTime(timezone=True)`) in `src/vja/db/schema.py` and swapped it onto all 12 timestamp
+columns. It normalizes both ends — inbound datetimes → UTC; outbound naive values (SQLite drops tzinfo on read) →
+UTC re-attached — so app code never juggles naive-vs-aware datetimes. Removed the now-redundant patch in
+`digest/assembly.py`.
+
+**Why:** SQLite returns naive datetimes, Postgres returns aware — same code, different type. Harmless until Python
+does datetime math (Phase-5 freshness/age, D-024) or the Postgres cutover, where `naive vs aware` raises/compares
+wrong. Fixing at the column type kills the whole class of bug in one place.
+
+**No migration:** underlying DDL is unchanged (`DateTime(timezone=True)`), so `alembic check` reports no drift.
+
+**Tests:** +2 — `test_utc_datetime.py`: a stored timestamp round-trips tz-aware UTC on SQLite; a non-UTC aware input
+is normalized to UTC on write.
+
+**Verified:** ruff + mypy(strict) clean; **94 passed, 3 deselected**; `alembic check` clean.
+
+**Next:** Phase 3 · Block 2 — render + Resend send + the `digests` row lifecycle.
+
+---
+
 ## 2026-06-16 — Phase 3 · Block 1: digest assembly + verification gate
 
 **Did:** Built the *contents* of the digest + the trust gate in front of it — no sending yet (that's P3B2).

@@ -65,13 +65,9 @@ def last_sent_at(engine: Engine, vertical: str) -> datetime | None:
         digests.c.vertical == vertical,
         digests.c.status == DigestStatus.SENT.value,
     )
+    # The schema's UTCDateTime type already returns tz-aware UTC on every dialect.
     with engine.connect() as conn:
-        result = cast("datetime | None", conn.execute(stmt).scalar_one_or_none())
-    # SQLite returns naive datetimes; re-attach UTC so the API is consistently tz-aware
-    # (we store everything in UTC — `docs/04`). Postgres already returns aware values.
-    if result is not None and result.tzinfo is None:
-        result = result.replace(tzinfo=UTC)
-    return result
+        return cast("datetime | None", conn.execute(stmt).scalar_one_or_none())
 
 
 def _base_select() -> Select[Any]:
