@@ -16,6 +16,7 @@ dependencies = [
 vja-import-employers = "vja.db.employers:main"
 vja-run = "vja.pipeline:run_main"
 vja-digest = "vja.digest.send:send_main"
+vja-nightly = "vja.nightly:nightly_main"
 
 [dependency-groups]
 dev = [
