@@ -12,7 +12,7 @@ from vja.db.employers import (
 )
 from vja.db.schema import employers
 from vja.fetchers.registry import SUPPORTED_ATS_TYPES
-from vja.models import Verification
+from vja.models import AtsType, Verification
 
 _SEED = Path(__file__).resolve().parents[2] / "data" / "seed" / "employers_seed.csv"
 
@@ -88,7 +88,9 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Seed has 5 Greenhouse + 3 Lever + 1 Ashby = 9 verified Layer-1 employers.
-    assert len(fetchable) == 9
+    # Tier-A Layer-1 fetchers over the seed: 5 Greenhouse + 3 Lever + 1 Ashby = 9, plus the 12
+    # verified Workday tenants (the 3 `detected` Workday rows are parked `proposed` until P4.2).
+    assert len(fetchable) == 21
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 12
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints

@@ -11,12 +11,14 @@ from vja.fetchers.ashby import AshbyFetcher
 from vja.fetchers.base import Fetcher
 from vja.fetchers.greenhouse import GreenhouseFetcher
 from vja.fetchers.lever import LeverFetcher
+from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType
 
 _FETCHERS: dict[AtsType, Fetcher] = {
     AtsType.GREENHOUSE: GreenhouseFetcher(),
     AtsType.LEVER: LeverFetcher(),
     AtsType.ASHBY: AshbyFetcher(),
+    AtsType.WORKDAY: WorkdayFetcher(),
 }
 
 #: ATS types with a Layer-1 fetcher available (used to pre-filter fetchable employers).

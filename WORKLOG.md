@@ -5,6 +5,39 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-17 (later still) — Phase 4 · Block 1: generic Workday `cxs` fetcher (coverage 9 → 21)
+
+**Did:** Built the one generic Workday fetcher that lights up the 12 verified Workday tenants — the biggest
+single coverage win.
+- Probed PJM live first to capture the real cxs response → fixture `tests/fixtures/workday_pjm_jobs.json`,
+  and confirmed the public apply-URL form (`{host}/{site}{externalPath}`, no locale segment) resolves.
+- `src/vja/fetchers/workday.py` — `WorkdayFetcher`: **POST** the cxs `/jobs` endpoint, **paginate by offset
+  until `total` is reached, fail (never return partial) on any page error or short tally** (fetcher-level
+  false-closure guard). **List-only** mapping (`description=None`; deferred to a lazy Layer-2 fetch):
+  `external_id = externalPath`, `apply_url` built from the cxs host+site+path, `location = locationsText`,
+  `updated_at = None` (Workday's `postedOn` is relative text). Registered `AtsType.WORKDAY` in the registry.
+- Parked the 3 `detected` tenants (BP, GE Vernova `SITE_TBD`; Castleton prefix) → `status=proposed` in the
+  seed until P4.2 verifies their endpoints, so only the 12 verified tenants fetch.
+
+**Decisions:** D-032 (Workday list-only + paginate-or-fail; the 3 detected parked). Confirmed with Hayden:
+list-only (defer description cost to where Layer 2 uses it; accept that description-only edits aren't tracked);
+park the unverified tenants for a clean nightly run.
+
+**Tests:** +12 — `tests/unit/test_workday.py` (fixture mapping incl. derived apply_url; multi-page pagination
+assembles all pages; truncated fetch → `FetchError` not partial; mid-pagination error → raise; empty board → [];
+500/non-JSON/missing-`jobPostings`/missing-`total`/missing-`externalPath`/non-cxs-endpoint all → `FetchError`),
+registry test extended (WORKDAY resolves; unsupported case moved to iCIMS), `test_employers_import` fetchable
+count 9 → 21 (12 Workday). Opt-in `tests/live/test_workday_live.py` (PJM shape).
+
+**Verified:** ruff + format + mypy(strict) clean; **126 passed, 5 deselected**; live Workday smoke passed;
+`alembic check` clean (no DDL). **End-to-end:** re-imported seed → `vja-run` = 21 employers, **0 failures,
+1131 new postings**, 44s; stored Workday apply URLs well-formed (e.g. Vistra `…/vistra_careers/job/…`).
+
+**Next:** P4.2 — onboard the 3 detected tenants (live-probe BP/GE Vernova/Castleton endpoints + revisit
+Fluence/Enverus/Aurora) → coverage 21 → 24; then P4.3 — generic pipeline-level mass-closure guard.
+
+---
+
 ## 2026-06-17 (later) — Phase 3 · Block 3: nightly scheduling (launchd) + `vja-nightly` (Phase 3 complete)
 
 **Did:** Made the loop run unattended — the last Phase-3 piece.
