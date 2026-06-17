@@ -54,15 +54,23 @@ Anthropic SDK for model calls · Resend for the email digest · cron/launchd sch
 
 ## Running the pipeline
 
-The nightly job is two commands — fetch/diff/persist, then build/send the digest:
+The nightly job is one command — `vja-nightly` composes fetch/diff/persist then build/send the digest
+(all verticals), and emails an alert if it hard-fails:
 
 ```sh
-vja-run      --vertical grid_power_software   # fetch → diff → persist (writes a pipeline_runs row)
-vja-digest   --vertical grid_power_software   # build → verify links → render → send via Resend
+vja-nightly        # fetch → diff → persist → verify links → render → send; alert on failure
 ```
 
-Omit `--vertical` to process all active verticals. Config comes from the environment (a local `.env`
-is loaded automatically — it is git-ignored, never commit secrets):
+Scheduled via macOS **launchd** at 06:00 daily (see `deploy/launchd/`):
+
+```sh
+uv run vja-nightly                 # run once by hand (the first run sends the full baseline)
+bash deploy/launchd/install.sh     # then install the 06:00 schedule
+```
+
+The two stages are also runnable separately for debugging — `vja-run [--vertical V]` (fetch→diff→persist)
+and `vja-digest [--vertical V]` (build→verify→render→send). Config comes from the environment (a local
+`.env`, loaded automatically — git-ignored, never commit secrets; see `.env.example`):
 
 | var | purpose |
 |---|---|

@@ -114,8 +114,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **Phase 1 — Core logic & scaffolding.** ✅ models, `content_hash`, GH/Lever/Ashby fetchers, diff arithmetic.
 - **Phase 2 — Persistence + Layer-1 implementation.** DB foundation + employer import ✅; fetch→diff→persist ✅;
   orchestration loop + `pipeline_runs` (in progress).
-- **Phase 3 — Bare digest (proof of loop).** Assemble what changed → verify apply links (D-008) → email via Resend
-  → schedule (cron/launchd). NO LLM. **First diff in the inbox = proof-of-loop milestone** (and the kill-criterion test).
+- **Phase 3 — Bare digest (proof of loop).** ✅ Assemble what changed → verify apply links (D-008) → email via Resend
+  → schedule via launchd (`vja-nightly`, D-031). NO LLM. **First diff in the inbox = proof-of-loop milestone** (hit).
 - **Phase 4 — Workday fetcher.** One generic `cxs` fetcher + per-tenant config → coverage ~9→24 of 54 (D-026/D-018).
   Pure Layer 1; rides on Phase 2's failure isolation + Phase 3's verification gate.
 - **Phase 5 — Layer 2: extraction + matching.** Profiles (resume), LLM extraction (cached by `content_hash`),
@@ -138,7 +138,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   summary record. A digest that fails to send is itself an alert.
 - API keys in env config, never in the repo. DB never publicly exposed. A git-ignored `.env` is
   auto-loaded (python-dotenv); send config = `RESEND_API_KEY`, `VJA_DIGEST_RECIPIENT`,
-  `VJA_DIGEST_FROM` (default sandbox `onboarding@resend.dev`). Nightly job = `vja-run` then `vja-digest`.
+  `VJA_DIGEST_FROM` (default sandbox `onboarding@resend.dev`). Nightly job = **`vja-nightly`** (composes
+  run+digest, alerts on hard failure), scheduled via launchd (`deploy/launchd/`); `vja-run`/`vja-digest`
+  remain as separate debugging entry points. Scheduler is a swappable trigger — cloud cutover swaps it, not code (D-031).
 - **Testing is policy, not preference (this code is model-written).** No behavior is "done" until a test pins it at
   the right level; bug fixes start with a failing regression test. Default `pytest` (unit+integration+system) stays
   fast/offline/free; `live`/`eval`/`e2e` are opt-in markers. Full rules: `docs/08-testing-strategy.md`.

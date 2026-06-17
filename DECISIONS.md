@@ -212,3 +212,23 @@ no logic of its own" framing in Memo 02 §76 / CLAUDE.md (that was early scope-c
 **Why:** a read-only mirror of digest data gives the user no reason to open the dashboard; recency views are its reason
 to exist. Keying "fresh" to ATS dates (not our content-change detection) means freshness reflects what the *employer*
 actually did, which is exactly what the "apply fast" thesis (D-024) depends on.
+
+### D-031 · Nightly scheduling: launchd + one-process `vja-nightly` + alert-on-hard-failure · accepted · 2026-06-17
+The unattended nightly run is a single console command, **`vja-nightly`** (`src/vja/nightly.py`), composing
+`run_pipeline` (all verticals, one pass) then `send_digest` per vertical — one process, one log, one exit code.
+- **Scheduler = macOS launchd** (LaunchAgent, `deploy/launchd/`), daily 06:00 local. Chosen over cron because
+  `StartCalendarInterval` runs a **missed job when the Mac wakes from sleep**; cron silently skips it. APScheduler
+  rejected (needs a long-lived process — wrong for a laptop). Refines D-012 (local cron/launchd, week 1).
+- **Failure surfacing (the run is unmonitored):** on a **hard failure** — pipeline `status==failed`, or any digest
+  send `failed` — `vja-nightly` emails an alert (reusing the Resend path) and exits non-zero. Partial fetch failures
+  are logged and included in the alert body but don't by themselves alert (anti-noise, cf. D-028). If the alert send
+  itself fails (Resend down), it's logged, not raised.
+- **Portability (standing principle; cloud cutover D-025):** the scheduler is a swappable trigger; the durable core is
+  the `vja-nightly` command + env/`.env` config + `VJA_DATABASE_URL`. macOS-specific surface is confined to
+  `deploy/launchd/` (plist + 2 scripts). Cutover adds a `deploy/<platform>/` trigger + secrets + a Postgres URL swap —
+  no rewrite. Two rules keep it portable: (1) the app logs to **stdout/stderr** and the trigger routes them (never
+  hardcode log paths); (2) schedule time + secrets are environment config, not code. launchd's catch-up is laptop-only
+  (servers don't sleep → plain cron suffices), and Postgres unlocks GitHub Actions cron (rejected before only for
+  SQLite ephemerality, D-012).
+**Why:** completes Phase 3's proof-of-loop as a *recurring* product, not a thing you remember to run; the sleep
+catch-up is the deciding factor for a laptop; an active alert is required precisely because nobody watches the run.

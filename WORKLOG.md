@@ -5,6 +5,41 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-17 (later) — Phase 3 · Block 3: nightly scheduling (launchd) + `vja-nightly` (Phase 3 complete)
+
+**Did:** Made the loop run unattended — the last Phase-3 piece.
+- `src/vja/nightly.py`: `run_nightly(engine, *, now, config, resolve_fetcher, verify)` composes
+  `run_pipeline(vertical=None)` (all verticals, one pass) then `send_digest` per
+  `distinct_active_verticals`, aggregates a status, and on a **hard failure** emails an alert.
+  `NightlyResult{status, run, digests, alerted}`. `_send_failure_alert` reuses `send_email` (a
+  `SendError` there is logged, not raised — can't alert if Resend is down). `nightly_main` →
+  `vja-nightly` console script; logs to stdout/stderr, exits 1 on hard failure.
+- **Hard-failure trigger:** pipeline `failed`, or any digest send `failed`. Partial fetch failures
+  are logged + in the alert body but don't themselves alert (anti-noise, same logic as D-028).
+- `deploy/launchd/`: `com.vja.nightly.plist.template` (StartCalendarInterval 06:00, absolute
+  `.venv/bin/vja-nightly`, `WorkingDirectory` = repo root so `.env`/`data/vja.db` resolve, logs →
+  `logs/`), idempotent `install.sh`/`uninstall.sh` (sed-substitute `__WORKDIR__`, load/unload), and a
+  README (prereqs, baseline-first note, install/verify/uninstall, failure behavior). Added `.env.example`.
+- `pyproject.toml`: `vja-nightly` entry point.
+
+**Decisions:** D-031 — launchd over cron (runs a job missed during sleep on wake; cron silently skips);
+one-process `vja-nightly`; alert-email-on-hard-failure + logs; 06:00. Recorded the **portability**
+principle (scheduler = swappable trigger; portable core = the command + env config + `VJA_DATABASE_URL`;
+app logs to stdout/stderr so the trigger routes them; cloud cutover swaps `deploy/<platform>/`, not code).
+
+**Tests:** +7 — `test_nightly.py` (integration: happy→sent+no-alert; failed send→`failed`+alert, 2 Resend
+calls; pipeline failure→alert even when digest skips; empty universe→nothing sent) + `test_nightly_alert.py`
+(unit: `_failure_summary` content; alert subject carries counts; alert swallows a `SendError`).
+
+**Verified:** ruff + ruff-format + mypy(strict) clean; **115 passed, 4 deselected**; `alembic check` clean
+(no DDL). Plist renders to absolute paths; scripts `chmod +x`; `.env.example` is tracked (not git-ignored).
+
+**Phase 3 complete** (assemble → verify → send → schedule). **Next:** Phase 4 — generic Workday `cxs`
+fetcher (D-026), ~9→24 of 54 employers. (Operational: run `vja-nightly` by hand once to absorb the 581-role
+baseline, then `bash deploy/launchd/install.sh`.)
+
+---
+
 ## 2026-06-17 — Phase 3 · Block 2: render + Resend send + `digests` row lifecycle
 
 **Did:** Closed the loop downstream of P3B1's `DigestContents` — the bare digest now actually sends.

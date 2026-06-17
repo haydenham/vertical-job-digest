@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: install.sh substitutes __WORKDIR__ with the repo root. Do not edit the installed
+     copy directly; re-run install.sh after changing this template. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.vja.nightly</string>
+
+    <!-- The editable-install console script: absolute path, so launchd needs no PATH or uv. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__WORKDIR__/.venv/bin/vja-nightly</string>
+    </array>
+
+    <!-- So the app's load_dotenv() finds .env and the default data/vja.db path resolves. -->
+    <key>WorkingDirectory</key>
+    <string>__WORKDIR__</string>
+
+    <!-- Daily at 06:00 local time. launchd runs a missed job when the Mac wakes from sleep. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- App logs to stdout/stderr; the trigger decides the destination (portability rule, D-031). -->
+    <key>StandardOutPath</key>
+    <string>__WORKDIR__/logs/nightly.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__WORKDIR__/logs/nightly.err.log</string>
+</dict>
+</plist>
