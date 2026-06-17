@@ -167,3 +167,27 @@ meaningful employers (Vistra/S&P/Shell/Duke/PJM…) — adding it ~doubles cover
 independent of the LLM, so it has no reason to wait behind matching; building it right after the digest also de-risks
 the gnarliest fetcher early and lets it ride on Phase-2 failure isolation + Phase-3 link verification. The bare digest
 (P3) still ships first on the 9 easy fetchers so the riskiest fetcher never gates the proof-of-loop milestone.
+
+### D-027 · Digest recipient: env var now → `profiles` at Phase 5 · accepted · 2026-06-17
+For the bare digest, the recipient is the `VJA_DIGEST_RECIPIENT` env var (single user — the builder). At Phase 5 the
+recipient resolves from active `profiles` rows per vertical; the `profiles` table already exists in the schema, so this
+is a source swap, not a model change. Multi-user/auth becomes operationally real at the D-025 hosting/Postgres cutover.
+**Why:** a "user" in this product is a *resume + vertical + email* (the rationale matches against the resume), and the
+bare digest has no resume/matching yet — a `profiles` row would be half-empty. The env var is a deliberate bridge that
+keeps `digests.recipient` carrying a real address without standing up signup/auth before there's anything to match.
+
+### D-028 · Empty digest = skip send (no email, no `digests` row) · accepted · 2026-06-17
+When a digest has zero new AND zero closed postings, send nothing and write no `digests` row. The `pipeline_runs` row
+still records that the run happened. (An all-quarantine night — new candidates all failed verification — logs the
+quarantine count to stderr so it isn't silent.)
+**Why:** the product hypothesis rests on the builder continuing to open the digest (the kill criterion). A recurring
+"nothing changed today" email trains the reader to ignore it; every email that arrives must carry real signal.
+
+### D-029 · Resend via raw httpx; sandbox sender for the proof-of-loop · accepted · 2026-06-17
+The Resend send (D-013) is a single `httpx.post` to `https://api.resend.com/emails`, not the `resend` SDK. Sender
+defaults to the sandbox `onboarding@resend.dev` (override via `VJA_DIGEST_FROM`); `RESEND_API_KEY` from env (the local
+`.env` may spell it `resend-api-key` — both accepted, since hyphenated names can't be shell-exported, only
+dotenv-loaded). A `pending` `digests` row carrying the full contents JSON is written *before* the POST, then finalized
+`sent`/`failed` — mirroring the `pipeline_runs` running-tombstone so a crash/failed send leaves a durable record.
+**Why:** httpx is already a dependency and `respx`-mockable (no new dep, offline tests); the sandbox sender needs only
+an API key to prove the loop end-to-end (it delivers only to the account-owner email — verify a domain to send wider).

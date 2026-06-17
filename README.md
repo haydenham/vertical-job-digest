@@ -6,8 +6,9 @@ with an LLM-written, reasoned match against the user's resume.
 
 Not a live chat agent. Not a horizontal job board. **The diff is the product.**
 
-> Status: **planning / pre-build.** Architecture and data model are specified; the seed universe
-> for the first vertical is curated. No pipeline code is written yet — Layer 1 is next.
+> Status: **building Phase 3 (bare digest).** Phases 0–2 are done (data model, Layer-1 GH/Lever/Ashby
+> fetchers, fetch→diff→persist, orchestration). The diff now renders + sends as an email via Resend;
+> matching (Layer 2) and the Workday fetcher are next.
 
 ## How it works (three layers, cheap deterministic path first)
 
@@ -50,6 +51,27 @@ data/
 
 Python pipeline · `uv` toolchain · FastAPI (read-only dashboard API) · SQLite → Postgres ·
 Anthropic SDK for model calls · Resend for the email digest · cron/launchd scheduling (local, week 1) · React dashboard (later).
+
+## Running the pipeline
+
+The nightly job is two commands — fetch/diff/persist, then build/send the digest:
+
+```sh
+vja-run      --vertical grid_power_software   # fetch → diff → persist (writes a pipeline_runs row)
+vja-digest   --vertical grid_power_software   # build → verify links → render → send via Resend
+```
+
+Omit `--vertical` to process all active verticals. Config comes from the environment (a local `.env`
+is loaded automatically — it is git-ignored, never commit secrets):
+
+| var | purpose |
+|---|---|
+| `RESEND_API_KEY` | Resend API key (required to send; `resend-api-key` also accepted) |
+| `VJA_DIGEST_RECIPIENT` | digest recipient. With the sandbox sender this must be your Resend account email |
+| `VJA_DIGEST_FROM` | sender; defaults to the Resend sandbox `onboarding@resend.dev` (set a verified domain to send anywhere) |
+| `VJA_DATABASE_URL` | DB URL; defaults to local SQLite `sqlite:///data/vja.db` |
+
+An empty digest (nothing new or closed) sends no email by design (D-028).
 
 ## Build sequence (phases)
 
