@@ -83,7 +83,7 @@ matching/dashboard — biggest coverage win, and pure Layer 1). Phases 0–2 are
 3. **Phase 3:** bare daily digest (no LLM) — verify links, email via Resend, schedule. *First diff in the inbox = proof of loop.*
 4. **Phase 4:** Workday fetcher — coverage ~9→24 of 54 (the high-volume employers).
 5. **Phase 5:** LLM extraction + matching (negative-case rationale + verification; two-stage cheap filter).
-6. **Phase 6:** minimal read-only dashboard.
+6. **Phase 6:** read-only dashboard — match table with recency toggles (new today / week / 2 weeks / all open), keyed on ATS posting dates (D-030).
 7. **Phase 7:** aviation vertical — the architecture test (config + curation only).
 8. **Phase 8+:** remaining ATS coverage (Tier-B, HN/niche), then the discovery agent. Postgres/host cutover when demo users land.
 

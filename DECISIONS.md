@@ -191,3 +191,24 @@ dotenv-loaded). A `pending` `digests` row carrying the full contents JSON is wri
 `sent`/`failed` — mirroring the `pipeline_runs` running-tombstone so a crash/failed send leaves a durable record.
 **Why:** httpx is already a dependency and `respx`-mockable (no new dep, offline tests); the sandbox sender needs only
 an API key to prove the loop end-to-end (it delivers only to the account-owner email — verify a domain to send wider).
+
+### D-030 · Dashboard v1 includes recency toggles; freshness = ATS posted/updated date · accepted · 2026-06-17
+The v1 dashboard is **not** a static four-column mirror of the digest — it includes **recency toggles** over the full
+open set, which is the feature that justifies a pull surface existing beside the push digest (a once-a-day email
+structurally can't offer "show me everything updated this week"). Refines D-010; relaxes the "deliberately minimal /
+no logic of its own" framing in Memo 02 §76 / CLAUDE.md (that was early scope-control, not a hard constraint).
+- **Toggle set:** *New today* (mirrors the digest's `new` set — keyed on **`first_seen_at`**, i.e. our detection),
+  *This week* (≤7d), *Two weeks* (≤14d — same window as the D-024 backfill cap), default *All open* with stale
+  flagging (D-024 b3). Shared recency vocabulary across digest, backfill, and dashboard.
+- **Recency criterion = ATS activity date.** A posting falls in a window if it was **posted *or* updated within it**,
+  using the most recent ATS-supplied date (Greenhouse `updated_at`, Ashby `publishedAt`, Lever `createdAt`),
+  normalized to UTC, falling back to `first_seen_at` when the ATS gives nothing. (*New today* alone uses
+  `first_seen_at` so it equals the digest.)
+- **Shared infra (build once):** persisting + normalizing that ATS date powers three things — the Phase-5 backfill
+  2-week cap (D-024 b1), these dashboard toggles (D-024 b3), and future apply-speed/lifespan signals. Fetchers already
+  capture the date into `RawPosting`; `insert_posting` currently drops it, so the work is: normalize per-ATS → persist
+  (small migration) → query. It lands with **Phase 5** (backfill needs it first); the **Phase 6** toggles then consume
+  it with no new backend date work — so nothing in the roadmap reorders.
+**Why:** a read-only mirror of digest data gives the user no reason to open the dashboard; recency views are its reason
+to exist. Keying "fresh" to ATS dates (not our content-change detection) means freshness reflects what the *employer*
+actually did, which is exactly what the "apply fast" thesis (D-024) depends on.

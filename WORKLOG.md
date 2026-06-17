@@ -38,7 +38,15 @@ Resend 4xx & transport-error → failed row, empty → no send/no row, window-ad
 `e2e` real-send (`tests/e2e/`, skipped unless `RESEND_API_KEY`+recipient set — the proof-of-loop test).
 
 **Verified:** ruff + ruff-format + mypy(strict) clean; **108 passed, 4 deselected**; `alembic check`
-clean against a fresh migrated DB (no DDL change). Hayden put the Resend key in `.env`.
+clean against a fresh migrated DB (no DDL change). Hayden put the Resend key in `.env`. Confirmed end-to-end:
+the opt-in `e2e` test sent a real email through Resend.
+
+**Also decided this session (planning, no code):** D-030 — the v1 **dashboard includes recency toggles** (new today /
+updated within a week / within two weeks / all open) over the full open set; this is what makes the pull surface worth
+opening beside the push digest. Freshness keys on the **ATS posted/updated date** ("posted or updated within the
+window"). Surfaced the shared dependency: persisting+normalizing that ATS date is one piece of infra that powers the
+Phase-5 backfill cap (D-024), the dashboard toggles (D-030), and apply-speed signals — it rides into Phase 5, toggles
+consume it in Phase 6, nothing reorders. Held the 2-week baseline/freshness filter where it is (new users ~2 weeks out).
 
 **Next:** the live proof-of-loop send (needs `VJA_DIGEST_RECIPIENT` = Hayden's Resend account email,
 since the sandbox sender only delivers to the account owner), then Phase 4 — the generic Workday

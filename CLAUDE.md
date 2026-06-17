@@ -94,11 +94,14 @@ dashboard.
 - **Email digest = push** (primary). New postings + match rationale + closures,
   sent at the end of the nightly pipeline. Postings are time-sensitive; output
   must arrive whether or not the user remembers the tool exists.
-- **Dashboard = pull** (simple, read-only). A single-page React table over the
-  same nightly-computed data: title, company, apply link, match quality
-  (verdict/score). Default sort: newest first. Updates once daily with the
-  pipeline — no live fetching, no logic of its own, just a window onto the DB.
-  Deliberately minimal in v1; polish is post-week-4.
+- **Dashboard = pull** (read-only). A single-page React table over the same
+  nightly-computed data: title, company, apply link, match quality (verdict/score),
+  default sort newest-first. Updates once daily with the pipeline — no live fetching,
+  just a window onto the DB. **v1 includes recency toggles** — *new today* / *updated
+  within a week* / *within two weeks* / *all open* — over the full open set; this is the
+  feature that justifies the pull surface beside the push digest (D-030). Windows key on
+  the ATS posted/updated date (posted **or** updated within the window; D-024); *new
+  today* uses `first_seen_at` so it equals the digest. Further polish is post-week-4.
 
 ## Build sequence (phase roadmap)
 
@@ -117,7 +120,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   Pure Layer 1; rides on Phase 2's failure isolation + Phase 3's verification gate.
 - **Phase 5 — Layer 2: extraction + matching.** Profiles (resume), LLM extraction (cached by `content_hash`),
   two-stage filter (D-023), matching with fits/gaps/verdict (D-007) + eval gate (D-020); digest gains rationale.
-- **Phase 6 — Dashboard.** Read-only FastAPI API + minimal React four-column table (needs the match column).
+- **Phase 6 — Dashboard.** Read-only FastAPI API + React table (title/company/apply/match) with **recency toggles**
+  (new today / 1wk / 2wk / all open) over the full open set (D-030). Consumes the normalized ATS posted/updated date
+  built for the Phase-5 backfill (D-024) — no new backend date work, so nothing reorders.
 - **Phase 7 — Aviation vertical.** The architecture test — config + curation only, **any forced code change is a defect** (D-004).
 - **Phase 8 — Remaining coverage.** Tier-B fetchers (iCIMS/Workable/Oracle/SmartRecruiters), then Layer-2 LLM-read
   for the custom tail + HN/niche sources.
