@@ -5,6 +5,47 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-17 — Phase 3 · Block 2: render + Resend send + `digests` row lifecycle
+
+**Did:** Closed the loop downstream of P3B1's `DigestContents` — the bare digest now actually sends.
+- `src/vja/digest/render.py`: `render_digest(contents) -> RenderedEmail{subject, html, text}` +
+  `contents_to_dict` (JSON-safe audit blob for the `contents` column). Body shows **new** roles
+  (company · title · location · verified apply link) and **closed** roles; **quarantined** postings
+  are kept out of the user-facing body but recorded in the audit JSON. Vertical slug is humanized
+  generically (`grid_power_software` → "Grid Power Software") — no per-vertical code (CLAUDE rule).
+- `src/vja/db/digests.py`: `create_pending` / `mark_sent` / `mark_failed` — mirrors the
+  `pipeline_runs` repo (open `Connection`, caller commits per-txn). `pending` row carries full
+  contents *before* the send; finalize flips to `sent` (+`sent_at`) or `failed` (+`error`).
+- `src/vja/digest/send.py`: `send_email` (one `httpx.post` to Resend, `raise_for_status`, errors →
+  `SendError`), `send_digest` orchestrator (build → skip-if-empty → render → pending row → send →
+  finalize; `verify`/`config` injectable for offline tests), `load_config` (`.env` via python-dotenv;
+  `RESEND_API_KEY`/`resend-api-key`, `VJA_DIGEST_FROM` default sandbox, `VJA_DIGEST_RECIPIENT`), and
+  the `vja-digest` console script (`--vertical`, default = all active verticals via new
+  `distinct_active_verticals`). Added `python-dotenv` dep.
+
+**Decisions:** D-027 (recipient = env var now → `profiles` at Phase 5), D-028 (empty digest = skip,
+no email/row; protects the kill criterion), D-029 (Resend via raw httpx + sandbox sender; pending-row-
+before-send lifecycle). Resolved with Hayden: env var bridge (not a new users table — `profiles`
+already models a user); sandbox `onboarding@resend.dev`; standalone `vja-digest` (matching slots
+between diff and digest at Phase 5, so send stays separate).
+
+**A successful send auto-advances the diff window** — `assembly.last_sent_at` keys the next digest off
+`digests.sent_at`, so `mark_sent` needs no extra wiring (pinned by a test).
+
+**Tests:** +18 — `test_digest_render.py` (unit: subject counts, links present, quarantine hidden,
+JSON round-trip), `test_digests_repo.py` (lifecycle), `test_digest_send.py` (respx: sent-row+payload,
+Resend 4xx & transport-error → failed row, empty → no send/no row, window-advance), and an opt-in
+`e2e` real-send (`tests/e2e/`, skipped unless `RESEND_API_KEY`+recipient set — the proof-of-loop test).
+
+**Verified:** ruff + ruff-format + mypy(strict) clean; **108 passed, 4 deselected**; `alembic check`
+clean against a fresh migrated DB (no DDL change). Hayden put the Resend key in `.env`.
+
+**Next:** the live proof-of-loop send (needs `VJA_DIGEST_RECIPIENT` = Hayden's Resend account email,
+since the sandbox sender only delivers to the account owner), then Phase 4 — the generic Workday
+`cxs` fetcher (D-026), the biggest coverage win (~9→24 of 54).
+
+---
+
 ## 2026-06-16 — Fix: UTCDateTime type (tz-aware timestamps on every dialect)
 
 **Did:** Replaced the localized `last_sent_at` tz patch (P3B1) with a root-cause fix. Added `UTCDateTime`

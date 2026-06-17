@@ -131,7 +131,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   long tail. Getting IP-banned is a self-inflicted coverage hole.
 - Per-fetcher health checks with loud alerts; every pipeline run writes a
   summary record. A digest that fails to send is itself an alert.
-- API keys in env config, never in the repo. DB never publicly exposed.
+- API keys in env config, never in the repo. DB never publicly exposed. A git-ignored `.env` is
+  auto-loaded (python-dotenv); send config = `RESEND_API_KEY`, `VJA_DIGEST_RECIPIENT`,
+  `VJA_DIGEST_FROM` (default sandbox `onboarding@resend.dev`). Nightly job = `vja-run` then `vja-digest`.
 - **Testing is policy, not preference (this code is model-written).** No behavior is "done" until a test pins it at
   the right level; bug fixes start with a failing regression test. Default `pytest` (unit+integration+system) stays
   fast/offline/free; `live`/`eval`/`e2e` are opt-in markers. Full rules: `docs/08-testing-strategy.md`.

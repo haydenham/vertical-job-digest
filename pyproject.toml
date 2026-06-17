@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.4",
     "httpx>=0.28",
+    "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.51",
 ]
 
@@ -14,6 +15,7 @@ dependencies = [
 # CLI entry points get wired here as the pipeline grows (fetch, diff, send).
 vja-import-employers = "vja.db.employers:main"
 vja-run = "vja.pipeline:run_main"
+vja-digest = "vja.digest.send:send_main"
 
 [dependency-groups]
 dev = [

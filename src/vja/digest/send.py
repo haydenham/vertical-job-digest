@@ -1,0 +1,187 @@
+"""Send the digest via Resend (D-013) and drive the `digests` row lifecycle.
+
+The orchestrator `send_digest` is the standalone step run after the nightly `vja-run`:
+build contents (with the D-008 verification gate) → skip if nothing changed (D-028) →
+render → write a `pending` row → POST to Resend → finalize `sent`/`failed`.
+
+Config comes from the environment (a local `.env` is loaded for the cron runtime, D-012):
+- `RESEND_API_KEY` — required to send. The provided `.env` may name it `resend-api-key`;
+  both spellings are accepted (hyphenated names can't be shell-exported, only dotenv-loaded).
+- `VJA_DIGEST_FROM` — sender; defaults to the Resend sandbox `onboarding@resend.dev`, which
+  delivers only to your own Resend account email (D-029). Set a verified domain to send anywhere.
+- `VJA_DIGEST_RECIPIENT` — recipient. The single-user bridge until Phase 5 reads `profiles` (D-027).
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+import httpx
+from dotenv import load_dotenv
+from sqlalchemy import Engine
+
+from vja.db import digests as digests_repo
+from vja.db.employers import distinct_active_verticals
+from vja.db.engine import begin, get_engine
+from vja.digest.assembly import build_digest
+from vja.digest.render import RenderedEmail, contents_to_dict, render_digest
+
+_RESEND_ENDPOINT = "https://api.resend.com/emails"
+_SANDBOX_SENDER = "onboarding@resend.dev"
+_TIMEOUT = 15.0
+
+
+class ConfigError(RuntimeError):
+    """Required send configuration (API key / recipient) is missing from the environment."""
+
+
+class SendError(RuntimeError):
+    """The Resend API call did not succeed (transport error or non-2xx response)."""
+
+
+@dataclass(frozen=True)
+class DigestConfig:
+    api_key: str
+    sender: str
+    recipient: str
+
+
+@dataclass(frozen=True)
+class DigestSendResult:
+    vertical: str
+    status: str  # "sent" | "failed" | "skipped"
+    digest_id: int | None
+    new: int
+    closed: int
+    quarantined: int
+    error: str | None = None
+
+
+def load_config() -> DigestConfig:
+    """Load send config from the environment (loading `.env` first for the local runtime)."""
+    load_dotenv()
+    # The provided `.env` names the key `resend-api-key`; accept it verbatim (it can't be
+    # shell-exported, only dotenv-loaded), alongside the canonical uppercase form.
+    api_key = os.environ.get("RESEND_API_KEY") or os.environ.get("resend-api-key")  # noqa: SIM112
+    if not api_key:
+        raise ConfigError("RESEND_API_KEY is not set (checked RESEND_API_KEY and resend-api-key)")
+    recipient = os.environ.get("VJA_DIGEST_RECIPIENT")
+    if not recipient:
+        raise ConfigError("VJA_DIGEST_RECIPIENT is not set")
+    sender = os.environ.get("VJA_DIGEST_FROM", _SANDBOX_SENDER)
+    return DigestConfig(api_key=api_key, sender=sender, recipient=recipient)
+
+
+def send_email(config: DigestConfig, rendered: RenderedEmail) -> None:
+    """POST one email to Resend; raise `SendError` on any transport error or non-2xx response."""
+    payload = {
+        "from": config.sender,
+        "to": [config.recipient],
+        "subject": rendered.subject,
+        "html": rendered.html,
+        "text": rendered.text,
+    }
+    try:
+        response = httpx.post(
+            _RESEND_ENDPOINT,
+            json=payload,
+            headers={"Authorization": f"Bearer {config.api_key}"},
+            timeout=_TIMEOUT,
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise SendError(f"Resend returned {exc.response.status_code}: {exc.response.text}") from exc
+    except httpx.HTTPError as exc:
+        raise SendError(f"Resend request failed: {exc!r}") from exc
+
+
+def send_digest(
+    engine: Engine,
+    vertical: str,
+    *,
+    now: datetime | None = None,
+    config: DigestConfig | None = None,
+    verify: Callable[[str], bool] | None = None,
+) -> DigestSendResult:
+    """Build → (skip if empty) → render → persist pending → send → finalize, for one vertical."""
+    stamp = now or datetime.now(UTC)
+    contents = build_digest(engine, vertical, now=stamp, verify=verify)
+    n_new, n_closed, n_quar = len(contents.new), len(contents.closed), len(contents.quarantined)
+
+    def result(status: str, digest_id: int | None, error: str | None = None) -> DigestSendResult:
+        return DigestSendResult(
+            vertical=vertical,
+            status=status,
+            digest_id=digest_id,
+            new=n_new,
+            closed=n_closed,
+            quarantined=n_quar,
+            error=error,
+        )
+
+    if not contents.new and not contents.closed:
+        # Nothing to ship (D-028). Surface quarantines so an all-quarantine night isn't silent.
+        if contents.quarantined:
+            print(
+                f"[{vertical}] skipped: 0 new, 0 closed, "
+                f"but {n_quar} quarantined (dead apply links)",
+                file=sys.stderr,
+            )
+        return result("skipped", None)
+
+    cfg = config or load_config()
+    rendered = render_digest(contents)
+
+    with begin(engine) as conn:
+        digest_id = digests_repo.create_pending(
+            conn, recipient=cfg.recipient, vertical=vertical, contents=contents_to_dict(contents)
+        )
+
+    try:
+        send_email(cfg, rendered)
+    except SendError as exc:
+        with begin(engine) as conn:
+            digests_repo.mark_failed(conn, digest_id, error=str(exc))
+        return result("failed", digest_id, error=str(exc))
+
+    with begin(engine) as conn:
+        digests_repo.mark_sent(conn, digest_id, sent_at=stamp)
+    return result("sent", digest_id)
+
+
+def send_main(argv: list[str] | None = None) -> int:
+    """CLI: `vja-digest [--vertical V]` — assemble and send the digest(s) via Resend."""
+    parser = argparse.ArgumentParser(
+        prog="vja-digest", description="Assemble and send the bare digest via Resend."
+    )
+    parser.add_argument("--vertical", default=None, help="limit to one vertical (default: all)")
+    args = parser.parse_args(argv)
+
+    engine = get_engine()
+    verticals = [args.vertical] if args.vertical else distinct_active_verticals(engine)
+    if not verticals:
+        print("no active verticals to send", file=sys.stderr)
+        return 0
+
+    config = load_config()
+    failed = False
+    for vertical in verticals:
+        result = send_digest(engine, vertical, config=config)
+        suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
+        print(
+            f"[{result.vertical}] {result.status}: new={result.new} closed={result.closed} "
+            f"quarantined={result.quarantined}{suffix}"
+        )
+        if result.status == "failed":
+            failed = True
+            print(f"  ! {result.error}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(send_main())

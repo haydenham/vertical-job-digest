@@ -153,6 +153,18 @@ def count_employers(engine: Engine, vertical: str | None = None) -> int:
         return int(conn.execute(stmt).scalar_one())
 
 
+def distinct_active_verticals(engine: Engine) -> list[str]:
+    """Distinct verticals that have ≥1 active employer (drives the per-vertical digest)."""
+    stmt = (
+        select(employers.c.vertical)
+        .where(employers.c.status == EmployerStatus.ACTIVE.value)
+        .distinct()
+        .order_by(employers.c.vertical)
+    )
+    with engine.connect() as conn:
+        return [row[0] for row in conn.execute(stmt).all()]
+
+
 def active_fetchable_employers(engine: Engine, vertical: str | None = None) -> list[Employer]:
     """Active employers whose ATS has a Layer-1 fetcher, as lean fetch-facing `Employer`s.
 
