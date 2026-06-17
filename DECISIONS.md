@@ -232,3 +232,21 @@ The unattended nightly run is a single console command, **`vja-nightly`** (`src/
   SQLite ephemerality, D-012).
 **Why:** completes Phase 3's proof-of-loop as a *recurring* product, not a thing you remember to run; the sleep
 catch-up is the deciding factor for a laptop; an active alert is required precisely because nobody watches the run.
+
+### D-032 · Workday `cxs` fetcher: list-only + paginate-or-fail · accepted · 2026-06-17
+One generic `WorkdayFetcher` (`src/vja/fetchers/workday.py`) handles all Workday tenants via the per-tenant config
+already in the seed — no per-company code (D-004/D-017). It's a **POST** to the cxs `/jobs` endpoint, paginated by
+`offset`. Two contracts:
+- **List-only.** The cxs list omits the job description; we map from the list alone (`description=None`). The full
+  description is a Layer-2 concern, fetched lazily per *new/changed* posting later — fetching it here would mean
+  hundreds of needless requests per big tenant (S&P 234, Vistra 193) for data Layer 1 doesn't use. The one tradeoff:
+  `content_hash` won't notice a description-only edit (accepted — the diff keys on `external_id`).
+- **Paginate fully or fail (never partial).** Page until the collected count reaches `total`; any page error → the
+  whole employer fails (`FetchError`), and a short final tally also fails loudly. A truncated/partial list would read
+  as mass closures — this is the fetcher-level half of the false-closure guard (the pipeline-level threshold guard is
+  P4.3). Mapping: `external_id = externalPath` (stable, unique — D-016), `apply_url` = public board URL built from the
+  cxs host + site + `externalPath` (confirmed live), `location = locationsText`, `updated_at = None` (Workday's list
+  gives only a relative `postedOn` — a weak spot for D-030). The **3 `detected` tenants** (BP, GE Vernova `SITE_TBD`;
+  Castleton prefix) are parked `proposed` in the seed until P4.2 live-verifies their endpoints.
+**Why:** Workday is the biggest coverage bucket (15/54); the generic fetcher took live coverage 9 → 21 fetchable
+employers (+1131 postings on first run). List-only keeps it polite/fast; paginate-or-fail keeps the diff trustworthy.

@@ -1,0 +1,32 @@
+{
+  "total": 13,
+  "jobPostings": [
+    {
+      "title": "Sr. Market Strategist I (II)",
+      "externalPath": "/job/Audubon-PA-Hybrid/Sr-Market-Strategist-I--II-_REQ-2026-4193",
+      "locationsText": "Audubon, PA (Hybrid)",
+      "postedOn": "Posted 2 Days Ago",
+      "bulletFields": [
+        "REQ-2026-4193"
+      ]
+    },
+    {
+      "title": "Sr. Market Design Specialist I (II)",
+      "externalPath": "/job/Audubon-PA/Sr-Market-Design-Specialist-I--II-_REQ-2026-4176",
+      "locationsText": "Audubon, PA",
+      "postedOn": "Posted 7 Days Ago",
+      "bulletFields": [
+        "REQ-2026-4176"
+      ]
+    },
+    {
+      "title": "(Sr./Lead) Fuel Supply Strategist I (II)",
+      "externalPath": "/job/Audubon-PA-Hybrid/XMLNAME--Sr-Lead--Fuel-Supply-Strategist-I--II-_REQ-2026-4191-1",
+      "locationsText": "Audubon, PA (Hybrid)",
+      "postedOn": "Posted 7 Days Ago",
+      "bulletFields": [
+        "REQ-2026-4191"
+      ]
+    }
+  ]
+}
