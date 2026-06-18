@@ -49,6 +49,7 @@ sources:                            # Layer 2 feeds (optional; can start empty)
   #   url: ...
 
 matching_profile:
+  user_email: haydenham10@gmail.com # whose resume this is (the profile key, with `key`)
   resume: profiles/hayden_grid_resume.md
   domain_vocabulary:                # steers the match prompt (Memo 02 §5)
     - power markets
@@ -59,7 +60,13 @@ matching_profile:
     - battery / storage bidding
     - ISO/RTO operations
 
-prefilter:                          # cheap deterministic gate before the strong model (D-006)
+scope:                              # Stage-A free title gate (D-023, P5.1) — resume-independent
+  role_include: [software, engineer, developer, data, analyst, scientist, machine learning]
+  exclude: [senior, sr, staff, principal, lead, manager, director, vp, technician, sales]
+  # Keep a title iff it matches a role_include keyword AND no exclude keyword
+  # (whole-word, case-insensitive). Coarse on purpose; Stage B + the LLM refine. Tune freely.
+
+prefilter:                          # Stage-B cheap deterministic gate, post-extraction (D-023)
   locations: [US]
   levels: [intern, new_grad, early_career]
   # work_auth: ...
