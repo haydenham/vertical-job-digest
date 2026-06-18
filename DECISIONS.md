@@ -257,3 +257,27 @@ code — D-004 again): **GE Vernova** (`Vernova_ExternalSite`, ~2381), **BP** (`
 >20s). Findings worth keeping: **`osv-` Workday hosts** (e.g. Castleton `osv-cci.wd1`) **422 the cxs API** — the board
 renders but exposes no clean JSON, so they route to Layer 2, not a Workday fetcher. Enverus = Jobvite (Tier-C, no
 fetcher yet); Aurora unidentified → Layer 2.
+
+### D-033 · Resume input abstracts to `resume_text`; non-text formats are a signup-time adapter · accepted · 2026-06-18
+The matching profile stores `profiles.resume_text` (plain text), and the matcher reads text — so the *input format*
+is decoupled from everything downstream. For now (single user, config-driven) the resume is supplied as markdown via
+the vertical YAML's `matching_profile.resume` path. When real users sign up (multi-user / D-025 era), **PDF (and other)
+resumes are handled by a small input adapter at the upload boundary** — `pdf→text` (`pypdf`/`pdfplumber`/PyMuPDF for
+text PDFs; OCR or Claude's native PDF document input as a fallback for scans) — landing plain text in `resume_text`.
+**Why:** it's purely an ingestion concern, with **no schema, matching, or extraction impact** (the seam is already at
+`resume_text`), so format support never gates Phase 5; it slots into the signup flow when there's a signup flow to slot
+into. Recorded now so the future path is explicit rather than rediscovered.
+
+### D-034 · Stage-A scope gate = config-driven whole-word keyword filter, computed on-the-fly · accepted · 2026-06-18
+Implements D-023's Stage A. A posting's **title** is in-scope iff it matches ≥1 `role_include` keyword
+AND no `exclude` keyword — whole-word, case-insensitive (`src/vja/scope.py`). Keyword lists live in the
+vertical YAML's `scope` section (config, not code — D-004), so tuning needs no code change. The verdict
+is **computed on-the-fly** when selecting postings to extract/match (5.2), **not persisted** — no
+`postings.in_scope` column, no migration; the gate is free + deterministic so recomputing each run is
+cheap, and postings are never dropped from the DB (the diff still tracks them all for closure detection).
+**Why:** the cheapest possible filter (zero tokens, no model) drops the bulk of a whole-company board
+before any paid work. Empirically on the grid universe it kept **400 of 1697 open postings (23%)** with
+correct drops (senior/non-software/ops) — a 77% cut to Layer-2 cost. Keyword matching is deliberately
+coarse; Stage B (post-extraction) + the LLM refine. Chose whole-word over substring to avoid false hits
+(`ml`→"html"); accepted the tradeoff that it won't catch a keyword embedded in a larger word
+(`data`→"database"), which other includes/role words cover.

@@ -1,0 +1,72 @@
+# Vertical config — "a vertical is config" (D-004, docs/06).
+# The employer list lives in data/seed/employers_seed.csv (filtered by `key`);
+# this file holds the matching profile, the Stage-A scope rules, and the Stage-B prefilter knobs.
+key: grid_power_software
+
+matching_profile:
+  user_email: haydenham10@gmail.com
+  resume: profiles/hayden_grid_resume.md   # path relative to config/verticals/
+  domain_vocabulary:                        # steers the match prompt (5.3)
+    - power markets
+    - dispatch optimization
+    - DER orchestration
+    - LMP / nodal pricing
+    - demand response
+    - battery / storage bidding
+    - ISO/RTO operations
+    - grid modernization
+    - energy trading / risk
+
+# Stage A — free, resume-independent title gate (D-023). Keep a title iff it matches a
+# role_include keyword AND no exclude keyword (whole-word, case-insensitive). Tune freely.
+scope:
+  role_include:
+    - software
+    - engineer
+    - developer
+    - data
+    - analyst
+    - scientist
+    - machine learning
+    - programmer
+    - backend
+    - frontend
+    - full stack
+    - fullstack
+    - devops
+    - platform
+    - infrastructure
+    - quant
+  exclude:
+    # seniority (we target early-career)
+    - senior
+    - sr
+    - staff
+    - principal
+    - lead
+    - manager
+    - director
+    - vp
+    - vice president
+    - head
+    - chief
+    # non-software roles common on whole-company boards
+    - technician
+    - electrician
+    - lineman
+    - mechanic
+    - welder
+    - operator
+    - sales
+    - marketing
+    - recruiter
+    - counsel
+    - attorney
+    - paralegal
+    - accountant
+    - nurse
+
+# Stage B — cheap deterministic pre-filter before the strong model (D-023; consumed in 5.3).
+prefilter:
+  locations: [US]
+  levels: [intern, new_grad, early_career]

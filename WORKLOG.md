@@ -5,6 +5,39 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-18 — Phase 5 · Block 1: profiles + vertical config + Stage-A scope gate (NO LLM)
+
+**Did:** The deterministic foundation for Layer 2 — zero LLM cost, no schema change.
+- `config/verticals/grid_power_software.yaml` — the first "a vertical is config" file (D-004):
+  matching_profile (user_email + resume path + domain_vocabulary), the new `scope` section (Stage-A
+  keyword lists), and `prefilter` knobs (consumed in 5.3). `config/verticals/profiles/hayden_grid_resume.md`
+  (Hayden's real resume).
+- `src/vja/verticals.py` — `load_vertical_config(key)` → validated `VerticalConfig` (resolves + reads
+  the resume); `vja-load-profiles` CLI loads every `config/verticals/*.yaml`. Added `pyyaml` + `types-pyyaml`.
+- `src/vja/scope.py` — `in_scope(title, scope)`: balanced whole-word, case-insensitive gate (≥1
+  role_include AND no exclude), regex cached by keyword tuple. Pure; computed on-the-fly (no column).
+- `src/vja/db/profiles.py` — `upsert_profile` (idempotent; `resume_version = sha256(text)[:12]`,
+  new version → new active row, prior deactivated) + `active_profiles`. `docs/06` documents the `scope` section.
+
+**Decisions:** D-034 (Stage-A = config-driven whole-word keyword gate, computed on-the-fly, no migration).
+Resolved with Hayden: build the YAML loader (not a minimal bootstrap); balanced include+exclude gate;
+on-the-fly (no `in_scope` column); real resume supplied now. Also D-033 (resume input abstracts to
+`resume_text`; PDF = a future signup-flow adapter) — landed on a separate `docs/` branch from main.
+
+**Tests:** +20 — `test_scope.py` (balanced/whole-word/none/role-required), `test_vertical_config.py`
+(real config loads; missing-file/field/resume + key-mismatch errors), `test_profiles.py` (idempotent
+upsert; versioning; vertical isolation).
+
+**Verified:** ruff + format + mypy(strict) clean; **149 passed, 5 deselected**; `alembic check` clean
+(no DDL — schema pre-provisioned Layer 2). `vja-load-profiles` created Hayden's active profile.
+**Empirical Stage-A check** over the real grid universe: **400 of 1697 open postings in-scope (23%)**,
+drops correct (senior/HR/ops) — a 77% cut to Layer-2 cost before any token is spent.
+
+**Next:** P5.2 — LLM extraction (cheap tier, cached by `content_hash`) over Stage-A survivors + cost
+metering + extraction evals (first Anthropic SDK code; model IDs via the `claude-api` skill).
+
+---
+
 ## 2026-06-18 — Phase 4 · Block 2: onboard the verified Workday tenants (coverage 21 → 24)
 
 **Did:** Config-only block — no new fetcher logic (D-004 again). Hayden pulled the real board URLs; I
