@@ -118,8 +118,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   → schedule via launchd (`vja-nightly`, D-031). NO LLM. **First diff in the inbox = proof-of-loop milestone** (hit).
 - **Phase 4 — Workday fetcher.** One generic `cxs` fetcher + per-tenant config → coverage ~9→24 of 54 (D-026/D-018).
   Pure Layer 1; rides on Phase 2's failure isolation + Phase 3's verification gate. **4.1 ✅** (12 verified tenants →
-  21 fetchable; D-032, list-only + paginate-or-fail). 4.2 = onboard the 3 parked `detected` tenants → 24. 4.3 =
-  generic mass-closure guard.
+  21 fetchable; D-032, list-only + paginate-or-fail). **4.2 ✅** (GE Vernova + BP + Fluence onboarded from config →
+  **24 fetchable**; `osv-` Workday hosts route to Layer 2). 4.3 = generic mass-closure guard.
 - **Phase 5 — Layer 2: extraction + matching.** Profiles (resume), LLM extraction (cached by `content_hash`),
   two-stage filter (D-023), matching with fits/gaps/verdict (D-007) + eval gate (D-020); digest gains rationale.
 - **Phase 6 — Dashboard.** Read-only FastAPI API + React table (title/company/apply/match) with **recency toggles**

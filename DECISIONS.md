@@ -250,3 +250,10 @@ already in the seed — no per-company code (D-004/D-017). It's a **POST** to th
   Castleton prefix) are parked `proposed` in the seed until P4.2 live-verifies their endpoints.
 **Why:** Workday is the biggest coverage bucket (15/54); the generic fetcher took live coverage 9 → 21 fetchable
 employers (+1131 postings on first run). List-only keeps it polite/fast; paginate-or-fail keeps the diff trustworthy.
+
+**P4.2 update (2026-06-18):** onboarded the 3 parked tenants from human-pulled board URLs (config only, zero fetcher
+code — D-004 again): **GE Vernova** (`Vernova_ExternalSite`, ~2381), **BP** (`bpCareers`, ~414), and **Fluence**
+(reclassified custom→Workday, ~108) → coverage 21 → **24**. Bumped the Workday timeout 20 → 30s (BP's board is slow,
+>20s). Findings worth keeping: **`osv-` Workday hosts** (e.g. Castleton `osv-cci.wd1`) **422 the cxs API** — the board
+renders but exposes no clean JSON, so they route to Layer 2, not a Workday fetcher. Enverus = Jobvite (Tier-C, no
+fetcher yet); Aurora unidentified → Layer 2.
