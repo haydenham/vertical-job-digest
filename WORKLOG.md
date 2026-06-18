@@ -5,6 +5,34 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-18 — Phase 4 · Block 2: onboard the verified Workday tenants (coverage 21 → 24)
+
+**Did:** Config-only block — no new fetcher logic (D-004 again). Hayden pulled the real board URLs; I
+live-verified the derived cxs endpoints, then updated the seed:
+- **GE Vernova** activated — `Vernova_ExternalSite` (~2381 open, whole-company board).
+- **BP** activated — `bpCareers` (~414); its board is slow, so bumped Workday `_TIMEOUT` 20 → 30s (generic).
+- **Fluence** reclassified custom → Workday — `fluenceenergy:wd12:fluenceenergy-jobs` (~108); was a bonus 4th find.
+- **Castleton** → custom/Layer 2: the `osv-cci.wd1` Workday proxy 422s the cxs API (board renders, no clean JSON).
+- **Enverus** → jobvite (powered-by tag; Tier-C, no fetcher yet); **Aurora** unidentified → stays Layer 2.
+
+**Decisions:** D-032 extended with the P4.2 onboarding + the reusable finding that `osv-` Workday hosts don't
+expose the cxs API (→ Layer 2). Coverage now **24/54 fetchable** (9 Tier-A + 15 Workday).
+
+**Tests:** updated `test_employers_import` fetchable 21 → 24, Workday 12 → 15. Existing Workday unit/live tests
+unchanged (no fetcher-logic change).
+
+**Verified:** ruff + format + mypy(strict) clean; **126 passed, 5 deselected**; `alembic check` clean. Live re-verify
+through the real fetcher (GE Vernova 2381 paginated fully, Fluence 109; URLs well-formed). **End-to-end on a throwaway
+DB** (kept prod's baseline clean): import → `vja-run` = **24 employers, 0 failures, 4597 postings, 1:47** (BP's slow
+board fine under 30s; GE Vernova's 120 pages + completeness guard held). Re-imported seed into **prod** (config only,
+no fetch) so the next scheduled nightly picks up the 3 new tenants.
+
+**Heads-up:** that next nightly's `vja-run` will add ~2900 postings (GE Vernova 2381 + BP 414 + Fluence 108) to the
+one-time Workday baseline digest; steady state after is small diffs. **Next:** P4.3 — generic pipeline-level
+mass-closure guard (defense-in-depth on top of the fetcher's paginate-or-fail).
+
+---
+
 ## 2026-06-17 (later still) — Phase 4 · Block 1: generic Workday `cxs` fetcher (coverage 9 → 21)
 
 **Did:** Built the one generic Workday fetcher that lights up the 12 verified Workday tenants — the biggest

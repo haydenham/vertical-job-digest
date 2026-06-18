@@ -88,9 +88,9 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Tier-A Layer-1 fetchers over the seed: 5 Greenhouse + 3 Lever + 1 Ashby = 9, plus the 12
-    # verified Workday tenants (the 3 `detected` Workday rows are parked `proposed` until P4.2).
-    assert len(fetchable) == 21
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 12
+    # 5 Greenhouse + 3 Lever + 1 Ashby = 9, plus 15 Workday (12 from P4.1 + BP/GE Vernova/Fluence
+    # onboarded in P4.2; Castleton left Workday → Layer 2).
+    assert len(fetchable) == 24
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 15
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints

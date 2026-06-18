@@ -33,7 +33,7 @@ from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
 _USER_AGENT = "vja-job-agent/0.0.1 (+https://github.com/haydenham/vertical-job-digest)"
-_TIMEOUT = 20.0
+_TIMEOUT = 30.0  # some tenants are slow (e.g. BP first page > 20s); generous, not per-company
 _PAGE_SIZE = 20
 _MAX_PAGES = 200  # safety cap against a bad `total` (200×20 = 4000, far above any real tenant)
 
