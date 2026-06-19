@@ -60,6 +60,32 @@ class WorkdayFetcher:
             if self._client is None:
                 client.close()
 
+    def fetch_detail(self, employer: Employer, external_path: str) -> dict[str, Any]:
+        """Fetch one posting's full cxs detail (`jobPostingInfo`) — the Layer-2 description (P5.2).
+
+        The list endpoint (`.../jobs`) omits the description; the detail endpoint is the same path
+        with `/jobs` replaced by the posting's `externalPath`. Returns the `jobPostingInfo` dict
+        (has `jobDescription`, `startDate`, structured `country`). Raises `FetchError` on failure.
+        """
+        detail_url = build_endpoint(employer).removesuffix("/jobs") + external_path
+        client = self._client or httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT})
+        try:
+            response = client.get(detail_url)
+            response.raise_for_status()
+            payload = response.json()
+        except httpx.HTTPError as exc:
+            raise FetchError(f"workday detail fetch failed for {employer.name!r}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise FetchError(f"workday detail non-JSON for {employer.name!r}: {exc}") from exc
+        finally:
+            if self._client is None:
+                client.close()
+
+        info = payload.get("jobPostingInfo") if isinstance(payload, dict) else None
+        if not isinstance(info, dict):
+            raise FetchError(f"workday detail for {employer.name!r} missing 'jobPostingInfo'")
+        return info
+
 
 def _paginate(
     client: httpx.Client, url: str, base: str, site: str, employer: Employer

@@ -281,3 +281,24 @@ correct drops (senior/non-software/ops) — a 77% cut to Layer-2 cost. Keyword m
 coarse; Stage B (post-extraction) + the LLM refine. Chose whole-word over substring to avoid false hits
 (`ml`→"html"); accepted the tradeoff that it won't catch a keyword embedded in a larger word
 (`data`→"database"), which other includes/role words cover.
+
+### D-035 · Layer-2 extraction: Haiku, all-LLM, cached by content_hash, Workday desc via cxs detail · accepted · 2026-06-19
+`src/vja/extract.py` turns in-scope postings into structured fields (`level`/`location`/`remote`/`work_auth`/
+`stack`/`comp_*`/`posted_at`) via `client.messages.parse` on the **cheap tier Haiku 4.5** (`claude-haiku-4-5`,
+the D-005 tiering — the SDK default is Opus; quality is gated by the eval, bump to Sonnet only if it
+underperforms).
+- **All-LLM** (no per-field hybrid): the description dominates input cost and must be sent regardless, so
+  hybrid saves rounding-error while adding per-ATS parsing. **Synchronous** calls (latency lands in-process;
+  absolute spend is pennies, so the Batches 50% discount isn't worth async polling).
+- **Cached by `content_hash`**: extraction runs only on open postings with `extracted_at IS NULL` that pass
+  Stage A; `update_changed` nulls `extracted_at` on a content change → re-extract. One-time ~1k backlog
+  (~$0.55–1.10), then pennies/night. Cost metered from `usage` (Haiku rates).
+- **Workday descriptions pulled at extraction** via the cxs detail endpoint (`WorkdayFetcher.fetch_detail`) —
+  the "lazy Layer-2 fetch" D-032 anticipated; scoped to in-scope + cached (~500 one-time GETs, not the
+  Layer-1 N+1 storm). Bonus: real posted date + structured `country`. So **every source gets full extraction**.
+- **Geo filtering deferred to Stage B** (5.3) over the extracted location/country — no fuzzy pre-filtering here.
+- **Evals (D-020):** offline unit/integration mock the SDK; an opt-in `eval` runs real Haiku on a fixture
+  (structural + an obvious senior/US case), the path-filtered merge gate.
+**Why:** extraction is the one resume-independent, cacheable LLM step; spending the cheap tier once per
+posting (Stage-A-gated) keeps Layer-2 cost in the cents while giving matching (5.3) the structured fields +
+descriptions it reasons over. Prereq: `ANTHROPIC_API_KEY` in `.env`.
