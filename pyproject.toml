@@ -21,6 +21,7 @@ vja-digest = "vja.digest.send:send_main"
 vja-nightly = "vja.nightly:nightly_main"
 vja-load-profiles = "vja.verticals:load_profiles_main"
 vja-extract = "vja.extract:extract_main"
+vja-match = "vja.match:match_main"
 
 [dependency-groups]
 dev = [

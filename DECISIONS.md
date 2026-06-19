@@ -302,3 +302,34 @@ underperforms).
 **Why:** extraction is the one resume-independent, cacheable LLM step; spending the cheap tier once per
 posting (Stage-A-gated) keeps Layer-2 cost in the cents while giving matching (5.3) the structured fields +
 descriptions it reasons over. Prereq: `ANTHROPIC_API_KEY` in `.env`.
+
+### D-036 · Stage-B pre-filter + matching: Sonnet, fits/gaps/verdict/score, prompt-cached, eval-gated · accepted · 2026-06-19
+Closes the two-stage filter (D-023) and writes the first `matches` rows (`src/vja/prefilter.py`,
+`src/vja/match.py`, `src/vja/db/matches.py`).
+- **Stage B** (`passes_prefilter`) is a cheap, deterministic gate over the *extracted* fields that
+  decides which Stage-A survivors earn the strong model for a given resume. Coarse by design (like
+  Stage A): it drops only **confirmed** out-of-range postings — a concrete `mid`/`senior` level, or a
+  clearly non-US `location` (US-signal allowlist: postal codes + full state names + `United States`/
+  `USA`/`America`/`remote`, whole-word + case-insensitive). `unknown`/null/`remote` **pass** — dropping
+  a plausible match is worse than spending a few cents to let the LLM rule it out. `work_auth` is **not**
+  a hard gate (the config carries no allowed values and the candidate's own auth status isn't encoded);
+  it's surfaced to the matcher as a signal. Knobs are the vertical YAML's `prefilter` (D-004).
+- **Matching** runs the **strong tier (`claude-sonnet-4-6`)** — *not* Haiku. Extraction is mechanical
+  (Haiku's job, D-035); matching is judgment and the user-visible, trust-critical output, so it gets the
+  strong model (D-005 tiering). The model emits a structured `MatchResult` (verdict ∈
+  strong_yes/yes/maybe/no, 0–100 score, non-empty fits AND gaps, a one-line rationale) mapping 1:1 to the
+  `matches` columns; the willingness to say *no* is enforced in the prompt + pinned by the eval (D-007).
+  Adaptive thinking on; resume + instructions are the **prompt-cached prefix** (stable across every
+  posting in a run), only the per-posting structured fields are volatile.
+- **Idempotent + isolated:** one `matches` row per (posting, profile, resume_version); a re-run only
+  matches the unmatched remainder; a single posting's failure is logged and skipped (mirrors extraction).
+  `trigger=nightly`. No schema change — the `matches` table pre-existed.
+- **Clarifies D-023's "Stage B writes `matches.score`":** Stage B persists **nothing** — it's an
+  in-memory filter (a non-survivor can't have a row, since `verdict` is NOT NULL). **`score` is the LLM's
+  0–100 output**, written with the rest of the rationale. Cost is **eval-gated** (D-020): bump Sonnet→Opus
+  only if it underperforms (the same cheap-tier-with-escape-hatch pattern 5.2 used for Haiku→Sonnet).
+**Why:** the strong model is the one real cost (D-005), but the two gates bound the set hard (1697 open →
+~400 Stage-A → ~50–150 Stage-B survivors), so a one-time backfill is ~$2 on Sonnet and steady state is
+pennies/night — making model choice a quality decision, not a cost one. Resolved with Hayden:
+Sonnet (not Haiku), Stage-B + matching as one block. Not in this block: digest rationale + nightly wiring
+(5.4). Prereq: `ANTHROPIC_API_KEY` in `.env`.
