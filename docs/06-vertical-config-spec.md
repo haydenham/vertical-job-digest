@@ -66,10 +66,11 @@ scope:                              # Stage-A free title gate (D-023, P5.1) — 
   # Keep a title iff it matches a role_include keyword AND no exclude keyword
   # (whole-word, case-insensitive). Coarse on purpose; Stage B + the LLM refine. Tune freely.
 
-prefilter:                          # Stage-B cheap deterministic gate, post-extraction (D-023)
-  locations: [US]
-  levels: [intern, new_grad, early_career]
-  # work_auth: ...
+prefilter:                          # Stage-B cheap deterministic gate, post-extraction (D-023, P5.3)
+  locations: [US]                    # keep US/remote/unknown; drop clearly-foreign extracted locations
+  levels: [intern, new_grad, early_career]   # drop a *confirmed* level outside this set; unknown passes
+  # Consumed by src/vja/prefilter.py to decide which Stage-A survivors earn the strong match model.
+  # Coarse on purpose (the LLM refines); work_auth is surfaced to the matcher, not gated here (D-036).
 
 digest:
   recipients: ["haydenham10@gmail.com"]

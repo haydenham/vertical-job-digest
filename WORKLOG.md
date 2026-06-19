@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-19 — Phase 5 · Block 3: Stage-B pre-filter + LLM matching (Sonnet, fits/gaps/verdict)
+
+**Did:** Closed the two-stage filter (D-023) and wrote the first `matches` rows — the product's
+actual output, a resume-match rationale per posting.
+- `src/vja/prefilter.py`: `passes_prefilter(level, location, cfg)` — Stage B, pure/deterministic,
+  no LLM. Drops only *confirmed* out-of-range postings (concrete `mid`/`senior` level, clearly
+  non-US location); `unknown`/null/`remote` pass (coarse gate, the LLM refines — same philosophy as
+  Stage A). Geo = US-signal allowlist (postal codes + full state names + `United States`/`USA`/
+  `America`/`remote`), whole-word + case-insensitive. `work_auth` is **not** gated (no config
+  values, candidate auth not encoded) — passed to the matcher as a signal.
+- `src/vja/match.py`: `MatchResult` (pydantic: verdict/score/fits/gaps/rationale) →
+  `client.messages.parse(model="claude-sonnet-4-6", thinking=adaptive)`; `match_posting`
+  (returns rationale + cache-aware metered cost), `run_matching` (per active profile: Stage A
+  `in_scope` on title ∧ Stage B over extracted fields ∧ not-yet-matched → strong model → persist;
+  per-posting isolation, cost summed), `vja-match` CLI. **Resume + instructions are the cached
+  prefix** (`cache_control` ephemeral); only the per-posting structured fields are volatile.
+- `src/vja/db/matches.py`: `postings_needing_match` (open ∧ extracted ∧ no `matches` row for
+  (posting, profile, resume_version) — idempotency) + `save_match`. No DDL — `matches` pre-existed.
+- Added `vja-match` script; `load_dotenv()` in `match_main` before the client (the 5.2 lesson).
+
+**Decisions:** D-036 (Stage-B prefilter + Sonnet matching, fits/gaps/verdict/score, prompt-cached
+resume, eval-gated). Resolved with Hayden: **Sonnet not Haiku** — matching is judgment / the
+user-visible trust-critical output, extraction is mechanical (D-005 tiering); cost is bounded by
+the gates (~$2 one-time backfill + pennies/night), so it's a quality call, not a cost one. Stage-B
++ matching ship as **one block**. Clarifies D-023's "Stage B writes `matches.score`": Stage B is an
+**in-memory filter** (no row for non-survivors, since `verdict` is NOT NULL); **`score` is the LLM's
+0–100 output**, persisted with the rest of the rationale.
+
+**Tests:** +15 — `test_prefilter.py` (unit: early-career/US passes; senior/mid/non-US drop;
+unknown/remote pass; config-driven levels), `test_match.py` (unit, faked client: result→column
+mapping, cache-aware cost math, cached-prefix shape, no-parse failure), `test_matching_run.py`
+(integration: selects only open+extracted+Stage-A+Stage-B+unmatched; skips out-of-scope/unextracted/
+senior/non-US/other-vertical/already-matched; idempotent; per-posting isolation; multi-profile),
+opt-in `eval` (`test_match_eval.py`, real Sonnet: structural + obvious-yes + obvious-no — D-020 gate).
+
+**Verified:** ruff + format + mypy(strict) clean; **172 passed, 8 deselected**; `alembic check` clean
+(no DDL); eval collects (2 new match evals). Live smoke (Hayden runs `vja-match`) pending.
+
+**Next:** P5.4 — wire the rationale into the digest (verdict/fits/gaps per new posting) and compose
+extract + match into `vja-nightly` (D-027 recipient → profiles rides along).
+
+---
+
 ## 2026-06-19 — Phase 5 · Block 2: LLM extraction (Haiku), cached by content_hash
 
 **Did:** First LLM code in the system — Layer-2 extraction of structured fields from in-scope postings.
