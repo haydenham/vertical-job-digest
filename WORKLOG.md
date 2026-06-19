@@ -5,6 +5,58 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-19 — Phase 5 · Block 2: LLM extraction (Haiku), cached by content_hash
+
+**Did:** First LLM code in the system — Layer-2 extraction of structured fields from in-scope postings.
+- `src/vja/extract.py`: `ExtractedFields` (pydantic) → `client.messages.parse(model="claude-haiku-4-5")`;
+  `extract_posting` (returns fields + metered cost from `usage`), `run_extraction` (selects in-scope
+  unextracted, per-posting isolation, persists, sums cost), `vja-extract` CLI. **All-LLM**, **synchronous**.
+- `src/vja/db/postings.py`: `postings_needing_extraction` (open ∧ `extracted_at IS NULL`; in-scope filtered
+  by the caller), `save_extraction`; **`update_changed` now nulls `extracted_at`** on a content change
+  (cache invalidation). Added `ExtractionCandidate`.
+- `src/vja/fetchers/workday.py`: `fetch_detail` — pulls a posting's cxs detail (`jobDescription` + real
+  `startDate` + structured `country`) so Workday gets full extraction (the lazy Layer-2 fetch D-032 named).
+- Added `anthropic` dep; `vja-extract` script; `ANTHROPIC_API_KEY` in `.env.example`.
+
+**Decisions:** D-035 (Haiku cheap tier, all-LLM, sync, cached by content_hash, Workday descriptions via
+cxs detail, geo filtering deferred to Stage B). Resolved with Hayden: all-LLM (hybrid saves rounding-error
+since the description is sent either way); sync (latency in-process, batch discount not worth polling);
+**pull Workday descriptions** after confirming the cxs detail endpoint live — scoped to in-scope + cached
+it's ~500 one-time GETs, not the Layer-1 storm.
+
+**Tests:** +12 — `test_extract.py` (unit, faked client: mapping, cost math, Workday-vs-raw source, no-parse
+failure), `test_extraction_run.py` (integration: selects only in-scope-unextracted; out-of-scope/
+already-extracted/other-vertical skipped; idempotent; content-change re-opens), opt-in `eval`
+(`tests/eval/test_extract_eval.py`, real Haiku on a senior/US fixture — the D-020 gate).
+
+**Verified:** ruff + format + mypy(strict) clean; **157 passed, 6 deselected**; `alembic check` clean (no
+DDL — Layer-2 columns pre-existed); eval collects.
+
+**Live run:** Hayden added `ANTHROPIC_API_KEY` and ran `vja-extract --vertical grid_power_software`.
+First attempt failed 422/422 (`Anthropic()` auth resolves at construction time, and `extract_main` never
+called `load_dotenv()` — every other CLI entrypoint does this inside its own `load_config()`/`main()`,
+this one was missed). Fixed: `load_dotenv()` added to `extract_main` before `get_engine()`, matching the
+`digest/send.py::load_config()` pattern. Re-run: **420/422 extracted, 2 failed, est_cost=$1.65** (in-scope
+backlog was 422, not the ~1k originally estimated — Stage-A cuts harder than guessed; cost ran ~3x the
+$0.55 estimate, worth re-baselining per-posting cost next time payload sizes are this large). The 2
+failures are Layer-1 Workday `cxs` detail-fetch errors (403 on one tenant, 404 — posting likely closed
+between list and detail fetch), not extraction bugs; per-posting isolation worked as designed. `pytest -m
+eval` (1 passed) and full suite (157 passed) green post-fix.
+
+**Spot-checked** extracted rows: Workday `stack` values (e.g. `Allen-Bradley`, `Triconex`, `RSLogix`)
+prove the cxs detail fetch is feeding real description text, not just the list payload; `level` varies
+sensibly; comp fields populate correctly when the posting states a range (Greenhouse/Lever ~33-50%, Workday
+~12%) and stay null otherwise. **Known minor issue (logged, not fixed):** one row (DRW posting id 6) has a
+malformed `posted_at` — Haiku appended a leaked `location` JSON fragment after the date
+(`"...T12:24:44-04:00\n\n{\"location\": \"New York City\"}"`). 1/420 (0.24%), cosmetic today since
+`posted_at` isn't parsed/joined anywhere yet — defer the fix to the Phase-6 date-normalization work (D-024),
+which will need to sanitize/parse this field for the dashboard recency toggles anyway.
+
+**Next:** P5.3 — Stage-B cheap pre-filter (level/location/work-auth + the geo filter) → strong-tier
+matching/rationale (fits/gaps/verdict, Option 4) → `matches` rows + the matching eval gate.
+
+---
+
 ## 2026-06-18 — Phase 5 · Block 1: profiles + vertical config + Stage-A scope gate (NO LLM)
 
 **Did:** The deterministic foundation for Layer 2 — zero LLM cost, no schema change.
