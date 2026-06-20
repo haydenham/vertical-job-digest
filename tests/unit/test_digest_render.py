@@ -1,8 +1,9 @@
-"""Unit tests for digest rendering (P3B2).
+"""Unit tests for digest rendering (P3B2, P5.4 rationale).
 
 No DB, no network: build `DigestContents` in memory and assert the subject counts, that
-new/closed roles (and apply links) appear in the body, that quarantined postings are kept
-out of the user-facing body, and that `contents_to_dict` is JSON-safe.
+new/closed roles (and apply links) appear in the body, that the match rationale (verdict/score/
+one-liner) renders for new roles while fits/gaps stay out of the body but in the audit dict, that
+quarantined postings are kept out of the user-facing body, and that `contents_to_dict` is JSON-safe.
 """
 
 import json
@@ -16,7 +17,15 @@ _NOW = datetime(2026, 6, 17, tzinfo=UTC)
 
 
 def _posting(
-    external_id: str, *, company: str = "Camus", apply_url: str | None = None
+    external_id: str,
+    *,
+    company: str = "Camus",
+    apply_url: str | None = None,
+    verdict: str | None = None,
+    score: int | None = None,
+    rationale: str | None = None,
+    fits: list[str] | None = None,
+    gaps: list[str] | None = None,
 ) -> DigestPosting:
     return DigestPosting(
         external_id=external_id,
@@ -25,7 +34,26 @@ def _posting(
         location="Remote",
         apply_url=apply_url,
         first_seen_at=_NOW,
+        verdict=verdict,
+        score=score,
+        rationale=rationale,
+        fits=fits,
+        gaps=gaps,
     )
+
+
+def _matched(external_id: str, **kw: object) -> DigestPosting:
+    """A `new` posting carrying a match rationale (the P5.4 shape)."""
+    defaults: dict[str, object] = {
+        "apply_url": "https://jobs/x",
+        "verdict": "strong_yes",
+        "score": 88,
+        "rationale": "Strong grid-software fit at the right level.",
+        "fits": ["ERCOT domain", "Python"],
+        "gaps": ["No SCADA experience"],
+    }
+    defaults.update(kw)
+    return _posting(external_id, **defaults)  # type: ignore[arg-type]
 
 
 def _contents(
@@ -36,6 +64,7 @@ def _contents(
 ) -> DigestContents:
     return DigestContents(
         vertical="grid_power_software",
+        recipient="hayden@example.com",
         since=None,
         generated_at=_NOW,
         new=list(new),
@@ -50,11 +79,27 @@ def test_subject_reports_new_and_closed_counts() -> None:
 
 
 def test_body_lists_new_roles_with_apply_links() -> None:
-    rendered = render_digest(_contents(new=[_posting("a", apply_url="https://jobs/x")]))
+    rendered = render_digest(_contents(new=[_matched("a")]))
     assert "https://jobs/x" in rendered.html
     assert 'href="https://jobs/x"' in rendered.html
     assert "https://jobs/x" in rendered.text
     assert "Camus" in rendered.html and "Software Engineer" in rendered.text
+
+
+def test_new_roles_render_verdict_score_and_rationale() -> None:
+    rendered = render_digest(_contents(new=[_matched("a")]))
+    # The [verdict · score] tag and the one-line rationale appear in both bodies (D-037).
+    assert "strong_yes" in rendered.text and "88" in rendered.text
+    assert "Strong grid-software fit at the right level." in rendered.text
+    assert "strong_yes" in rendered.html and "88" in rendered.html
+    assert "Strong grid-software fit at the right level." in rendered.html
+
+
+def test_fits_and_gaps_stay_out_of_the_body() -> None:
+    rendered = render_digest(_contents(new=[_matched("a")]))
+    # fits/gaps are persisted in the audit dict but deliberately not rendered (scannability).
+    assert "SCADA" not in rendered.html and "SCADA" not in rendered.text
+    assert "ERCOT domain" not in rendered.html
 
 
 def test_closed_roles_appear_without_links() -> None:
@@ -80,7 +125,7 @@ def test_empty_sections_render_none_placeholder() -> None:
 
 def test_contents_to_dict_is_json_safe_and_complete() -> None:
     contents = _contents(
-        new=[_posting("a", apply_url="https://jobs/x")],
+        new=[_matched("a")],
         closed=[_posting("b")],
         quarantined=[_posting("dead")],
     )
@@ -93,3 +138,10 @@ def test_contents_to_dict_is_json_safe_and_complete() -> None:
     assert [p["external_id"] for p in restored["new"]] == ["a"]
     assert [p["external_id"] for p in restored["quarantined"]] == ["dead"]
     assert restored["new"][0]["first_seen_at"] == _NOW.isoformat()
+    # The full rationale (incl. fits/gaps) lands in the audit record (D-037).
+    assert restored["new"][0]["verdict"] == "strong_yes"
+    assert restored["new"][0]["score"] == 88
+    assert restored["new"][0]["fits"] == ["ERCOT domain", "Python"]
+    assert restored["new"][0]["gaps"] == ["No SCADA experience"]
+    # A closure carries no match fields.
+    assert "verdict" not in restored["closed"][0]

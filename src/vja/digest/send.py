@@ -9,7 +9,9 @@ Config comes from the environment (a local `.env` is loaded for the cron runtime
   both spellings are accepted (hyphenated names can't be shell-exported, only dotenv-loaded).
 - `VJA_DIGEST_FROM` — sender; defaults to the Resend sandbox `onboarding@resend.dev`, which
   delivers only to your own Resend account email (D-029). Set a verified domain to send anywhere.
-- `VJA_DIGEST_RECIPIENT` — recipient. The single-user bridge until Phase 5 reads `profiles` (D-027).
+- `VJA_DIGEST_RECIPIENT` — the **ops/alert** recipient (where nightly failure-alerts go). As of
+  P5.4 the *digest* recipient is the matched profile's `user_email`, not this env var (D-027/D-037):
+  a digest is per (vertical, profile), addressed to whoever owns that resume.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from sqlalchemy import Engine
 from vja.db import digests as digests_repo
 from vja.db.employers import distinct_active_verticals
 from vja.db.engine import begin, get_engine
+from vja.db.profiles import Profile, active_profiles
 from vja.digest.assembly import build_digest
 from vja.digest.render import RenderedEmail, contents_to_dict, render_digest
 
@@ -48,12 +51,13 @@ class SendError(RuntimeError):
 class DigestConfig:
     api_key: str
     sender: str
-    recipient: str
+    recipient: str  # ops/alert recipient — the digest recipient is the profile's email (D-037)
 
 
 @dataclass(frozen=True)
 class DigestSendResult:
     vertical: str
+    recipient: str
     status: str  # "sent" | "failed" | "skipped"
     digest_id: int | None
     new: int
@@ -77,11 +81,17 @@ def load_config() -> DigestConfig:
     return DigestConfig(api_key=api_key, sender=sender, recipient=recipient)
 
 
-def send_email(config: DigestConfig, rendered: RenderedEmail) -> None:
-    """POST one email to Resend; raise `SendError` on any transport error or non-2xx response."""
+def send_email(
+    config: DigestConfig, rendered: RenderedEmail, *, recipient: str | None = None
+) -> None:
+    """POST one email to Resend; raise `SendError` on any transport error or non-2xx response.
+
+    `recipient` defaults to the config's ops/alert recipient (used by the nightly failure alert);
+    digest sends pass the profile's `user_email` explicitly (D-037).
+    """
     payload = {
         "from": config.sender,
-        "to": [config.recipient],
+        "to": [recipient or config.recipient],
         "subject": rendered.subject,
         "html": rendered.html,
         "text": rendered.text,
@@ -103,19 +113,26 @@ def send_email(config: DigestConfig, rendered: RenderedEmail) -> None:
 def send_digest(
     engine: Engine,
     vertical: str,
+    profile: Profile,
     *,
     now: datetime | None = None,
     config: DigestConfig | None = None,
     verify: Callable[[str], bool] | None = None,
 ) -> DigestSendResult:
-    """Build → (skip if empty) → render → persist pending → send → finalize, for one vertical."""
+    """Build → (skip if empty) → render → persist → send → finalize, per (vertical, profile).
+
+    The digest is addressed to `profile.user_email` and carries that profile's match rationale
+    (D-027/D-037); `config` is only the transport (api key/sender) + ops/alert recipient.
+    """
     stamp = now or datetime.now(UTC)
-    contents = build_digest(engine, vertical, now=stamp, verify=verify)
+    recipient = profile.user_email
+    contents = build_digest(engine, vertical, profile=profile, now=stamp, verify=verify)
     n_new, n_closed, n_quar = len(contents.new), len(contents.closed), len(contents.quarantined)
 
     def result(status: str, digest_id: int | None, error: str | None = None) -> DigestSendResult:
         return DigestSendResult(
             vertical=vertical,
+            recipient=recipient,
             status=status,
             digest_id=digest_id,
             new=n_new,
@@ -128,7 +145,7 @@ def send_digest(
         # Nothing to ship (D-028). Surface quarantines so an all-quarantine night isn't silent.
         if contents.quarantined:
             print(
-                f"[{vertical}] skipped: 0 new, 0 closed, "
+                f"[{vertical}→{recipient}] skipped: 0 new, 0 closed, "
                 f"but {n_quar} quarantined (dead apply links)",
                 file=sys.stderr,
             )
@@ -139,11 +156,11 @@ def send_digest(
 
     with begin(engine) as conn:
         digest_id = digests_repo.create_pending(
-            conn, recipient=cfg.recipient, vertical=vertical, contents=contents_to_dict(contents)
+            conn, recipient=recipient, vertical=vertical, contents=contents_to_dict(contents)
         )
 
     try:
-        send_email(cfg, rendered)
+        send_email(cfg, rendered, recipient=recipient)
     except SendError as exc:
         with begin(engine) as conn:
             digests_repo.mark_failed(conn, digest_id, error=str(exc))
@@ -171,15 +188,16 @@ def send_main(argv: list[str] | None = None) -> int:
     config = load_config()
     failed = False
     for vertical in verticals:
-        result = send_digest(engine, vertical, config=config)
-        suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
-        print(
-            f"[{result.vertical}] {result.status}: new={result.new} closed={result.closed} "
-            f"quarantined={result.quarantined}{suffix}"
-        )
-        if result.status == "failed":
-            failed = True
-            print(f"  ! {result.error}", file=sys.stderr)
+        for profile in active_profiles(engine, vertical):
+            result = send_digest(engine, vertical, profile, config=config)
+            suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
+            print(
+                f"[{result.vertical}→{result.recipient}] {result.status}: new={result.new} "
+                f"closed={result.closed} quarantined={result.quarantined}{suffix}"
+            )
+            if result.status == "failed":
+                failed = True
+                print(f"  ! {result.error}", file=sys.stderr)
     return 1 if failed else 0
 
 

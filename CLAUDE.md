@@ -139,10 +139,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - Per-fetcher health checks with loud alerts; every pipeline run writes a
   summary record. A digest that fails to send is itself an alert.
 - API keys in env config, never in the repo. DB never publicly exposed. A git-ignored `.env` is
-  auto-loaded (python-dotenv); send config = `RESEND_API_KEY`, `VJA_DIGEST_RECIPIENT`,
-  `VJA_DIGEST_FROM` (default sandbox `onboarding@resend.dev`). Nightly job = **`vja-nightly`** (composes
-  run+digest, alerts on hard failure), scheduled via launchd (`deploy/launchd/`); `vja-run`/`vja-digest`
-  remain as separate debugging entry points. Scheduler is a swappable trigger — cloud cutover swaps it, not code (D-031).
+  auto-loaded (python-dotenv); send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `VJA_DIGEST_FROM`
+  (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
+  **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's
+  `user_email` (D-027/D-037). Nightly job = **`vja-nightly`** (composes run → extract → match → digest
+  per profile, alerts on hard failure), scheduled via launchd (`deploy/launchd/`); `vja-run`/`vja-extract`/
+  `vja-match`/`vja-digest` remain as separate debugging entry points. Scheduler is a swappable trigger —
+  cloud cutover swaps it, not code (D-031).
 - **Testing is policy, not preference (this code is model-written).** No behavior is "done" until a test pins it at
   the right level; bug fixes start with a failing regression test. Default `pytest` (unit+integration+system) stays
   fast/offline/free; `live`/`eval`/`e2e` are opt-in markers. Full rules: `docs/08-testing-strategy.md`.

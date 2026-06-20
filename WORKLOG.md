@@ -5,6 +5,47 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-19 — Phase 5 · Block 4: digest rationale + nightly extract→match→send + recipient→profiles
+
+**Did:** Composed the Layer-2 pieces (5.1–5.3) into the nightly loop and put the match rationale in the
+inbox — Phase 5 is now end-to-end. Three wiring seams (D-037):
+- `digest/assembly.py`: `build_digest` is now per **(vertical, profile)** — INNER-JOINs `matches` on
+  (posting, profile, resume_version) gated to verdict ∈ {strong_yes, yes, maybe}, ordered by `score`
+  desc. `DigestPosting` gains verdict/score/rationale/fits/gaps; `DigestContents` gains `recipient`.
+  `last_sent_at` now keys on (vertical, **recipient**) so each profile's window is independent.
+- `digest/render.py`: new-role lines render `[verdict · score]` + the one-line `rationale` (text + HTML);
+  `fits`/`gaps` go into the `contents` audit JSON but **not** the body (D-037 scannability).
+- `digest/send.py`: `send_digest(engine, vertical, profile, …)` → recipient = `profile.user_email`;
+  `send_main` loops verticals → `active_profiles`. `send_email` takes an explicit recipient (alert path
+  still uses `config.recipient`). `DigestConfig.recipient` redocumented as the **ops/alert** address.
+- `nightly.py`: `run_nightly` = pipeline → per config-vertical `run_extraction`+`run_matching`
+  (`_default_layer2`, injectable as `run_layer2` for offline tests; one Anthropic client shared) →
+  `send_digest` per active profile. Per-vertical isolation around the Layer-2 pass; LLM totals written to
+  the run row via `update_llm_metrics`; `NightlyResult` + the printed summary carry extracted/matched/cost.
+- `db/pipeline_runs.py`: `update_llm_metrics` (the columns `finish_run` had stubbed at 0).
+
+**Decisions:** D-037. Resolved with Hayden: (1) digest hides `no` + unmatched, sorts by score; (2) body
+carries verdict+score+one-liner (fits/gaps audit-only); (3) **three wiring items only** — `posted_at`
+normalization (D-030) + new-user backfill (D-024) stay deferred to the backfill block (docs peg that work
+to Phase 5 *because backfill needs it*; the nightly digest is a diff and reads no `posted_at`). DRW
+malformed-date fix stays parked there too.
+
+**Tests:** +5 net (172→176) — `test_digest_render.py` (verdict/score/rationale in body; fits/gaps
+audit-only; closures carry no match fields), `test_digest_assembly.py` (match-gating drops `no`/unmatched;
+score-desc order; per-recipient `last_sent_at`; window/closures), `test_digest_send.py` (recipient =
+profile email; per-profile rows), `test_nightly.py` (composition via injected `run_layer2`; rationale in
+the delivered body; LLM totals on the run row), `test_nightly_alert.py`/`test_digest_send_e2e.py` updated
+for the new signatures.
+
+**Verified:** ruff + format + mypy(strict) clean; **176 passed, 8 deselected**; `alembic check` clean
+(no DDL); eval still collects (2 match evals). Live `vja-nightly` smoke pending (Hayden).
+
+**Next:** Phase 6 — dashboard (read-only FastAPI + React table with recency toggles, D-030). Still open:
+record the deferred onboarding-backfill decision + build it (with the D-030 `posted_at` normalize→persist,
+which the backfill needs first) and the parked DRW date fix; consider the Batches API for the backfill burst.
+
+---
+
 ## 2026-06-19 — Phase 5 · Block 3: Stage-B pre-filter + LLM matching (Sonnet, fits/gaps/verdict)
 
 **Did:** Closed the two-stage filter (D-023) and wrote the first `matches` rows — the product's

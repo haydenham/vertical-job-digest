@@ -33,12 +33,14 @@ def _run(status: str = "failed", fetch_failures: int = 2) -> RunSummary:
 
 
 def test_failure_summary_includes_pipeline_fetch_and_digest_detail() -> None:
-    digest = DigestSendResult("grid_power_software", "failed", None, 0, 0, 0, "Resend 422")
+    digest = DigestSendResult(
+        "grid_power_software", "hayden@example.com", "failed", None, 0, 0, 0, "Resend 422"
+    )
     summary = _failure_summary(_run(), [digest])
     assert "status=failed" in summary
     assert "fetch_failures=2" in summary
     assert "Beta" in summary and "outage" in summary
-    assert "digest [grid_power_software]: failed" in summary
+    assert "digest [grid_power_software→hayden@example.com]: failed" in summary
     assert "Resend 422" in summary
 
 
