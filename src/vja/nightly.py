@@ -1,9 +1,11 @@
-"""The unattended nightly run: fetch → diff → persist → send, in one process (P3B3).
+"""The unattended nightly run: fetch → diff → extract → match → send, one process (P3B3/P5.4).
 
 `vja-nightly` is the single command a scheduler invokes (launchd locally — `deploy/launchd/`;
-a cloud cron later, D-025). It composes the existing pieces — `run_pipeline` (Phase 2) then
-`send_digest` per vertical (P3B2) — adds an aggregate status, and on a **hard failure** emails an
-alert, because the builder isn't watching the run ("a failed run is itself an alert").
+a cloud cron later, D-025). It composes the existing pieces — `run_pipeline` (Phase 2), then the
+Layer-2 LLM passes per vertical (`run_extraction` + `run_matching`, P5.2/P5.3), then `send_digest`
+per (vertical, profile) (P3B2 + D-027) — adds an aggregate status, records the run's LLM totals,
+and on a **hard failure** emails an alert, because the builder isn't watching the run ("a failed
+run is itself an alert").
 
 Portability: all logic lives here, not in the scheduler; config is env/`.env`; logs go to
 stdout/stderr (the trigger decides where they land). Moving to cloud swaps the trigger, not this.
@@ -19,10 +21,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
 
+from anthropic import Anthropic
 from sqlalchemy import Engine
 
-from vja.db.employers import distinct_active_verticals
-from vja.db.engine import get_engine
+from vja.db.engine import begin, get_engine
+from vja.db.pipeline_runs import update_llm_metrics
+from vja.db.profiles import active_profiles
 from vja.digest.render import RenderedEmail
 from vja.digest.send import (
     ConfigError,
@@ -33,12 +37,43 @@ from vja.digest.send import (
     send_digest,
     send_email,
 )
+from vja.extract import run_extraction
 from vja.fetchers.base import Fetcher
 from vja.fetchers.registry import get_fetcher
+from vja.match import run_matching
 from vja.models import AtsType
 from vja.pipeline import RunSummary, run_pipeline
+from vja.verticals import available_verticals, load_vertical_config
 
 logger = logging.getLogger("vja.nightly")
+
+
+@dataclass(frozen=True)
+class Layer2Summary:
+    """The Layer-2 LLM totals for one vertical (extraction + matching)."""
+
+    extracted: int
+    matched: int
+    est_cost_usd: float
+
+
+# The per-vertical Layer-2 pass, injected so tests run fully offline (mirrors `resolve_fetcher`).
+Layer2Runner = Callable[..., Layer2Summary]
+
+
+def _default_layer2(
+    engine: Engine, vertical: str, *, client: Anthropic | None, now: datetime
+) -> Layer2Summary:
+    """Extract then match one vertical against its config; one client shared across both passes."""
+    cli = client or Anthropic()  # auth resolves at construction — the real path needs a key
+    vcfg = load_vertical_config(vertical)
+    ext = run_extraction(engine, vertical, scope=vcfg.scope, client=cli, now=now)
+    mat = run_matching(engine, vertical, config=vcfg, client=cli, now=now)
+    return Layer2Summary(
+        extracted=ext.extracted,
+        matched=mat.matched,
+        est_cost_usd=ext.est_cost_usd + mat.est_cost_usd,
+    )
 
 
 @dataclass(frozen=True)
@@ -47,6 +82,9 @@ class NightlyResult:
     run: RunSummary
     digests: list[DigestSendResult]
     alerted: bool
+    extraction_calls: int = 0
+    match_calls: int = 0
+    llm_cost_usd: float = 0.0
 
 
 def _is_hard_failure(run: RunSummary, digests: list[DigestSendResult]) -> bool:
@@ -68,8 +106,10 @@ def run_nightly(
     config: DigestConfig | None = None,
     resolve_fetcher: Callable[[AtsType], Fetcher] = get_fetcher,
     verify: Callable[[str], bool] | None = None,
+    client: Anthropic | None = None,
+    run_layer2: Layer2Runner = _default_layer2,
 ) -> NightlyResult:
-    """Run the nightly loop once: pipeline across all verticals, then a digest per vertical."""
+    """Run the nightly loop once: pipeline → (extract → match → send per profile) per vertical."""
     stamp = now or datetime.now(UTC)
     cfg = config or load_config()
 
@@ -85,23 +125,62 @@ def run_nightly(
     )
 
     digests: list[DigestSendResult] = []
-    for vertical in distinct_active_verticals(engine):
-        result = send_digest(engine, vertical, now=stamp, config=cfg, verify=verify)
-        digests.append(result)
+    extraction_calls = match_calls = 0
+    llm_cost = 0.0
+    # Layer 2 + digests are config-driven (a "vertical is config"): each config-backed vertical
+    # gets its LLM passes, then one digest per active profile (D-027).
+    for vertical in available_verticals():
+        try:
+            l2 = run_layer2(engine, vertical, client=client, now=stamp)
+        except Exception:  # per-vertical isolation: one vertical's Layer-2 error can't kill the run
+            logger.exception("layer-2 pass failed for vertical %s", vertical)
+            l2 = Layer2Summary(extracted=0, matched=0, est_cost_usd=0.0)
+        extraction_calls += l2.extracted
+        match_calls += l2.matched
+        llm_cost += l2.est_cost_usd
         logger.info(
-            "digest [%s]: %s new=%d closed=%d quarantined=%d",
-            result.vertical,
-            result.status,
-            result.new,
-            result.closed,
-            result.quarantined,
+            "layer-2 [%s]: extracted=%d matched=%d est_cost=$%.4f",
+            vertical,
+            l2.extracted,
+            l2.matched,
+            l2.est_cost_usd,
+        )
+
+        for profile in active_profiles(engine, vertical):
+            result = send_digest(engine, vertical, profile, now=stamp, config=cfg, verify=verify)
+            digests.append(result)
+            logger.info(
+                "digest [%s→%s]: %s new=%d closed=%d quarantined=%d",
+                result.vertical,
+                result.recipient,
+                result.status,
+                result.new,
+                result.closed,
+                result.quarantined,
+            )
+
+    with begin(engine) as conn:
+        update_llm_metrics(
+            conn,
+            run.run_id,
+            extraction_calls=extraction_calls,
+            match_calls=match_calls,
+            llm_cost_usd=llm_cost,
         )
 
     alerted = False
-    if _is_hard_failure(run, digests):
+    status = "failed" if _is_hard_failure(run, digests) else "ok"
+    if status == "failed":
         alerted = _send_failure_alert(cfg, run, digests)
-        return NightlyResult(status="failed", run=run, digests=digests, alerted=alerted)
-    return NightlyResult(status="ok", run=run, digests=digests, alerted=alerted)
+    return NightlyResult(
+        status=status,
+        run=run,
+        digests=digests,
+        alerted=alerted,
+        extraction_calls=extraction_calls,
+        match_calls=match_calls,
+        llm_cost_usd=llm_cost,
+    )
 
 
 def _failure_summary(run: RunSummary, digests: list[DigestSendResult]) -> str:
@@ -112,7 +191,8 @@ def _failure_summary(run: RunSummary, digests: list[DigestSendResult]) -> str:
     lines += [f"  fetch error — {e.get('name')}: {e.get('error')}" for e in run.errors]
     for d in digests:
         line = (
-            f"digest [{d.vertical}]: {d.status} new={d.new} closed={d.closed} quar={d.quarantined}"
+            f"digest [{d.vertical}→{d.recipient}]: {d.status} "
+            f"new={d.new} closed={d.closed} quar={d.quarantined}"
         )
         lines.append(line + (f" — {d.error}" if d.error else ""))
     return "\n".join(lines)
@@ -159,10 +239,12 @@ def nightly_main(argv: list[str] | None = None) -> int:
         return 1
 
     result = run_nightly(get_engine(), config=config)
-    digests = "/".join(f"{d.vertical}:{d.status}" for d in result.digests) or "none"
+    digests = "/".join(f"{d.vertical}→{d.recipient}:{d.status}" for d in result.digests) or "none"
     print(
         f"nightly: status={result.status} pipeline={result.run.status} "
-        f"fetch_failures={result.run.fetch_failures} digests={digests} alerted={result.alerted}"
+        f"fetch_failures={result.run.fetch_failures} "
+        f"extracted={result.extraction_calls} matched={result.match_calls} "
+        f"llm_cost=${result.llm_cost_usd:.4f} digests={digests} alerted={result.alerted}"
     )
     return 1 if result.status == "failed" else 0
 

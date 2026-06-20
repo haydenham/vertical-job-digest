@@ -333,3 +333,33 @@ Closes the two-stage filter (D-023) and writes the first `matches` rows (`src/vj
 pennies/night — making model choice a quality decision, not a cost one. Resolved with Hayden:
 Sonnet (not Haiku), Stage-B + matching as one block. Not in this block: digest rationale + nightly wiring
 (5.4). Prereq: `ANTHROPIC_API_KEY` in `.env`.
+
+### D-037 · Phase 5.4: digest rationale + nightly extract→match→send + recipient→profiles · accepted · 2026-06-19
+Closes Phase 5 by composing the Layer-2 pieces (5.1–5.3) into the nightly loop and putting the match
+rationale in the inbox. Three wiring seams:
+- **Digest rationale + gating.** A digest is now per **(vertical, profile)**: its `new` set is the open
+  postings that earned a *relevant* match for that profile's `resume_version` — verdict ∈
+  **{strong_yes, yes, maybe}**, **sorted by score desc**. `no` verdicts and unmatched/out-of-scope
+  postings drop out (an all-`no`/all-out-of-scope night skips via D-028). The body shows
+  `[verdict · score]` + the one-line `rationale`; `fits`/`gaps` persist in the `digests.contents` audit
+  JSON but are **not** rendered (scannability). Closures stay vertical-global, no rationale.
+  (`build_digest` now joins `matches`; `last_sent_at` keys on (vertical, **recipient**) so each profile's
+  window is independent.)
+- **Nightly composition.** `vja-nightly` runs `run_pipeline` → for each config-backed vertical
+  `run_extraction` → `run_matching` → `send_digest` per active profile (the CLAUDE order
+  fetch→diff→extract→match→verify→send). The Layer-2 pass is an injected seam (`run_layer2`, mirroring
+  `resolve_fetcher`) so the orchestrator tests stay fully offline. Per-vertical isolation: one vertical's
+  Layer-2 error is logged and skipped, never aborting the run. The run's LLM totals (extraction/match
+  calls + est cost) are written to the `pipeline_runs` row via `update_llm_metrics` (the columns
+  `finish_run` had stubbed at 0 "no LLM yet").
+- **Recipient → profiles (realizes D-027).** The digest recipient is the matched **profile's
+  `user_email`**, not an env var. `VJA_DIGEST_RECIPIENT` is **repurposed as the ops/alert recipient**
+  (where nightly failure-alerts go) — still required, since the builder is the ops contact.
+**Scope (decided with Hayden):** the three wiring items only. ATS `posted_at` normalize→persist→query
+(D-030) and new-user backfill (D-024) stay **deferred to the backfill block** — the docs peg that work to
+Phase 5 *because backfill needs it first*, and the nightly digest is a diff that reads no `posted_at`. The
+DRW malformed-`posted_at` row (D-035) stays parked with that same future work. No schema change.
+**Why:** matching is the product (D-007), so the rationale has to reach the inbox, gated to what's worth
+reading — a once-a-day email of every new posting (incl. roles the model says *no* to) would train the
+reader to ignore it (the kill criterion). Per-profile addressing is the natural unit now that a "user" is
+a resume+vertical+email; deferring the date work keeps this block small and honors the docs' sequencing.

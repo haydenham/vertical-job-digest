@@ -53,9 +53,33 @@ def finish_run(
             fetch_failures=fetch_failures,
             postings_new=postings_new,
             postings_closed=postings_closed,
-            extraction_calls=0,  # no LLM yet (Phase 5)
+            extraction_calls=0,  # Layer-2 totals land via update_llm_metrics after the run (P5.4)
             match_calls=0,
             llm_cost_usd=0.0,
             errors=errors,
+        )
+    )
+
+
+def update_llm_metrics(
+    conn: Connection,
+    run_id: int,
+    *,
+    extraction_calls: int,
+    match_calls: int,
+    llm_cost_usd: float,
+) -> None:
+    """Record the run's Layer-2 LLM totals (extraction + matching) after the per-vertical loop.
+
+    `finish_run` writes 0s first (the run row is finalized before the LLM steps run); the nightly
+    loop calls this once the extract/match passes are done, overwriting them with real totals.
+    """
+    conn.execute(
+        pipeline_runs.update()
+        .where(pipeline_runs.c.id == run_id)
+        .values(
+            extraction_calls=extraction_calls,
+            match_calls=match_calls,
+            llm_cost_usd=llm_cost_usd,
         )
     )

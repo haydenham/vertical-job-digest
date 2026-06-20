@@ -1,8 +1,10 @@
 """Render `DigestContents` into a sendable email (HTML + plaintext) and an audit JSON blob.
 
 "The diff is the product": the body shows what *changed* — new roles (with verified apply links)
-and roles that closed — and nothing else. Quarantined postings (links that failed the D-008 gate)
-are deliberately kept out of the user-facing body but recorded in the audit `contents` so an
+and roles that closed — and nothing else. Each new role now carries its match rationale: a
+`[verdict · score]` tag and the one-line `rationale` (P5.4 / D-037). The fuller `fits`/`gaps`
+lists are kept out of the body (scannability) but recorded in the audit `contents`. Quarantined
+postings (links that failed the D-008 gate) are likewise kept out of the body but recorded so an
 all-quarantine night is still traceable.
 
 Nothing here is vertical-specific (CLAUDE rule): the vertical slug is humanized generically for the
@@ -39,6 +41,14 @@ def _label(posting: DigestPosting) -> str:
     return f"{head} ({posting.location})" if posting.location else head
 
 
+def _verdict_tag(posting: DigestPosting) -> str:
+    """`[verdict · score]` for a matched posting, or `''` when there's no rationale (closures)."""
+    if posting.verdict is None:
+        return ""
+    score = "" if posting.score is None else f" · {posting.score}"
+    return f"[{posting.verdict}{score}]"
+
+
 def render_digest(contents: DigestContents) -> RenderedEmail:
     """Build subject + HTML + plaintext from a digest's contents."""
     name = _humanize(contents.vertical)
@@ -56,8 +66,12 @@ def _render_text(name: str, contents: DigestContents) -> str:
     lines.append(f"New roles ({len(contents.new)})")
     if contents.new:
         for posting in contents.new:
+            tag = _verdict_tag(posting)
+            head = f"{_label(posting)} {tag}".rstrip()
             link = f" — {posting.apply_url}" if posting.apply_url else ""
-            lines.append(f"  • {_label(posting)}{link}")
+            lines.append(f"  • {head}{link}")
+            if posting.rationale:
+                lines.append(f"      {posting.rationale}")
     else:
         lines.append("  (none)")
     lines.append("")
@@ -88,14 +102,19 @@ def _html_list(postings: list[DigestPosting], *, linked: bool) -> str:
         label = escape(_label(posting))
         if linked and posting.apply_url:
             href = escape(posting.apply_url, quote=True)
-            items.append(f'<li><a href="{href}">{label}</a></li>')
+            head = f'<a href="{href}">{label}</a>'
         else:
-            items.append(f"<li>{label}</li>")
+            head = label
+        tag = _verdict_tag(posting)
+        if tag:
+            head += f" <strong>{escape(tag)}</strong>"
+        rationale = f"<br><em>{escape(posting.rationale)}</em>" if posting.rationale else ""
+        items.append(f"<li>{head}{rationale}</li>")
     return "<ul>\n" + "\n".join(items) + "\n</ul>"
 
 
 def _posting_to_dict(posting: DigestPosting) -> dict[str, Any]:
-    return {
+    d: dict[str, Any] = {
         "external_id": posting.external_id,
         "company": posting.company,
         "title": posting.title,
@@ -103,6 +122,16 @@ def _posting_to_dict(posting: DigestPosting) -> dict[str, Any]:
         "apply_url": posting.apply_url,
         "first_seen_at": posting.first_seen_at.isoformat(),
     }
+    # The full rationale lands in the audit record even though fits/gaps aren't in the body (D-037).
+    if posting.verdict is not None:
+        d |= {
+            "verdict": posting.verdict,
+            "score": posting.score,
+            "rationale": posting.rationale,
+            "fits": posting.fits,
+            "gaps": posting.gaps,
+        }
+    return d
 
 
 def contents_to_dict(contents: DigestContents) -> dict[str, Any]:
