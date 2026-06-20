@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-20 — Phase 6 prep · multi-user & hosting migration ledger (doc-only)
+
+**Did:** Added `docs/11-multi-user-and-hosting.md` — a *living checklist* (not a design doc) for the
+eventual D-025 hosting/Postgres + multi-user cutover. Three working sections: (1) **already portable** (DB
+D-025, runtime D-031, cost model D-005, matching D-006, identity/resume seams D-027/D-033 — linked so they
+aren't re-derived under cutover pressure); (2) **seams to preserve** — chiefly the rule that the **Phase-6
+dashboard API is `(vertical, profile_id)`-parameterized**, so adding auth later is a filter, not a rewrite;
+(3) **deferred work enumerated** — security/PII (flagged highest-stakes), auth/identity, cost/abuse guards
+(signup backfill is the first place user action drives LLM spend), email deliverability, live
+migrations/observability. Added it to the CLAUDE.md doc map.
+
+**Why:** Hayden flagged that lots of design is deferred to an approaching cloud migration with no written
+plan. Turning "a lot goes into it" into an enumerated, trackable ledger is cheap and prevents single-user
+assumptions from hardening silently — discipline is *document the seams now, build the machinery at the
+trigger*; kept honest with the kill criterion (no speculative scaffolding).
+
+**Decisions:** none new (no ADR — this is a ledger over existing decisions). Adopted-but-unrecorded
+convention surfaced for Phase 6: the read API is `(vertical, profile_id)`-parameterized (will land with B1).
+
+**Tests:** none (doc-only).
+
+**Next:** in-depth plan of **A1** (normalize → persist the ATS activity date: `postings.source_updated_at`
++ migration + per-ATS normalizer; closes the parked DRW malformed-`posted_at` fix), then code.
+
+---
+
 ## 2026-06-19 — Phase 5 · Block 4: digest rationale + nightly extract→match→send + recipient→profiles
 
 **Did:** Composed the Layer-2 pieces (5.1–5.3) into the nightly loop and put the match rationale in the
