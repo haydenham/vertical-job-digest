@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 
+from vja.dates import normalize_ats_date
 from vja.db.engine import begin
 from vja.db.postings import (
     ExtractionCandidate,
@@ -165,7 +166,12 @@ def run_extraction(
         cost += call_cost
         with begin(engine) as conn:
             save_extraction(
-                conn, candidate.posting_id, fields_to_columns(fields), model=_MODEL, now=stamp
+                conn,
+                candidate.posting_id,
+                fields_to_columns(fields),
+                model=_MODEL,
+                now=stamp,
+                source_updated_at=normalize_ats_date(fields.posted_at),
             )
         extracted += 1
 

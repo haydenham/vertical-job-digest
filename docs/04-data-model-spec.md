@@ -84,6 +84,7 @@ The heart of the diff. A posting belongs to **either** an employer **or** a sour
 | `first_seen_at` | TEXT NOT NULL | when first observed |
 | `last_seen_at` | TEXT NOT NULL | bumped every fetch the posting is still present |
 | `closed_at` | TEXT | set when it vanishes from the source |
+| `source_updated_at` | TIMESTAMP | normalized "best-available ATS activity date" (D-038): the L1 `updated_at` when present (refreshed every sighting), else the extraction-filled `posted_at`; queries (D-030 windows / D-024 cap) fall back to `first_seen_at` when NULL |
 | **extracted fields** (L2 fills these; NULL until extracted) | | |
 | `title` | TEXT | |
 | `level` | TEXT | `intern` \| `new_grad` \| `early_career` \| `mid` \| `senior` \| `unknown` |
@@ -93,7 +94,7 @@ The heart of the diff. A posting belongs to **either** an employer **or** a sour
 | `stack` | TEXT | JSON array of technologies |
 | `comp_min` / `comp_max` | INTEGER | if listed |
 | `comp_raw` | TEXT | original comp string |
-| `posted_at` | TEXT | source's posting date if available |
+| `posted_at` | TEXT | source's posting date if available (raw, unnormalized string; normalized form lands in `source_updated_at`) |
 | `extraction_model` | TEXT | model id used |
 | `extracted_at` | TEXT | |
 

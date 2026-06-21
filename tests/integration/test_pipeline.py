@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import Engine, select
 
+from vja.dates import normalize_ats_date
 from vja.db.engine import begin
 from vja.db.schema import employers, postings
 from vja.fetchers.base import FetchError
@@ -34,14 +35,18 @@ class FakeFetcher:
 
 
 def _posting(
-    external_id: str, *, title: str = "Engineer", description: str = "Build it."
+    external_id: str,
+    *,
+    title: str = "Engineer",
+    description: str = "Build it.",
+    updated_at: str | None = None,
 ) -> RawPosting:
     return RawPosting(
         external_id=external_id,
         title=title,
         apply_url=f"https://example.com/{external_id}",
         location="Remote",
-        updated_at=None,
+        updated_at=updated_at,
         raw={"id": external_id, "title": title, "content": description},
         description=description,
     )
@@ -170,6 +175,102 @@ def test_content_hash_includes_description(migrated_engine: Engine, employer: Em
 
     stored = _rows(migrated_engine)[0]["content_hash"]
     assert stored == content_hash(title="SWE", location="Remote", description="unique body text")
+
+
+def _by_id(engine: Engine) -> dict[str, dict[str, object]]:
+    return {r["external_id"]: r for r in _rows(engine)}
+
+
+def test_insert_persists_normalized_source_updated_at(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # A Greenhouse-style ISO `updated_at` is normalized to UTC and stored on insert.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", updated_at="2026-06-15T08:30:00-04:00")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] == datetime(
+        2026, 6, 15, 12, 30, tzinfo=UTC
+    )
+
+
+def test_insert_with_no_ats_date_leaves_source_null(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # Workday gives no L1 date — the column stays NULL until extraction fills it.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", updated_at=None)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] is None
+
+
+def test_bump_backfills_null_source_updated_at(migrated_engine: Engine, employer: Employer) -> None:
+    # An existing row with no date (pre-A1 / Workday corpus): a later sight whose body is
+    # unchanged but now carries an `updated_at` backfills it via the bump path (the self-heal).
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="x", updated_at=None)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] is None
+
+    result = sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="x", updated_at="2026-06-15T00:00:00Z")]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+    assert result.unchanged == 1  # body unchanged → bump path, not update
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] == normalize_ats_date(
+        "2026-06-15T00:00:00Z"
+    )
+
+
+def test_content_change_refreshes_source_updated_at(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="orig", updated_at="2026-06-10T00:00:00Z")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="EDITED", updated_at="2026-06-15T00:00:00Z")]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] == normalize_ats_date(
+        "2026-06-15T00:00:00Z"
+    )
+
+
+def test_later_null_ats_date_does_not_clobber_existing(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # Once we have a good date, a subsequent fetch that omits it must not null it out.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="orig", updated_at="2026-06-10T00:00:00Z")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="EDITED", updated_at=None)]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+    assert _by_id(migrated_engine)["a"]["source_updated_at"] == normalize_ats_date(
+        "2026-06-10T00:00:00Z"
+    )
 
 
 def test_failed_fetch_closes_nothing(migrated_engine: Engine, employer: Employer) -> None:

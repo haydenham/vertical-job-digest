@@ -5,6 +5,47 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-21 — Phase 6 · Block A1: ATS date normalizer + `postings.source_updated_at`
+
+**Did:** Built the deferred D-030/D-024 date infra — one normalized, queryable ATS activity date, the
+dashboard recency toggles' (A2/B) backend prerequisite.
+- `src/vja/dates.py` (new): `normalize_ats_date(str|None) → datetime|None`. ISO 8601 (offset/`Z`/naive→UTC/
+  date-only) + epoch sec/millis digit-strings (Lever) → tz-aware UTC; unparseable → `None`, never raises.
+  Resolves the parked DRW malformed-`posted_at` row (it now normalizes to `None`).
+- `db/schema.py` + migration `13c2203d963b`: new nullable `postings.source_updated_at` (`UTCDateTime`).
+  Hand-fixed the autogen to render the custom type as `sa.DateTime(timezone=True)` (matches the initial
+  migration; the autogen emitted an un-imported `vja.db.schema.UTCDateTime` ref). Applied to local `vja.db`.
+- `db/postings.py`: `insert_posting`/`bump_last_seen`/`update_changed` take a keyword-only
+  `source_updated_at` (bump/update write it only when non-None — never null a good value);
+  `save_extraction` fills it via `CASE WHEN source_updated_at IS NULL` (L1-authoritative).
+- `pipeline.py`: normalizes `posting.updated_at` and passes it to all three L1 write paths (so the unchanged
+  `bump` path refreshes it too — self-heals the existing GH/Lever/Ashby corpus next run).
+- `extract.py`: passes `normalize_ats_date(fields.posted_at)` to `save_extraction` (fills Workday's date).
+
+**Decisions:** D-038. Per Hayden's sign-off: (1) **L1 `updated_at` authoritative, L2 `posted_at` fills only
+when NULL** (vs literal "most recent" — better data quality, dialect-portable); (2) **refresh on every
+sighting** incl. the unchanged path, guarded non-NULL, which also self-heals the corpus. Accepted limitation:
+existing Workday rows (already extracted, no L1 date) stay NULL → dashboard falls back to `first_seen_at`
+(the documented Workday weak spot).
+
+**Bug found + fixed (probe before sign-off):** a bare digit string like `"2026"` (a plausible LLM
+`posted_at`) was parsed as epoch-seconds → **1970** — a garbage date is worse than NULL (NULL falls back to
+`first_seen_at`; 1970 reads as ancient and drops out of every recency window). Fixed with a posting-era
+sanity guard in `_from_epoch` (reject if the resolved year ∉ [2000, 2100]) + a regression test.
+
+**Tests:** +26 (176→202). `test_dates.py` (ISO offset/`Z`/naive/date-only, Lever ms + epoch sec, empty,
+malformed/DRW regression, **implausible-epoch guard**, surrounding whitespace). `test_pipeline.py` (insert
+persists normalized date; no-date→NULL; bump self-heal/backfill; content-change refresh; later-null never
+clobbers). `test_extraction_run.py` (extraction fills only when NULL; never overrides an L1 date).
+
+**Verified:** ruff + format + mypy(strict) clean; **202 passed, 8 deselected**; `alembic check` clean.
+
+**Next:** A2 — `open_postings_in_window` query helper (D-030 criterion: `source_updated_at` in-window OR
+`first_seen_at` fallback; *new today* = `first_seen_at`) + its `(status, source_updated_at)` index, then the
+onboarding backfill (D-024, `trigger=backfill`, ≤14d cap). Then Phase 6 B1 (FastAPI read API) / B2 (React).
+
+---
+
 ## 2026-06-20 — Phase 6 prep · multi-user & hosting migration ledger (doc-only)
 
 **Did:** Added `docs/11-multi-user-and-hosting.md` — a *living checklist* (not a design doc) for the

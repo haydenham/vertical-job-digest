@@ -21,6 +21,7 @@ from typing import Any
 
 from sqlalchemy import Engine
 
+from vja.dates import normalize_ats_date
 from vja.db import pipeline_runs as pipeline_runs_repo
 from vja.db import postings as postings_repo
 from vja.db.employers import active_fetchable_employers
@@ -77,19 +78,35 @@ def sync_employer(
 
         for external_id in diff.new:
             posting = by_id[external_id]
-            postings_repo.insert_posting(conn, employer.id, posting, _hash(posting), stamp)
+            postings_repo.insert_posting(
+                conn,
+                employer.id,
+                posting,
+                _hash(posting),
+                stamp,
+                source_updated_at=normalize_ats_date(posting.updated_at),
+            )
 
         updated = 0
         for external_id in diff.still_present:
             posting = by_id[external_id]
+            source_updated_at = normalize_ats_date(posting.updated_at)
             new_hash = _hash(posting)
             if new_hash != stored[external_id]:
                 postings_repo.update_changed(
-                    conn, employer.id, external_id, new_hash, posting.raw, stamp
+                    conn,
+                    employer.id,
+                    external_id,
+                    new_hash,
+                    posting.raw,
+                    stamp,
+                    source_updated_at=source_updated_at,
                 )
                 updated += 1
             else:
-                postings_repo.bump_last_seen(conn, employer.id, external_id, stamp)
+                postings_repo.bump_last_seen(
+                    conn, employer.id, external_id, stamp, source_updated_at=source_updated_at
+                )
 
         for external_id in diff.closed:
             postings_repo.close_posting(conn, employer.id, external_id, stamp)

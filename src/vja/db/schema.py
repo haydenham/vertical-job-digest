@@ -164,6 +164,10 @@ postings = Table(
     Column("first_seen_at", UTCDateTime(), nullable=False),
     Column("last_seen_at", UTCDateTime(), nullable=False),
     Column("closed_at", UTCDateTime()),
+    # Normalized "best-available ATS activity date" (D-038): the L1 `updated_at` when present,
+    # else the extraction-filled `posted_at`. Queries (D-030 windows / D-024 cap) fall back to
+    # `first_seen_at` when NULL. The raw `posted_at` (below) stays the unnormalized source string.
+    Column("source_updated_at", UTCDateTime()),
     # --- extracted fields (Layer 2 fills these; NULL until extracted) ---
     Column("title", String),
     Column("level", _enum(Level, "level")),
