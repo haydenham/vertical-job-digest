@@ -178,7 +178,7 @@ def test_content_hash_includes_description(migrated_engine: Engine, employer: Em
 
 
 def _by_id(engine: Engine) -> dict[str, dict[str, object]]:
-    return {r["external_id"]: r for r in _rows(engine)}
+    return {str(r["external_id"]): r for r in _rows(engine)}
 
 
 def test_insert_persists_normalized_source_updated_at(
