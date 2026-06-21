@@ -190,6 +190,9 @@ postings = Table(
     ),
     Index("ix_postings_employer_status", "employer_id", "status"),
     Index("ix_postings_status_first_seen", "status", "first_seen_at"),
+    # Recency-window queries (D-030 dashboard toggles / D-024 backfill cap) filter open postings
+    # by `source_updated_at`; the existing `status_first_seen` index covers the COALESCE fallback.
+    Index("ix_postings_status_source_updated", "status", "source_updated_at"),
 )
 
 

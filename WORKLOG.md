@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-21 — Phase 6 · Block A2: recency-window query + index + signup backfill (D-039)
+
+**Did:** Consumed A1's `source_updated_at` to build the dashboard's recency prerequisite + the D-024
+signup backfill — the two consumers D-030 said would share one date predicate.
+- `db/postings.py`: `activity_window_clause(cutoff)` (the one home for
+  `COALESCE(source_updated_at, first_seen_at) >= cutoff`), `OpenPosting` dataclass (match-free
+  dashboard row), and `open_postings_in_window(vertical, *, cutoff, by_first_seen)` — open postings
+  in a window, newest-activity-first, no match join. `cutoff=None` → all open; `by_first_seen=True`
+  → the "new today" basis (first_seen only = calendar midnight UTC, so it equals the digest); else
+  the activity predicate (week/2-week toggles + backfill).
+- `db/matches.py`: `postings_needing_match` gains a keyword-only `since=` that ANDs in
+  `activity_window_clause` (default `None` = nightly, byte-identical). This is what bounds backfill.
+- `db/schema.py` + migration `f7164d547f15`: `ix_postings_status_source_updated` on
+  `(status, source_updated_at)`. Applied + round-tripped on local `vja.db`.
+- `match.py`: extracted `run_matching`'s per-profile loop into shared `_match_profile`
+  (`since`/`trigger` params); added `run_backfill(vertical, profile)` (5-day cap,
+  `trigger=backfill`, idempotent) + `vja-backfill --vertical V [--email X]` CLI (registered in
+  pyproject). Nightly matching behavior unchanged.
+
+**Decisions:** D-039. Per Hayden's sign-off: (1) **match-free shared primitive** (dashboard layers
+verdict/score in B1, keeping the docs/11 `(vertical, profile_id)` seam in the API layer; backfill
+reuses the bare window); (2) **flexible cutoff, not a rigid 4-toggle enum** (backfill's 5d isn't a
+toggle value); (3) **backfill = 5 days, not 14** — **amends D-024** and decouples it from the
+dashboard's 14d "Two weeks" toggle (they share only the predicate now); (4) **nightly stays
+uncapped** — the digest's `first_seen_at` window already keeps old backlog out of the inbox, so the
+cap is the backfill's job alone; (5) **"new today" = calendar midnight UTC**.
+
+**Tests:** +9 (202→211). `test_postings_window.py` (activity basis + fallback, new-today first_seen
+basis, all-open, newest-first order, vertical scoping, open-only, dashboard columns).
+`test_backfill.py` (5d-window matching, `trigger=backfill`, idempotency, + a direct
+`postings_needing_match(since=)` repo test). `test_matching_run.py` unchanged + green (pins the
+`_match_profile` refactor preserved nightly behavior).
+
+**Verified:** ruff + format + mypy(strict) clean; **211 passed, 8 deselected**; `alembic check`
+clean + `downgrade -1`/`upgrade head` round-trip. Smoke on local `vja.db`: window sizes monotonic
+(all_open 2175 → last_1d 4 → new_today 4); `vja-backfill --help` wired.
+
+**Next:** Phase 6 **B1** — FastAPI read API (`(vertical, profile_id)`-parameterized per docs/11),
+mapping the recency toggles → `open_postings_in_window` cutoffs + LEFT-joining match quality; then
+**B2** — the Vite/React/TS table served by FastAPI.
+
+---
+
 ## 2026-06-21 — Phase 6 · Block A1: ATS date normalizer + `postings.source_updated_at`
 
 **Did:** Built the deferred D-030/D-024 date infra — one normalized, queryable ATS activity date, the

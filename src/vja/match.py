@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from anthropic import Anthropic
@@ -30,7 +31,7 @@ from sqlalchemy import Engine
 
 from vja.db.engine import begin
 from vja.db.matches import MatchCandidate, postings_needing_match, save_match
-from vja.db.profiles import active_profiles
+from vja.db.profiles import Profile, active_profiles
 from vja.models import MatchTrigger, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import in_scope
@@ -39,6 +40,7 @@ from vja.verticals import VerticalConfig
 logger = logging.getLogger("vja.match")
 
 _MODEL = "claude-sonnet-4-6"  # strong tier for the user-visible rationale (D-005); eval-gated
+_BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
 _MAX_TOKENS = 4096  # room for adaptive thinking + the structured rationale
 _SONNET_IN_PER_TOKEN = 3.0 / 1_000_000  # $3 / MTok input
 _SONNET_OUT_PER_TOKEN = 15.0 / 1_000_000  # $15 / MTok output
@@ -163,6 +165,61 @@ def match_posting(
     return result, _call_cost(response.usage)
 
 
+def _match_profile(
+    engine: Engine,
+    vertical: str,
+    profile: Profile,
+    *,
+    config: VerticalConfig,
+    client: Anthropic,
+    since: datetime | None,
+    trigger: MatchTrigger,
+    now: datetime,
+) -> tuple[int, int, float]:
+    """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, cost).
+
+    The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
+    (`since=now−5d`, `trigger=BACKFILL`). `since` bounds the candidate set to the recency window;
+    Stage A (`in_scope`) + Stage B (`passes_prefilter`) drop the obvious non-matches for free.
+    Per-posting isolation: one posting's failure (API error, bad parse) is logged and skipped,
+    never aborting the batch.
+    """
+    prefilter = PrefilterConfig(
+        locations=config.prefilter_locations, levels=config.prefilter_levels
+    )
+    candidates = [
+        c
+        for c in postings_needing_match(
+            engine, vertical, profile.id, profile.resume_version, since=since
+        )
+        if in_scope(c.title, config.scope) and passes_prefilter(c.level, c.location, prefilter)
+    ]
+    matched = 0
+    cost = 0.0
+    for candidate in candidates:
+        try:
+            result, call_cost = match_posting(
+                client, profile.resume_text, config.domain_vocabulary, _posting_text(candidate)
+            )
+        except Exception as exc:  # deliberate per-posting isolation boundary (logged)
+            logger.warning("match failed for posting %s: %r", candidate.posting_id, exc)
+            continue
+        cost += call_cost
+        with begin(engine) as conn:
+            save_match(
+                conn,
+                candidate.posting_id,
+                profile.id,
+                profile.resume_version,
+                fields_to_columns(result),
+                model=_MODEL,
+                trigger=trigger.value,
+                now=now,
+            )
+        matched += 1
+    return len(candidates), matched, cost
+
+
 def run_matching(
     engine: Engine,
     vertical: str,
@@ -173,56 +230,75 @@ def run_matching(
 ) -> MatchingSummary:
     """Match every Stage-A/B-surviving, unmatched posting for `vertical` against each active resume.
 
-    Per-posting isolation: one posting's failure (API error, bad parse) is logged and skipped, never
-    aborting the batch. `client` is injected so tests run fully offline.
+    Uncapped by design (the digest's `first_seen_at` window keeps old roles out of the inbox);
+    the 5-day cap is the backfill's job (`run_backfill`). `client` is injected for offline tests.
     """
     stamp = now or datetime.now(UTC)
     cli = client or Anthropic()
-    prefilter = PrefilterConfig(
-        locations=config.prefilter_locations, levels=config.prefilter_levels
-    )
-
     profiles = active_profiles(engine, vertical)
-    total = 0
-    matched = 0
-    failed = 0
+    total = matched = 0
     cost = 0.0
     for profile in profiles:
-        candidates = [
-            c
-            for c in postings_needing_match(engine, vertical, profile.id, profile.resume_version)
-            if in_scope(c.title, config.scope) and passes_prefilter(c.level, c.location, prefilter)
-        ]
-        total += len(candidates)
-        for candidate in candidates:
-            try:
-                result, call_cost = match_posting(
-                    cli, profile.resume_text, config.domain_vocabulary, _posting_text(candidate)
-                )
-            except Exception as exc:  # deliberate per-posting isolation boundary (logged)
-                logger.warning("match failed for posting %s: %r", candidate.posting_id, exc)
-                failed += 1
-                continue
-            cost += call_cost
-            with begin(engine) as conn:
-                save_match(
-                    conn,
-                    candidate.posting_id,
-                    profile.id,
-                    profile.resume_version,
-                    fields_to_columns(result),
-                    model=_MODEL,
-                    trigger=MatchTrigger.NIGHTLY.value,
-                    now=stamp,
-                )
-            matched += 1
+        prof_total, prof_matched, prof_cost = _match_profile(
+            engine,
+            vertical,
+            profile,
+            config=config,
+            client=cli,
+            since=None,
+            trigger=MatchTrigger.NIGHTLY,
+            now=stamp,
+        )
+        total += prof_total
+        matched += prof_matched
+        cost += prof_cost
 
     return MatchingSummary(
         vertical=vertical,
         profiles=len(profiles),
         total=total,
         matched=matched,
-        failed=failed,
+        failed=total - matched,
+        est_cost_usd=cost,
+    )
+
+
+def run_backfill(
+    engine: Engine,
+    vertical: str,
+    profile: Profile,
+    *,
+    config: VerticalConfig,
+    client: Anthropic | None = None,
+    now: datetime | None = None,
+) -> MatchingSummary:
+    """Signup catch-up (D-024/D-039): match one new profile against the *recent* open set.
+
+    Matches `profile` against open, extracted, unmatched postings whose ATS activity date is
+    within the last `_BACKFILL_WINDOW_DAYS` (5) — so a new user's first view is timely, not a
+    months-deep dump. Idempotent (a re-run only matches the unmatched remainder) and per-posting
+    isolated, mirroring `run_matching`. `trigger=backfill`; `client` injected for offline tests.
+    Intended caller: the future signup flow (one profile); nightly matching stays uncapped.
+    """
+    stamp = now or datetime.now(UTC)
+    cli = client or Anthropic()
+    since = stamp - timedelta(days=_BACKFILL_WINDOW_DAYS)
+    total, matched, cost = _match_profile(
+        engine,
+        vertical,
+        profile,
+        config=config,
+        client=cli,
+        since=since,
+        trigger=MatchTrigger.BACKFILL,
+        now=stamp,
+    )
+    return MatchingSummary(
+        vertical=vertical,
+        profiles=1,
+        total=total,
+        matched=matched,
+        failed=total - matched,
         est_cost_usd=cost,
     )
 
@@ -250,6 +326,48 @@ def match_main(argv: list[str] | None = None) -> int:
         print(
             f"[{summary.vertical}] matched {summary.matched}/{summary.total} across "
             f"{summary.profiles} profile(s) (failed {summary.failed}) "
+            f"est_cost=${summary.est_cost_usd:.4f}"
+        )
+    return 0
+
+
+def backfill_main(argv: list[str] | None = None) -> int:
+    """CLI: `vja-backfill --vertical V [--email X]` — signup catch-up over the recent open set.
+
+    Runs the 5-day-capped backfill (`trigger=backfill`) for each active profile in the vertical
+    (optionally just `--email`). The standalone manual entry point until a real signup flow calls
+    `run_backfill` directly (multi-user cutover, D-025).
+    """
+    import argparse
+
+    from vja.db.engine import get_engine
+    from vja.verticals import load_vertical_config
+
+    parser = argparse.ArgumentParser(
+        prog="vja-backfill",
+        description="Signup backfill: match recent open postings against active resumes.",
+    )
+    parser.add_argument("--vertical", required=True, help="the vertical to backfill")
+    parser.add_argument("--email", default=None, help="limit to one profile by user email")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    load_dotenv()  # load `.env` (ANTHROPIC_API_KEY) before constructing the Anthropic client
+    engine = get_engine()
+    cfg = load_vertical_config(args.vertical)
+    profiles = [
+        p
+        for p in active_profiles(engine, args.vertical)
+        if args.email is None or p.user_email == args.email
+    ]
+    if not profiles:
+        print(f"no active profiles for vertical {args.vertical!r}", file=sys.stderr)
+        return 0
+    for profile in profiles:
+        summary = run_backfill(engine, args.vertical, profile, config=cfg)
+        print(
+            f"[{summary.vertical}→{profile.user_email}] backfilled "
+            f"{summary.matched}/{summary.total} (failed {summary.failed}) "
             f"est_cost=${summary.est_cost_usd:.4f}"
         )
     return 0
