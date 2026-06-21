@@ -5,6 +5,33 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-21 — Comprehension-debt guards: enforced import layering + INVARIANTS registry (D-040)
+
+**Did:** Interlude before Phase 6 · B1, prompted by Hayden feeling he and Claude were losing the thread.
+Diagnosis from a real survey: the *code* is healthy (~4.1k LOC, max file 377, clean layered DAG, ~1:1 tests) —
+what grows unbounded is the *context to change it safely* (39 ADRs, 840-line WORKLOG). Built two cheap guards:
+- **#1 Import contract (`import-linter`).** Encoded the real dependency stack as a layered contract in
+  `pyproject.toml` (`nightly → pipeline/extract/match/digest → fetchers/verticals → db → helpers → models`);
+  wired `uv run lint-imports` into pre-commit + CI after mypy. Verified it has teeth (breaks on a synthetic
+  removal of the exception). Setup surfaced a back-edge nobody knew about: `db.employers → fetchers.registry`
+  (`SUPPORTED_ATS_TYPES`) — grandfathered as one documented `ignore_imports` line; new `db→fetchers` edges fail.
+- **#2 `docs/INVARIANTS.md`.** Derived "what's true now" registry, mined from D-001…D-039, each rule → its ADR.
+  Caught the live example: backfill cap is **5 days** (D-039), not D-024's original 2 weeks. Linked read-first
+  from `CLAUDE.md` doc map; added a discipline rule (ADR that changes a live rule must update INVARIANTS same session).
+
+**Why:** convert "good architecture by luck/discipline" into machine-guaranteed structure, and give both Hayden
+and each fresh agent session a single current-truth doc instead of replaying 39 ADRs. See D-040.
+
+**Verified:** `lint-imports` KEPT (1 contract, 86 deps); `uv lock --check` clean. Full gate run pending (next).
+
+**Next:** run the full gate suite, then Phase 6 · B1 (FastAPI read API: recency toggles→cutoffs + LEFT-join match
+quality). Open thread: optionally refactor the grandfathered `db→fetchers` edge (inject supported set from
+orchestration layer) — deferred to keep this chunk tight.
+
+**Branch:** `chore/import-contract-and-invariants` (off the merged A2 state).
+
+---
+
 ## 2026-06-21 — Phase 6 · Block A2: recency-window query + index + signup backfill (D-039)
 
 **Did:** Consumed A1's `source_updated_at` to build the dashboard's recency prerequisite + the D-024

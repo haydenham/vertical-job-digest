@@ -160,12 +160,18 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   what's next, open threads. It is the narrative backup to git history.
 - **Every decision that could be re-litigated lands in `DECISIONS.md`** as a short ADR
   (id · date · decision · why · status). Supersede rather than delete.
+- **When an ADR changes a live cross-cutting rule, update `docs/INVARIANTS.md` in the same
+  session** — replace the affected line, don't append. ADRs are the log; INVARIANTS is the
+  current head. They drifting apart is the failure mode this guards against.
 - **Specs live in `docs/`**, numbered. Build-spec docs (`04+`) are the source of truth for the
   schema/interfaces and override the prose sketches in the 01–03 memos where they differ.
 - **Seed/config is documented next to the data** (`data/seed/README.md`, `config/verticals/*.yaml`).
 - Order of authority when docs disagree: build specs (`docs/04+`) > CLAUDE.md > planning memos (`docs/01–03`).
 
 ### Doc map
+- `docs/INVARIANTS.md` — **read first.** The derived "what's true right now" registry of
+  cross-cutting rules, each pointing to its backing ADR. The fast antidote to acting on a
+  stale rule. The layering rule in it is machine-enforced by `import-linter`.
 - `docs/01–03` — planning memos (business, technical, open questions). Context, not spec.
 - `docs/04-data-model-spec.md` — concrete schema; the diff keys on `external_id`, not fuzzy match.
 - `docs/05-fetcher-interface-spec.md` — the common Fetcher contract + per-ATS modules.

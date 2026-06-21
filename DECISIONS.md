@@ -429,3 +429,23 @@ within a window" — building that predicate once (match-free) lets the dashboar
 backfill inheriting a match join it can't use, and keeps the nightly diff (already fresh via `first_seen_at`)
 unchanged. Deferring the dashboard's match-quality join to B1 keeps the `(vertical, profile_id)` auth seam where
 docs/11 wants it.
+
+### D-040 · Comprehension-debt guards: enforced import layering + derived invariants registry · accepted · 2026-06-21
+As the codebase grew (~4.1k LOC, 39 ADRs, 840-line WORKLOG), the binding constraint shifted from *code size* (still
+healthy — largest file 377 LOC, clean layering, ~1:1 tests) to **the context required to change the code safely**.
+Two cheap, durable guards, both modeled on the existing "gates + docs" discipline (D-021):
+- **Import-linter layered contract** (`[tool.importlinter]` in `pyproject.toml`; `uv run lint-imports`; wired into
+  pre-commit + CI after mypy). Declares the real dependency stack as law — *lower layers must not import higher* —
+  so the clean DAG is machine-guaranteed, not luck. Setup surfaced one pre-existing back-edge nobody had noticed:
+  `db.employers → fetchers.registry` (for `SUPPORTED_ATS_TYPES`). Grandfathered via one documented `ignore_imports`
+  line (visible + reviewed); any *new* `db → fetchers` edge fails the build. Candidate cleanup: inject the supported
+  set from the orchestration layer.
+- **`docs/INVARIANTS.md`** — a derived, always-current registry of cross-cutting rules, each pointing to its backing
+  ADR. ADRs stay the immutable log (the "why/when"); INVARIANTS is the queryable "what's true now" head. Linked from
+  `CLAUDE.md` (read-first in the doc map) so every session loads it. New discipline rule: an ADR that changes a live
+  rule must replace the matching INVARIANTS line in the same session.
+**Why:** "the codebase is getting too big to understand" was a misdiagnosis — the code is small and well-factored;
+what grows unbounded is the accumulated invariant/decision context an agent (or Hayden) must reconstruct each
+session. These two guards target *that* directly: one keeps the structure mechanically honest, the other keeps the
+shared mental model from drifting out of the 39-and-counting ADR log. **Status:** initial INVARIANTS mined from
+D-001…D-039; refactoring the grandfathered edge is deferred (out of scope for this chunk by design).
