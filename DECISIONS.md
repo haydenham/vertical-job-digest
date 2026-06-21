@@ -363,3 +363,34 @@ DRW malformed-`posted_at` row (D-035) stays parked with that same future work. N
 reading — a once-a-day email of every new posting (incl. roles the model says *no* to) would train the
 reader to ignore it (the kill criterion). Per-profile addressing is the natural unit now that a "user" is
 a resume+vertical+email; deferring the date work keeps this block small and honors the docs' sequencing.
+
+### D-038 · Phase 6 · A1: normalized ATS activity date (`postings.source_updated_at`) · accepted · 2026-06-21
+Builds the date infra D-030/D-024 promised for Phase 5 but D-037 deferred — the dashboard's recency
+toggles + the backfill cap need one normalized, queryable date. New nullable column
+`postings.source_updated_at` (`UTCDateTime`), fed by a tolerant normalizer (`src/vja/dates.py`).
+- **One normalizer, tolerant by contract.** `normalize_ats_date(str|None) → datetime|None` collapses every
+  shape — ISO 8601 (offset/`Z`/naive→UTC/date-only), epoch seconds/millis digit-strings (Lever) — to
+  tz-aware UTC; **anything unparseable returns `None`, never raises.** A posting must never fail to persist
+  on a bad date. This is also where the parked **DRW malformed-`posted_at`** row (D-035) is resolved: it
+  normalizes to `None` → falls back to `first_seen_at`. A digit string is only trusted as an epoch when it
+  resolves to a posting-era date (year ∈ [2000, 2100]) — so a bare year like `"2026"` returns `None` rather
+  than silently becoming 1970 (a garbage date is worse than NULL, which falls back to `first_seen_at`).
+- **Source-of-truth rule: L1 `updated_at` is authoritative; L2 `posted_at` fills only when L1 left it NULL.**
+  The ATS `updated_at` bumps when the employer touches the posting (exactly "updated within window"); the
+  LLM-read `posted_at` is an older, less-reliable body read. So extraction's date only *rescues* date-less
+  sources (**Workday**) via a `CASE WHEN source_updated_at IS NULL` — it never overwrites a clean L1 stamp.
+  A slight, deliberate departure from D-030's literal "most recent of the two" (better data quality, and it
+  avoids dialect-specific `GREATEST`/`max`).
+- **Refreshed on *every* sighting (incl. the unchanged `bump_last_seen` path), but only when non-NULL.**
+  `updated_at` isn't part of `content_hash`, so a date-only bump lands on the unchanged path — all three L1
+  write paths (insert/bump/update) refresh it. The non-NULL guard means a later fetch that omits the date
+  never nulls a good value (or Workday's extraction-filled one). Bonus: this **self-heals the existing
+  corpus** — GH/Lever/Ashby rows backfill on the next nightly's bump, no data migration needed.
+- **Accepted limitation:** existing *Workday* rows are already extracted (extraction won't revisit) and had
+  no L1 date, so their `source_updated_at` stays NULL → dashboard falls back to `first_seen_at` for them.
+  That's D-030/D-032's acknowledged Workday weak spot; *new* Workday postings get `startDate` via extraction.
+- Scope: persist + normalize only. The window **query** + its index (D-030) and onboarding **backfill**
+  (D-024) are the next blocks (A2). New repo params are keyword-only/defaulted — nothing else moves.
+**Why:** the dashboard's headline feature (recency) and the backfill cap both need a real date, and the
+fetchers already capture it (`RawPosting.updated_at`) — `insert_posting` just dropped it. One tolerant
+normalizer + one column, fed at the persistence boundary, unblocks Phase 6 without reordering the roadmap.

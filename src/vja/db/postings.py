@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, case, select
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import employers, postings
@@ -40,8 +40,14 @@ def insert_posting(
     posting: RawPosting,
     content_hash: str,
     now: datetime,
+    *,
+    source_updated_at: datetime | None = None,
 ) -> None:
-    """Insert a newly-seen posting as `open` with `first_seen = last_seen = now`."""
+    """Insert a newly-seen posting as `open` with `first_seen = last_seen = now`.
+
+    `source_updated_at` is the caller-normalized L1 activity date (D-038), `None` for a source
+    that gives no date (Workday) — extraction fills it later via `save_extraction`.
+    """
     conn.execute(
         postings.insert().values(
             employer_id=employer_id,
@@ -54,16 +60,33 @@ def insert_posting(
             status=PostingStatus.OPEN.value,
             first_seen_at=now,
             last_seen_at=now,
+            source_updated_at=source_updated_at,
         )
     )
 
 
-def bump_last_seen(conn: Connection, employer_id: int, external_id: str, now: datetime) -> None:
-    """Mark a still-present, unchanged posting as seen again."""
+def bump_last_seen(
+    conn: Connection,
+    employer_id: int,
+    external_id: str,
+    now: datetime,
+    *,
+    source_updated_at: datetime | None = None,
+) -> None:
+    """Mark a still-present, unchanged posting as seen again.
+
+    `source_updated_at` is the diff key (D-016) but not part of `content_hash`, so an ATS
+    `updated_at` bump with an unchanged body lands here — refresh it so "updated within window"
+    (D-030) stays accurate. Only written when non-None: never null out a previously-good date
+    (incl. Workday's extraction-filled one). This is also what self-heals the existing corpus.
+    """
+    values: dict[str, Any] = {"last_seen_at": now}
+    if source_updated_at is not None:
+        values["source_updated_at"] = source_updated_at
     conn.execute(
         postings.update()
         .where(postings.c.employer_id == employer_id, postings.c.external_id == external_id)
-        .values(last_seen_at=now)
+        .values(**values)
     )
 
 
@@ -74,23 +97,29 @@ def update_changed(
     content_hash: str,
     raw_payload: dict[str, Any],
     now: datetime,
+    *,
+    source_updated_at: datetime | None = None,
 ) -> None:
     """A still-present posting whose content changed: refresh hash + payload + last_seen.
 
     Also clears `extracted_at` so Layer-2 extraction re-runs against the new content next pass
     (the cache-invalidation seam, P5.2). The stale extracted fields are left in place until that
     re-extraction overwrites them — avoids a transient window where level/location read NULL.
+    `source_updated_at` is refreshed only when non-None (same rule as `bump_last_seen`).
     """
+    values: dict[str, Any] = {
+        "content_hash": content_hash,
+        "raw_payload": raw_payload,
+        "last_seen_at": now,
+        "extracted_at": None,
+        "extraction_model": None,
+    }
+    if source_updated_at is not None:
+        values["source_updated_at"] = source_updated_at
     conn.execute(
         postings.update()
         .where(postings.c.employer_id == employer_id, postings.c.external_id == external_id)
-        .values(
-            content_hash=content_hash,
-            raw_payload=raw_payload,
-            last_seen_at=now,
-            extracted_at=None,
-            extraction_model=None,
-        )
+        .values(**values)
     )
 
 
@@ -171,10 +200,22 @@ def save_extraction(
     *,
     model: str,
     now: datetime,
+    source_updated_at: datetime | None = None,
 ) -> None:
-    """Persist extracted fields + stamp `extraction_model` / `extracted_at` on a posting (P5.2)."""
+    """Persist extracted fields + stamp `extraction_model` / `extracted_at` on a posting (P5.2).
+
+    `source_updated_at` is the normalized extracted `posted_at` (D-038). It fills the column **only
+    when it's still NULL** — i.e. L1 gave no date (Workday) — so a clean L1 `updated_at` is never
+    overwritten by the model's best-effort body-read date (the L1-authoritative rule).
+    """
+    values = dict(columns)
+    if source_updated_at is not None:
+        values["source_updated_at"] = case(
+            (postings.c.source_updated_at.is_(None), source_updated_at),
+            else_=postings.c.source_updated_at,
+        )
     conn.execute(
         postings.update()
         .where(postings.c.id == posting_id)
-        .values(**columns, extraction_model=model, extracted_at=now)
+        .values(**values, extraction_model=model, extracted_at=now)
     )

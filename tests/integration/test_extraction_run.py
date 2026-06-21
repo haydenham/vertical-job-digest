@@ -76,7 +76,13 @@ def _employer(engine: Engine, *, vertical: str, name: str, ats: str) -> int:
 
 
 def _posting(
-    engine: Engine, employer_id: int, external_id: str, title: str, *, extracted: bool = False
+    engine: Engine,
+    employer_id: int,
+    external_id: str,
+    title: str,
+    *,
+    extracted: bool = False,
+    source_updated_at: datetime | None = None,
 ) -> None:
     with begin(engine) as conn:
         conn.execute(
@@ -89,6 +95,7 @@ def _posting(
                 status="open",
                 first_seen_at=_NOW,
                 last_seen_at=_NOW,
+                source_updated_at=source_updated_at,
                 extracted_at=_NOW if extracted else None,
                 extraction_model="old" if extracted else None,
             )
@@ -152,6 +159,51 @@ def test_rerun_is_idempotent(migrated_engine: Engine) -> None:
     _run(migrated_engine)
     summary, _ = _run(migrated_engine)
     assert (summary.total, summary.extracted) == (0, 0)  # nothing left to extract
+
+
+class _ClientReturning:
+    """A fake Anthropic whose extraction always returns the given fields (with a `posted_at`)."""
+
+    def __init__(self, fields: ExtractedFields) -> None:
+        class _Messages:
+            def parse(self, **kwargs: Any) -> Any:
+                class _U:
+                    input_tokens = 800
+                    output_tokens = 120
+
+                class _R:
+                    parsed_output = fields
+                    usage = _U()
+
+                return _R()
+
+        self.messages = _Messages()
+
+
+def test_extraction_fills_source_updated_at_only_when_null(migrated_engine: Engine) -> None:
+    # D-038: the extracted `posted_at` fills `source_updated_at` only where L1 left it NULL
+    # (Workday); a clean L1 date is never overwritten by the model's body-read date.
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    existing = datetime(2026, 6, 10, tzinfo=UTC)
+    _posting(migrated_engine, gh, "needs", "Software Engineer")  # source NULL → should fill
+    _posting(migrated_engine, gh, "has", "Data Engineer", source_updated_at=existing)  # keep
+
+    fields = ExtractedFields(
+        level=Level.NEW_GRAD,
+        remote=RemoteType.HYBRID,
+        posted_at="2026-06-05T00:00:00Z",
+    )
+    run_extraction(
+        migrated_engine,
+        "grid_power_software",
+        scope=_SCOPE,
+        client=cast("Anthropic", _ClientReturning(fields)),
+        resolve_detail=_detail_resolver_factory()[0],
+        now=_NOW,
+    )
+
+    assert _row(migrated_engine, "needs")["source_updated_at"] == datetime(2026, 6, 5, tzinfo=UTC)
+    assert _row(migrated_engine, "has")["source_updated_at"] == existing  # unchanged
 
 
 def test_content_change_reopens_extraction(migrated_engine: Engine) -> None:
