@@ -22,6 +22,7 @@ vja-nightly = "vja.nightly:nightly_main"
 vja-load-profiles = "vja.verticals:load_profiles_main"
 vja-extract = "vja.extract:extract_main"
 vja-match = "vja.match:match_main"
+vja-backfill = "vja.match:backfill_main"
 
 [dependency-groups]
 dev = [

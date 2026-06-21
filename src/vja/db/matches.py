@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import Engine, exists, select
 from sqlalchemy.engine import Connection
 
+from vja.db.postings import activity_window_clause
 from vja.db.schema import employers, matches, postings
 
 
@@ -36,12 +37,21 @@ class MatchCandidate:
 
 
 def postings_needing_match(
-    engine: Engine, vertical: str, profile_id: int, resume_version: str
+    engine: Engine,
+    vertical: str,
+    profile_id: int,
+    resume_version: str,
+    *,
+    since: datetime | None = None,
 ) -> list[MatchCandidate]:
     """Open, extracted postings for `vertical` with no match yet for (profile, resume_version).
 
     Stage A/B filtering is the caller's job — this just excludes postings already matched against
     this resume version, so a re-run only matches the new/unmatched remainder (D-005 cost).
+
+    `since` bounds the set to the recency window (`activity_window_clause`) for the signup
+    backfill's 5-day cap (D-024/D-039); the default `None` is the nightly path — every unmatched
+    posting, uncapped (the digest's `first_seen_at` window keeps old roles out of the inbox).
     """
     already_matched = (
         select(matches.c.id)
@@ -73,6 +83,8 @@ def postings_needing_match(
             ~exists(already_matched),
         )
     )
+    if since is not None:
+        stmt = stmt.where(activity_window_clause(since))
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [

@@ -198,11 +198,13 @@ pushed."
 | Window key | `first_seen_at` (so it equals the digest) | `source_updated_at` OR `first_seen_at` fallback (D-024/D-030) |
 | Gating | relevant verdict + verification + non-empty | full open set (read-only) |
 
-**Phase-6 attach point:** the dashboard needs an `open_postings_in_window` query helper
-(window = `source_updated_at` in-window OR `first_seen_at` fallback; *new today* uses
-`first_seen_at`) plus a `(status, source_updated_at)` index — the next block (A2 / D-039).
-The normalized `source_updated_at` it keys on is already populated by every L1 write path
-and by extraction (D-038), so no new backend date work reorders the dashboard.
+**Phase-6 attach point (A2 / D-039 — built):** `open_postings_in_window` (`db/postings.py`)
+returns open postings in a window — `COALESCE(source_updated_at, first_seen_at) >= cutoff`,
+or `first_seen_at` alone for *new today* — newest-activity-first, **match-free**. The B1
+dashboard API maps each recency toggle to a cutoff and LEFT-joins match quality on top (the
+`(vertical, profile_id)` seam, docs/11). The same predicate (`activity_window_clause`) bounds
+the **signup backfill** (`run_backfill`, 5-day cap, `trigger=backfill`) via
+`postings_needing_match(since=…)`. Index: `ix_postings_status_source_updated`.
 
 ## Stage → module → store → decisions
 
@@ -213,5 +215,6 @@ and by extraction (D-038), so no new backend date work reorders the dashboard.
 | Date normalize | `dates.py` | — | `postings.source_updated_at` | D-038, D-024/D-030 |
 | L2 extract | `extract.py`, `scope.py` | `postings` | `postings` (fields) | D-023 (Stage A), D-005 (cheap tier) |
 | L2 match | `match.py`, `prefilter.py` | `postings`, `profiles` | `matches` | D-023 (Stage B), D-005/D-007 (strong tier, say no) |
+| Backfill (signup, on-demand) | `match.py` (`run_backfill`, `vja-backfill`) | `postings`, `profiles` | `matches` (`trigger=backfill`) | D-024 (5-day cap), D-039 (windowed, nightly untouched) |
 | Push | `digest/` | `postings`, `matches`, `profiles`, `digests` | `digests`, inbox | D-027/D-037 (per-profile), D-008 (verify), D-028 (skip empty) |
-| Pull | FastAPI + React (Phase 6) | `postings`, `matches` | — | D-030 (recency toggles), docs/11 ((vertical, profile) seam) |
+| Pull | FastAPI + React (Phase 6) | `postings` (`open_postings_in_window`), `matches` | — | D-030 (recency toggles), D-039 (window query), docs/11 ((vertical, profile) seam) |

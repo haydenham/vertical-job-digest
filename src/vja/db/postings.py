@@ -12,11 +12,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, case, select
+from sqlalchemy import ColumnElement, Engine, case, func, select
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import employers, postings
 from vja.models import AtsType, Employer, PostingStatus, RawPosting
+
+
+def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
+    """The D-030/D-024 freshness predicate: the most-recent ATS activity date is within the
+    window, falling back to our detection date (`first_seen_at`) when the ATS gave no date.
+
+    One home for the `COALESCE(source_updated_at, first_seen_at) >= cutoff` logic — shared by
+    the dashboard window query (`open_postings_in_window`) and the backfill candidate selection
+    (`postings_needing_match(since=...)`). Mirrors the dashboard's "posted *or* updated within
+    the window" rule (D-030).
+    """
+    return func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at) >= cutoff
 
 
 def open_index(conn: Connection, employer_id: int) -> dict[str, str]:
@@ -219,3 +231,77 @@ def save_extraction(
         .where(postings.c.id == posting_id)
         .values(**values, extraction_model=model, extracted_at=now)
     )
+
+
+@dataclass(frozen=True)
+class OpenPosting:
+    """One open posting row for the dashboard's full-open-set view (D-030), match-free.
+
+    Deliberately carries no verdict/score: the dashboard API (B1) layers match quality on top
+    with a second query keyed on `(profile_id, resume_version)` — keeping this primitive reusable
+    by the backfill, which selects postings precisely *because* they have no match yet.
+    """
+
+    posting_id: int
+    company: str
+    title: str | None
+    location: str | None
+    apply_url: str | None
+    first_seen_at: datetime
+    source_updated_at: datetime | None
+
+
+def open_postings_in_window(
+    engine: Engine,
+    vertical: str,
+    *,
+    cutoff: datetime | None,
+    by_first_seen: bool = False,
+) -> list[OpenPosting]:
+    """Open postings for `vertical` within a recency window, newest-activity-first (D-030).
+
+    The window is a caller-computed `cutoff` so one query serves every dashboard toggle *and*
+    the backfill cap (they pass different cutoffs over the same predicate):
+    - `cutoff is None` → no date filter (the *All open* toggle).
+    - `by_first_seen=True` → window on `first_seen_at` only (the *New today* basis — our
+      detection date, so it mirrors the digest's `new` set; D-030).
+    - otherwise → window on `activity_window_clause(cutoff)` (posted *or* updated within, with
+      the `first_seen_at` fallback) — the *This week* / *Two weeks* toggles and the backfill.
+    """
+    freshness = func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at)
+    stmt = (
+        select(
+            postings.c.id.label("posting_id"),
+            employers.c.name.label("company"),
+            postings.c.title,
+            postings.c.location,
+            postings.c.apply_url,
+            postings.c.first_seen_at,
+            postings.c.source_updated_at,
+        )
+        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .where(
+            employers.c.vertical == vertical,
+            postings.c.status == PostingStatus.OPEN.value,
+        )
+        .order_by(freshness.desc())
+    )
+    if cutoff is not None:
+        in_window = (
+            postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
+        )
+        stmt = stmt.where(in_window)
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [
+        OpenPosting(
+            posting_id=row["posting_id"],
+            company=row["company"],
+            title=row["title"],
+            location=row["location"],
+            apply_url=row["apply_url"],
+            first_seen_at=row["first_seen_at"],
+            source_updated_at=row["source_updated_at"],
+        )
+        for row in rows
+    ]

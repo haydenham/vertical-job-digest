@@ -142,6 +142,12 @@ Full mechanics deferred to the **week-3 digest/matching spec**; this entry fixes
 **Why:** the diff gives daily freshness for free, so a cap only matters where we present the whole open set (backfill,
 dashboard); a hard flood of months-old roles at signup would bury the timely ones and falsify the "apply fast" value.
 
+**Amendment (2026-06-21, D-039):** the **backfill cap is now 5 days, not ~14** (the 14d figure was always
+flagged a tunable starting default), and it is **decoupled from the dashboard's "Two weeks" toggle** (which stays
+14d). They now share only the *windowing predicate* (`COALESCE(source_updated_at, first_seen_at) >= cutoff`), not the
+number. Also settled: **nightly matching is NOT capped** — the digest already keys its `new` set on `first_seen_at`
+vs `last_sent_at`, so old backlog can't flood the inbox; the cap is the backfill's job alone. See D-039.
+
 ### D-025 · DB access = SQLAlchemy Core + Alembic; SQLite now → Postgres at first hosted deploy · accepted · 2026-06-15
 The persistence layer is **SQLAlchemy Core** (not ORM) with **Alembic** migrations. Schema lives in
 `vja.db.schema` as Core `Table`s; engine/URL in `vja.db.engine` (`VJA_DATABASE_URL`, default local SQLite, with a
@@ -394,3 +400,32 @@ toggles + the backfill cap need one normalized, queryable date. New nullable col
 **Why:** the dashboard's headline feature (recency) and the backfill cap both need a real date, and the
 fetchers already capture it (`RawPosting.updated_at`) — `insert_posting` just dropped it. One tolerant
 normalizer + one column, fed at the persistence boundary, unblocks Phase 6 without reordering the roadmap.
+
+### D-039 · Phase 6 · A2: recency-window query + index + signup backfill · accepted · 2026-06-21
+Consumes A1's normalized `source_updated_at` (D-038) to build the dashboard's recency prerequisite and the D-024
+signup backfill — the two consumers D-030 promised would share one date predicate.
+- **One match-free window primitive.** `open_postings_in_window(engine, vertical, *, cutoff, by_first_seen)`
+  (`src/vja/db/postings.py`) returns open postings in a window, newest-activity-first, **with no match join** — so
+  it serves both the dashboard *and* the backfill (which selects postings *because* they have no match yet). The
+  dashboard API (B1) layers verdict/score on top with a second query keyed on `(profile_id, resume_version)`,
+  honoring the docs/11 `(vertical, profile_id)` seam. The freshness predicate lives once in
+  `activity_window_clause(cutoff)` = `COALESCE(source_updated_at, first_seen_at) >= cutoff` and is reused by
+  `postings_needing_match(..., since=…)`.
+- **Flexible cutoff, not a 4-value enum.** The caller computes the cutoff, so one query covers every dashboard
+  toggle *and* the backfill (different cutoffs, same predicate): `cutoff=None` → all open; `by_first_seen=True` →
+  window on `first_seen_at` only (the **"new today"** basis = **calendar midnight UTC**, so it equals the digest's
+  `new` set, D-030); else → the activity predicate (the *This week* / *Two weeks* toggles + the backfill).
+- **Backfill = standalone capped path; nightly untouched.** `run_backfill(engine, vertical, profile)`
+  (`src/vja/match.py`, CLI `vja-backfill`) matches one profile against open∧extracted∧unmatched postings whose
+  activity date is within the last **5 days** (`_BACKFILL_WINDOW_DAYS`), `trigger=backfill`, idempotent + per-posting
+  isolated. `run_matching`'s per-profile loop was extracted into a shared `_match_profile` (`since=None,
+  trigger=NIGHTLY` for nightly; `since=now−5d, trigger=BACKFILL` for backfill) — zero behavior change to nightly
+  (pinned by the unchanged `test_matching_run.py`). Intended caller: the future signup flow; until then `vja-backfill`
+  is the manual entry. **Amends D-024** (14d → 5d, decoupled from the dashboard toggle); see that entry.
+- **Index.** `ix_postings_status_source_updated` on `(status, source_updated_at)` (migration `f7164d547f15`); the
+  existing `(status, first_seen_at)` index covers the COALESCE fallback half.
+**Why:** the dashboard's recency views and the signup catch-up both reduce to "open postings whose freshness date is
+within a window" — building that predicate once (match-free) lets the dashboard and backfill share it without the
+backfill inheriting a match join it can't use, and keeps the nightly diff (already fresh via `first_seen_at`)
+unchanged. Deferring the dashboard's match-quality join to B1 keeps the `(vertical, profile_id)` auth seam where
+docs/11 wants it.
