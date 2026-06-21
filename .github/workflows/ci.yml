@@ -37,6 +37,9 @@ jobs:
       - name: Types (mypy)
         run: uv run mypy
 
+      - name: Imports (import-linter — layered architecture)
+        run: uv run lint-imports
+
       - name: Tests (unit + integration + system)
         run: uv run pytest
 

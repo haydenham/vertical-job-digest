@@ -23,6 +23,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: import-linter
+        name: import-linter (layered architecture)
+        entry: uv run lint-imports
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: pytest
         name: pytest (unit + integration + system)
         entry: uv run pytest

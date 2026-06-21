@@ -33,6 +33,7 @@ dev = [
     "freezegun>=1.5",
     "pre-commit>=4.0",
     "types-pyyaml>=6.0",
+    "import-linter>=2.11",
 ]
 
 [build-system]
@@ -69,4 +70,31 @@ markers = [
     "live: hits real ATS endpoints (opt-in; catches ATS drift, not logic)",
     "e2e: full real pipeline incl. network/LLM/email (opt-in, milestone-only)",
     "eval: pins LLM match/extraction behavior (opt-in; path-filtered CI merge gate)",
+]
+
+# import-linter: the layered architecture is law, not luck (run: `uv run lint-imports`).
+# "Lower layers must not import higher ones" keeps every module readable from its own
+# layer down. Enforced in pre-commit + CI alongside ruff/mypy. The current truth this
+# encodes lives in docs/INVARIANTS.md (§ Architecture).
+[tool.importlinter]
+root_package = "vja"
+
+[[tool.importlinter.contracts]]
+name = "vja layered architecture (lower layers must not import higher)"
+type = "layers"
+containers = ["vja"]
+layers = [
+    "nightly",
+    "pipeline | extract | match | digest",
+    "fetchers | verticals",
+    "db",
+    "prefilter | scope | dates | diff | hashing",
+    "models",
+]
+# Grandfathered back-edge: db.employers reaches up to fetchers.registry for
+# SUPPORTED_ATS_TYPES (filters employers to fetchable ATS types). Visible and reviewed,
+# not invisible. Candidate cleanup: inject the supported set from the orchestration
+# layer instead. Any *new* db -> fetchers edge still fails the build.
+ignore_imports = [
+    "vja.db.employers -> vja.fetchers.registry",
 ]
