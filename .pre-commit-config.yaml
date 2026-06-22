@@ -35,3 +35,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # Frontend gate (D-042) — mirrors the CI `frontend` job. Runs only when frontend
+      # TS/TSX changes are staged; same eslint + tsc + vitest checks, two moments.
+      - id: frontend-checks
+        name: frontend (eslint + tsc + vitest)
+        entry: bash -c 'cd frontend && npm run lint && npm run typecheck && npm run test'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

@@ -14,18 +14,30 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 from typing import Annotated, cast
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
 
 from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality
-from vja.db.profiles import Profile, active_profiles
+from vja.db.profiles import Profile, active_profiles, active_verticals
+
+# The built React SPA (B2). Mounted at `/` only when present, so dev (Vite server + CORS) and
+# tests/CI (no build) are unaffected; prod serves the SPA same-origin from this dir. (D-042)
+_FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
+# Dev-server origins allowed by CORS. Prod is same-origin (static mount), so this is the Vite
+# dev server by default; override with `VJA_CORS_ORIGINS` (comma-separated). (D-042)
+_DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
 
 class Window(StrEnum):
@@ -104,14 +116,35 @@ def _get_engine(request: Request) -> Engine:
     return cast("Engine", request.app.state.engine)
 
 
+def _cors_origins() -> list[str]:
+    """Allowed CORS origins: `VJA_CORS_ORIGINS` (comma-separated) or the Vite dev defaults."""
+    raw = os.environ.get("VJA_CORS_ORIGINS")
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return list(_DEFAULT_CORS_ORIGINS)
+
+
 def create_app(engine: Engine | None = None) -> FastAPI:
     """Build the read-only dashboard API. Pass `engine` in tests; defaults to `get_engine()`."""
     app = FastAPI(title="VJA dashboard API", version="0.1.0")
     app.state.engine = engine if engine is not None else get_engine()
 
+    # Dev serves the SPA from a separate Vite origin → CORS; prod is same-origin (mount below).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins(),
+        allow_methods=["GET"],
+        allow_headers=["*"],
+    )
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/verticals")
+    def verticals(engine: Annotated[Engine, Depends(_get_engine)]) -> list[str]:
+        """Active verticals — the frontend's vertical picker, so no slug is hardcoded (D-042)."""
+        return active_verticals(engine)
 
     @app.get("/api/postings")
     def postings(
@@ -143,6 +176,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             count=len(rows),
             postings=[PostingRow.model_validate(r) for r in rows],
         )
+
+    # Serve the built SPA same-origin in prod, if it exists. Mounted last so `/api/*` wins;
+    # `html=True` makes it serve `index.html` for the SPA's client routes. (D-042)
+    if _FRONTEND_DIST.is_dir():
+        app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="spa")
 
     return app
 

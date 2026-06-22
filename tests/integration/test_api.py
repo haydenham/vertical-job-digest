@@ -96,6 +96,18 @@ def test_health(migrated_engine: Engine) -> None:
     assert resp.json() == {"status": "ok"}
 
 
+def test_cors_allows_dev_origin(migrated_engine: Engine) -> None:
+    resp = _client(migrated_engine).get("/api/health", headers={"Origin": "http://localhost:5173"})
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_verticals_lists_active(migrated_engine: Engine) -> None:
+    client = _client(migrated_engine)
+    assert client.get("/api/verticals").json() == []  # none until a profile exists
+    _profile(migrated_engine)
+    assert client.get("/api/verticals").json() == [_VERTICAL]
+
+
 def test_default_view_is_matched_only(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)

@@ -475,3 +475,26 @@ for this (profile, resume_version)` (assessed). Decisions:
 **Why:** the dashboard's job is "browse the roles relevant to you," not "mirror the raw ATS dump." Flooring on T2
 and defaulting to T3 makes a new user's first view tailored (a few dozen assessed roles), while the in-scope T2
 toggle still honors D-030's full-set browsing — without ever surfacing out-of-scope noise.
+
+### D-042 · Phase 6 · B2: dashboard SPA stack, frontend test gate, serving model · accepted · 2026-06-21
+B2 is the repo's first frontend, so the cross-cutting choices get logged once. The SPA (`frontend/`) consumes the B1
+`GET /api/postings` contract and renders the full D-041 surface (4 recency toggles + the two match-status toggles +
+expandable fits/gaps/rationale), styled to `DESIGN.md`. Decisions:
+- **Stack = Vite + React + TS**, no router/state lib (one page, fetch + `useState`). **Styling = plain CSS + custom
+  properties** (DESIGN.md tokens as CSS vars; no Tailwind — the dense, custom dark theme doesn't want a utility
+  framework's config).
+- **Frontend tests = Vitest + React Testing Library**, wired into the inner loop and as a path-filtered gate (a
+  `frontend-checks` pre-commit hook on `frontend/**.{ts,tsx}` + a parallel CI `frontend` job): `eslint` +
+  `tsc --noEmit` + `vitest run`. This is the frontend arm of the "testing is policy" invariant (D-021) — it pins the
+  toggle→query-param mapping (client side of the contract), control emission, table render rules, and refetch-on-toggle.
+  The server side stays pinned by the Python API tests; the two meet at the typed `PostingRow`/`PostingsResponse`.
+- **Serving model:** dev = Vite dev server (`:5173`) talking to FastAPI via **CORS** (`CORSMiddleware`, GET-only,
+  origins from `VJA_CORS_ORIGINS`, default the two `:5173` hosts — no new dependency); prod = FastAPI mounts the built
+  `frontend/dist` at `/` via `StaticFiles(html=True)`, **only when present**, so tests/CI (no build) and `/api/*` are
+  unaffected. The scheduler/cloud cutover (D-025) keeps this same shape.
+- **No hardcoded vertical:** added `GET /api/verticals` (distinct active-profile verticals via `active_verticals`); the
+  SPA picks the first by default. Keeps the "nothing vertical-specific in code" rule (D-004) intact and is Phase-7 ready.
+- **Vitest 3** (not 2) — v2 pins Vite 5 nested, clashing with the top-level Vite 6 plugin types; v3 dedupes on Vite 6.
+**Why:** lock the frontend conventions (stack, tests-as-gate, serving) in one ADR so later frontend work has a current
+head to read instead of re-deriving them, and so the dashboard ships under the same DoD bar as the Python code.
+Read-only/localhost/no-auth still defers multi-user + security to the D-025 cutover (per D-041).

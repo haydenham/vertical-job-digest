@@ -76,6 +76,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Empty digest = skip send:** no email, no `digests` row. (D-028)
 - **Email digest (push) is primary; the dashboard (pull) is read-only** over the same
   nightly-computed data — no live fetching. (D-010)
+- **The dashboard is a Vite/React/TS SPA in `frontend/`** consuming `GET /api/postings`. Dev =
+  Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI serves the built
+  `frontend/dist` same-origin via StaticFiles. The frontend never hardcodes a vertical —
+  `GET /api/verticals` drives the picker. (D-042)
 
 ## Dashboard & freshness
 
@@ -121,6 +125,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Definition of Done:** green tests + ruff/format/mypy + import-linter + a human-read
   diff + updated docs, before merge. CI and pre-commit run the same checks. (D-021)
 - **Toolchain is `uv`; the lockfile must stay in sync** (`uv lock --check` in CI). (D-014)
+- **Frontend gate = eslint + `tsc --noEmit` + vitest** (Vitest + React Testing Library), run
+  in the inner loop and path-filtered (pre-commit hook + a CI `frontend` job). The dashboard's
+  own behavior is pinned here; the B1 API contract stays pinned by the Python API tests. (D-042)
 
 ## Coverage / fetchers
 

@@ -166,3 +166,14 @@ Non-negotiables:
 - **Coverage:** tracked as a signal on the unit+integration+system tiers, not worshipped — a high number over shallow
   asserts is worse than fewer tests that pin the contracts above (diff correctness, the no-mass-close guard,
   verification gate, idempotency).
+
+## Frontend tests (the dashboard SPA, D-042)
+
+The React dashboard (`frontend/`, Phase 6 · B2) has its own runner — **Vitest + React Testing Library** — but the
+same policy: no behavior is done until a test pins it. It is the frontend analogue of the unit/integration tiers, runs
+**in the inner loop** (offline, free, jsdom — no real network), and is a path-filtered gate (pre-commit + a CI
+`frontend` job). What it pins: the toggle → query-param mapping (`src/api.test.ts` — the client side of the B1
+contract), the controls' state emission, the table's rendering rules (unassessed shows `—` not a fake score, rejected
+styling, row-expand reveals fits/gaps/rationale), and `App`'s refetch-on-toggle. The server side of the same contract
+stays pinned by the Python `test_api.py` / `test_dashboard_query.py` integration tests — the two layers meet at the
+typed `PostingRow`/`PostingsResponse` shapes.
