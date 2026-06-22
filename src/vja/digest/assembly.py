@@ -27,7 +27,7 @@ from sqlalchemy import Engine, RowMapping, Select, func, select
 from vja.db.profiles import Profile
 from vja.db.schema import digests, employers, matches, postings
 from vja.digest.verification import default_client, verify_apply_url
-from vja.models import DigestStatus, PostingStatus, Verdict
+from vja.models import RELEVANT_VERDICTS, DigestStatus, PostingStatus
 
 
 @dataclass(frozen=True)
@@ -62,9 +62,6 @@ class _Unset:
 
 
 _UNSET: Final = _Unset()
-
-# Verdicts worth surfacing in the digest (D-037): a `no` is honest but not inbox-worthy.
-_RELEVANT_VERDICTS: Final = (Verdict.STRONG_YES.value, Verdict.YES.value, Verdict.MAYBE.value)
 
 _POSTING_COLUMNS = (
     postings.c.external_id,
@@ -114,7 +111,7 @@ def _new_select(profile: Profile) -> Select[Any]:
         .where(
             matches.c.profile_id == profile.id,
             matches.c.resume_version == profile.resume_version,
-            matches.c.verdict.in_(_RELEVANT_VERDICTS),
+            matches.c.verdict.in_(RELEVANT_VERDICTS),
         )
     )
 

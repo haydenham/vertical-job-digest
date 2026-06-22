@@ -39,8 +39,9 @@ Concrete, low/zero-cost rules adopted now so the cutover is "add a layer," not "
 - **Phase 6 dashboard API is `(vertical, profile_id)`-parameterized.** The read API resolves data by explicit
   vertical + profile, never "the one active profile." Today a thin default picks the single active profile;
   multi-user adds *resolve profile from authenticated session → filter*, not an API redesign. Per-user rows
-  (`matches`/`digests`) stay row-scoped; shared rows (`employers`/`postings`) stay global. *(Status: to adopt
-  in Phase 6 B1.)*
+  (`matches`/`digests`) stay row-scoped; shared rows (`employers`/`postings`) stay global. *(Status: ✅ adopted
+  in Phase 6 B1 — `_resolve_profile` in `src/vja/api/app.py`: explicit `profile_id` or single-active default;
+  404 none, 409 ambiguous. D-041.)*
 - **No live external calls from user-facing surfaces** (D-005). The dashboard reads the DB only; it never
   triggers a fetch/LLM call. Keeps the read path safe to expose publicly without a cost/abuse surface.
 - **PII lives only in `profiles`/`matches`/`digests`.** Don't denormalize `user_email`/`resume_text` into
@@ -70,8 +71,9 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
 ### 3.3 Cost & abuse control
 - [ ] **Signup-triggered backfill is the first place user action drives LLM spend** (the D-006 on-demand
       exceptions: signup backfill, resume-update re-match, deep-dive). Needs throttling + a per-user cost
-      ceiling before any public signup. Backfill cap (≤14d, D-024) already bounds the set; this adds a
-      rate/cost guard on top.
+      ceiling before any public signup. Backfill cap (5d, D-039 amending D-024) already bounds the set; this
+      adds a rate/cost guard on top. (The read-only dashboard never drives matching — D-005/D-041 — so it adds
+      no cost surface here.)
 - [ ] Rate limiting on the API + any future write endpoints.
 
 ### 3.4 Email deliverability

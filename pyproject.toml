@@ -7,10 +7,12 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.4",
     "anthropic>=0.111.0",
+    "fastapi>=0.138.0",
     "httpx>=0.28",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0",
     "sqlalchemy>=2.0.51",
+    "uvicorn[standard]>=0.49.0",
 ]
 
 [project.scripts]
@@ -23,6 +25,7 @@ vja-load-profiles = "vja.verticals:load_profiles_main"
 vja-extract = "vja.extract:extract_main"
 vja-match = "vja.match:match_main"
 vja-backfill = "vja.match:backfill_main"
+vja-api = "vja.api:api_main"
 
 [dependency-groups]
 dev = [
@@ -84,7 +87,7 @@ name = "vja layered architecture (lower layers must not import higher)"
 type = "layers"
 containers = ["vja"]
 layers = [
-    "nightly",
+    "nightly | api",
     "pipeline | extract | match | digest",
     "fetchers | verticals",
     "db",
