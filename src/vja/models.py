@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
 
 class AtsType(StrEnum):
@@ -67,6 +67,16 @@ class Verdict(StrEnum):
     YES = "yes"
     MAYBE = "maybe"
     NO = "no"
+
+
+#: Verdicts worth surfacing unprompted — the digest's `new` set (D-037) and the dashboard's
+#: default (matched) view. A `no` is honest but not surfaced unless explicitly asked for. One home
+#: for the rule so the digest and the dashboard can't drift (consumed via `.in_()`, hence `.value`).
+RELEVANT_VERDICTS: Final[tuple[str, ...]] = (
+    Verdict.STRONG_YES.value,
+    Verdict.YES.value,
+    Verdict.MAYBE.value,
+)
 
 
 class Verification(StrEnum):

@@ -5,6 +5,42 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-21 — Phase 6 · Block B1: dashboard read-only API (D-041)
+
+**Did:** Built the FastAPI read API the React table (B2) will consume. Planning surfaced that the dashboard's
+"full open set" (D-030) was underspecified — `postings` holds the *raw* open set incl. out-of-scope roles
+(Stage-A scope gate D-034 is on-the-fly, never stored; `extracted_at IS NOT NULL` is the only durable in-scope
+marker). Resolved with three tiers and **D-041**.
+- `src/vja/db/postings.py`: new `open_postings_with_match_quality(engine, vertical, profile_id, resume_version,
+  *, cutoff, by_first_seen, include_unassessed, include_rejected)` + `DashboardPosting`. Floors on Tier 2
+  (`extracted_at IS NOT NULL`), LEFT-JOINs `matches` on `(profile_id, resume_version)`. Two axes: match-status
+  (matched-only default; `include_unassessed` → null-match rows; `include_rejected` → un-hide `no`) × recency
+  (`activity_window_clause` / first_seen / all). **Retired** the A2 `open_postings_in_window`/`OpenPosting`
+  (caller-less — backfill uses `postings_needing_match(since=)`).
+- `src/vja/api/` (new top layer): `create_app()` + `GET /api/health` and `GET /api/postings`
+  (`vertical`/`window`/`profile_id`/`include_unassessed`/`include_rejected`), Pydantic `PostingRow`/envelope,
+  `_resolve_profile` thin default (404 none/unknown, 409 ambiguous). `vja-api` CLI (uvicorn, localhost).
+- `models.RELEVANT_VERDICTS` lifted out of `digest/assembly.py` → one home for the digest + dashboard.
+- import-linter: `api` added to the top layer (`nightly | api`).
+- Tests: `test_dashboard_query.py` (DB-level: tiers, both axes, recency — folds in the retired A2 window tests)
+  + `test_api.py` (HTTP: param mapping, profile resolution, health). Deleted `test_postings_window.py`.
+- Docs: D-041; INVARIANTS dashboard section; fixed stale docs/11 §3.3 backfill cap (14d→5d) + marked §2 seam
+  adopted.
+
+**Decisions:** D-041 (per Hayden). Dashboard = in-scope (T2) universe, matched-default (T3); `no` hidden by
+default (mirrors digest D-037); LEFT-JOIN over reuse+merge. Key clarification: the 5-day cap (D-039) is a
+*matching/backfill* cost lever — the dashboard is read-only and never matches (D-005), so its window is free and
+decoupled from the cap.
+
+**Verified:** new tests pass (18); full gate run next.
+
+**Next:** Phase 6 · B2 (React table over `/api/postings`) — `DESIGN.md` ("terminal dev-tool, dark") is the UI
+spec; wire CORS for the dev server there. Open thread (unchanged): grandfathered `db→fetchers` edge refactor.
+
+**Branch:** `feat/dashboard-read-api` (off merged `main`).
+
+---
+
 ## 2026-06-21 — Comprehension-debt guards: enforced import layering + INVARIANTS registry (D-040)
 
 **Did:** Interlude before Phase 6 · B1, prompted by Hayden feeling he and Claude were losing the thread.
@@ -22,11 +58,12 @@ what grows unbounded is the *context to change it safely* (39 ADRs, 840-line WOR
 **Why:** convert "good architecture by luck/discipline" into machine-guaranteed structure, and give both Hayden
 and each fresh agent session a single current-truth doc instead of replaying 39 ADRs. See D-040.
 
-**Verified:** `lint-imports` KEPT (1 contract, 86 deps); `uv lock --check` clean. Full gate run pending (next).
+**Verified:** full gate suite green — ruff format/check, mypy, `lint-imports` (1 kept / 0 broken, 86 deps),
+211 tests, `uv lock --check` clean.
 
-**Next:** run the full gate suite, then Phase 6 · B1 (FastAPI read API: recency toggles→cutoffs + LEFT-join match
-quality). Open thread: optionally refactor the grandfathered `db→fetchers` edge (inject supported set from
-orchestration layer) — deferred to keep this chunk tight.
+**Next:** Phase 6 · B1 (FastAPI read API: recency toggles→cutoffs + LEFT-join match quality on the
+`(vertical, profile_id)` seam). Open thread: optionally refactor the grandfathered `db→fetchers` edge (inject
+supported set from orchestration layer) — deferred to keep this chunk tight.
 
 **Branch:** `chore/import-contract-and-invariants` (off the merged A2 state).
 

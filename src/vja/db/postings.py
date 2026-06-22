@@ -8,15 +8,16 @@ deleted — vanished ones are marked `closed` (D-009).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Engine, case, func, select
+from sqlalchemy import ColumnElement, Engine, and_, case, func, or_, select
 from sqlalchemy.engine import Connection
 
-from vja.db.schema import employers, postings
-from vja.models import AtsType, Employer, PostingStatus, RawPosting
+from vja.db.schema import employers, matches, postings
+from vja.models import RELEVANT_VERDICTS, AtsType, Employer, PostingStatus, RawPosting
 
 
 def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
@@ -24,9 +25,9 @@ def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
     window, falling back to our detection date (`first_seen_at`) when the ATS gave no date.
 
     One home for the `COALESCE(source_updated_at, first_seen_at) >= cutoff` logic — shared by
-    the dashboard window query (`open_postings_in_window`) and the backfill candidate selection
-    (`postings_needing_match(since=...)`). Mirrors the dashboard's "posted *or* updated within
-    the window" rule (D-030).
+    the dashboard window query (`open_postings_with_match_quality`) and the backfill candidate
+    selection (`postings_needing_match(since=...)`). Mirrors the dashboard's "posted *or* updated
+    within the window" rule (D-030).
     """
     return func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at) >= cutoff
 
@@ -234,12 +235,14 @@ def save_extraction(
 
 
 @dataclass(frozen=True)
-class OpenPosting:
-    """One open posting row for the dashboard's full-open-set view (D-030), match-free.
+class DashboardPosting:
+    """One row for the read-only dashboard (P6 B1, D-041): an in-scope open posting plus this
+    profile's match quality (`None` when not yet assessed).
 
-    Deliberately carries no verdict/score: the dashboard API (B1) layers match quality on top
-    with a second query keyed on `(profile_id, resume_version)` — keeping this primitive reusable
-    by the backfill, which selects postings precisely *because* they have no match yet.
+    The dashboard's universe is **Tier 2** — open *and* extracted (`extracted_at IS NOT NULL`),
+    which is the only durable "in-scope" marker (the Stage-A scope gate, D-034, runs on-the-fly and
+    is never stored, so raw open postings still include out-of-scope roles). Match fields come from
+    a LEFT JOIN keyed on `(profile_id, resume_version)`, so unassessed rows carry `None`.
     """
 
     posting_id: int
@@ -249,26 +252,52 @@ class OpenPosting:
     apply_url: str | None
     first_seen_at: datetime
     source_updated_at: datetime | None
+    # Match quality for this (profile, resume_version) — None when unassessed (LEFT JOIN miss).
+    verdict: str | None
+    score: int | None
+    fits: list[str] | None
+    gaps: list[str] | None
+    rationale: str | None
 
 
-def open_postings_in_window(
+def _loads(value: Any) -> list[str] | None:
+    """Parse a `matches` JSON-text list column (`fits`/`gaps`) back into a list."""
+    if not value:
+        return None
+    return cast("list[str]", json.loads(value))
+
+
+def open_postings_with_match_quality(
     engine: Engine,
     vertical: str,
+    profile_id: int,
+    resume_version: str,
     *,
     cutoff: datetime | None,
     by_first_seen: bool = False,
-) -> list[OpenPosting]:
-    """Open postings for `vertical` within a recency window, newest-activity-first (D-030).
+    include_unassessed: bool = False,
+    include_rejected: bool = False,
+) -> list[DashboardPosting]:
+    """In-scope open postings for `vertical`, LEFT-joined to this profile's match (P6 B1, D-041).
 
-    The window is a caller-computed `cutoff` so one query serves every dashboard toggle *and*
-    the backfill cap (they pass different cutoffs over the same predicate):
-    - `cutoff is None` → no date filter (the *All open* toggle).
-    - `by_first_seen=True` → window on `first_seen_at` only (the *New today* basis — our
-      detection date, so it mirrors the digest's `new` set; D-030).
-    - otherwise → window on `activity_window_clause(cutoff)` (posted *or* updated within, with
-      the `first_seen_at` fallback) — the *This week* / *Two weeks* toggles and the backfill.
+    Two orthogonal axes (the API maps query params onto them):
+    - **recency** via the caller-computed `cutoff`: `None` → all open; `by_first_seen=True` →
+      window on `first_seen_at` only (the *New today* basis = our detection date, mirroring the
+      digest; D-030); else `activity_window_clause(cutoff)` (posted *or* updated within, with the
+      `first_seen_at` fallback) — the *This week* / *Two weeks* toggles.
+    - **match-status**: default is **matched-only** (Tier 3) and relevant-only. `include_unassessed`
+      widens to Tier 2 (in-scope rows with no match yet, surfaced with `None` match fields);
+      `include_rejected` un-hides `no` verdicts (otherwise hidden, mirroring the digest D-037).
+
+    Floor is always Tier 2 (`extracted_at IS NOT NULL`) — raw out-of-scope roles never appear.
+    Newest-activity-first (D-010).
     """
     freshness = func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at)
+    match_join = and_(
+        matches.c.posting_id == postings.c.id,
+        matches.c.profile_id == profile_id,
+        matches.c.resume_version == resume_version,
+    )
     stmt = (
         select(
             postings.c.id.label("posting_id"),
@@ -278,11 +307,21 @@ def open_postings_in_window(
             postings.c.apply_url,
             postings.c.first_seen_at,
             postings.c.source_updated_at,
+            matches.c.verdict,
+            matches.c.score,
+            matches.c.fits,
+            matches.c.gaps,
+            matches.c.rationale,
         )
-        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .select_from(
+            postings.join(employers, postings.c.employer_id == employers.c.id).outerjoin(
+                matches, match_join
+            )
+        )
         .where(
             employers.c.vertical == vertical,
             postings.c.status == PostingStatus.OPEN.value,
+            postings.c.extracted_at.is_not(None),
         )
         .order_by(freshness.desc())
     )
@@ -291,10 +330,16 @@ def open_postings_in_window(
             postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
         )
         stmt = stmt.where(in_window)
+    if not include_unassessed:
+        stmt = stmt.where(matches.c.id.is_not(None))
+    if not include_rejected:
+        stmt = stmt.where(
+            or_(matches.c.verdict.is_(None), matches.c.verdict.in_(RELEVANT_VERDICTS))
+        )
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [
-        OpenPosting(
+        DashboardPosting(
             posting_id=row["posting_id"],
             company=row["company"],
             title=row["title"],
@@ -302,6 +347,11 @@ def open_postings_in_window(
             apply_url=row["apply_url"],
             first_seen_at=row["first_seen_at"],
             source_updated_at=row["source_updated_at"],
+            verdict=row["verdict"],
+            score=row["score"],
+            fits=_loads(row["fits"]),
+            gaps=_loads(row["gaps"]),
+            rationale=row["rationale"],
         )
         for row in rows
     ]

@@ -79,9 +79,21 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Dashboard & freshness
 
+- **Dashboard universe = in-scope (Tier 2), never raw open.** The query floors on `extracted_at
+  IS NOT NULL` (the only durable in-scope marker — the Stage-A gate D-034 runs on-the-fly, never
+  stored), so out-of-scope roles never surface. "Full open set" means the *in-scope* open set. (D-041)
+- **Dashboard default = matched (Tier 3); two orthogonal axes.** *match-status*: matched-only by
+  default, `include_unassessed` widens to in-scope-unmatched (null match), `include_rejected`
+  un-hides `no` verdicts (hidden by default, mirroring the digest D-037). *recency*: `window` ∈
+  {new_today, week, two_weeks, all} (default all). Match quality is a LEFT JOIN on `(profile_id,
+  resume_version)` via `open_postings_with_match_quality`. (D-041, D-037)
+- **Relevant verdicts = `models.RELEVANT_VERDICTS`** (strong_yes/yes/maybe) — one home, shared by
+  the digest's `new` set and the dashboard's matched default. (D-037, D-041)
+- **The dashboard never triggers a match** (read-only, D-005), so its window has zero LLM cost —
+  the 5-day cap governs only the signup backfill, decoupled from the dashboard window. (D-041, D-039)
 - **Recency windows key on the ATS posted/updated date:** `COALESCE(source_updated_at,
   first_seen_at) >= cutoff`. Toggles: *new today* / *within 1wk* / *within 2wk* / *all
-  open*, over the full open set. (D-030, D-024, D-038, D-039)
+  open*. (D-030, D-024, D-038, D-039)
 - **"New today" uses `first_seen_at` (midnight UTC)** so it equals the digest, not the ATS
   date. (D-030, D-039)
 - **Signup backfill caps at 5 days, `trigger=backfill`, idempotent.** *(Supersedes D-024's

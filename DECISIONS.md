@@ -449,3 +449,29 @@ what grows unbounded is the accumulated invariant/decision context an agent (or 
 session. These two guards target *that* directly: one keeps the structure mechanically honest, the other keeps the
 shared mental model from drifting out of the 39-and-counting ADR log. **Status:** initial INVARIANTS mined from
 D-001…D-039; refactoring the grandfathered edge is deferred (out of scope for this chunk by design).
+
+### D-041 · Phase 6 · B1: dashboard = in-scope universe, matched-by-default · accepted · 2026-06-21
+The read API (`GET /api/postings`, `src/vja/api/`) revealed that "full open set" (D-030) was underspecified.
+`postings` stores the **raw** open set — every role at the curated employers, **including out-of-scope ones** —
+because the Stage-A scope gate (`in_scope`, D-034) runs on-the-fly at extraction and is never persisted. The only
+durable in-scope marker is `extracted_at IS NOT NULL` (only in-scope titles ever get extracted). Three tiers
+result: **T1** raw open (incl. noise) · **T2** `open ∧ extracted` (in-scope, structured) · **T3** `T2 ∧ a match
+for this (profile, resume_version)` (assessed). Decisions:
+- **Dashboard universe = T2.** The query floors on `extracted_at IS NOT NULL`; raw out-of-scope roles never appear
+  (else a new user is dumped thousands of irrelevant jobs). **Refines D-030**: "full open set" → "full *in-scope*
+  open set."
+- **Default view = T3 (matched), expressed as match-status not a time clock.** Two orthogonal axes:
+  *match-status* — matched-only default; `include_unassessed=true` widens to T2 (unmatched rows carry `None`); and
+  *recency* — `window` ∈ {`new_today`,`week`,`two_weeks`,`all`} (default `all`). Default hides `no` verdicts
+  (mirrors the digest D-037); `include_rejected=true` un-hides them. The relevant-verdict set now lives once in
+  `models.RELEVANT_VERDICTS` (was a private constant in `digest/assembly.py`).
+- **Match quality via a dedicated LEFT-JOIN query** (`open_postings_with_match_quality`, keyed on
+  `(profile_id, resume_version)`). The A2 match-free `open_postings_in_window` becomes caller-less and is **retired**
+  (the backfill uses `postings_needing_match(since=)`, not it).
+- **`(vertical, profile_id)` seam** (docs/11 §2): `profile_id` optional → thin default resolves the single active
+  profile (404 none / id-not-found; 409 ambiguous). Read-only, localhost, no auth — multi-user/security deferred to
+  the D-025 cutover. **Cost note:** the dashboard never triggers a match (D-005), so its window has zero LLM cost —
+  the 5-day cap (D-039) governs only the signup backfill, deliberately decoupled from the dashboard window.
+**Why:** the dashboard's job is "browse the roles relevant to you," not "mirror the raw ATS dump." Flooring on T2
+and defaulting to T3 makes a new user's first view tailored (a few dozen assessed roles), while the in-scope T2
+toggle still honors D-030's full-set browsing — without ever surfacing out-of-scope noise.
