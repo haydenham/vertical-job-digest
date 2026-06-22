@@ -533,3 +533,14 @@ matches. Deliberately omits names that are also US places ("mexico"→New Mexico
 the absence of a US signal instead; bare ambiguous codes with no country name ("Munich, DE") stay a coarse-gate residual
 the now-location-aware Sonnet match backstops. **Why:** "City, Country, CODE" is the common foreign ATS pattern, and a
 named country is an unambiguous signal — cheap to catch deterministically rather than spend a Sonnet call to reject.
+
+### D-045 · Cleaned view = the whole in-scope set, incl. rejected · accepted · 2026-06-22
+Live use of the D-043 dashboard revealed that "rejected never shown" makes the two views collapse: once the corpus is
+fully assessed, *Cleaned* (in-scope minus `no`) equals *Matched* (relevant only), so the toggle does nothing. The
+builder's intent for *Cleaned* is the **objective US-software job list** — "these are the in-scope roles, the same list
+for anyone" — independent of the AI's verdict (a user may distrust the match, or have a stale résumé). Decision: the
+*Cleaned* view returns **every** in-scope open role — `strong_yes`/`yes`/`maybe`/`no`/unassessed — applying no verdict
+filter; the per-profile match columns are decoration on a profile-independent set. *Matched* is unchanged (this résumé's
+relevant verdicts only). **Amends D-043**: `no` is hidden from *Matched* and the digest (D-037), but **shown in Cleaned**.
+**Why:** the cleaned list's job is coverage/browse, not recommendation — filtering it by the AI verdict defeats its
+purpose and made the toggle inert. Matched stays the curated recommendation surface.

@@ -26,6 +26,7 @@ vja-extract = "vja.extract:extract_main"
 vja-match = "vja.match:match_main"
 vja-backfill = "vja.match:backfill_main"
 vja-api = "vja.api:api_main"
+vja-repair = "vja.repair:repair_main"
 
 [dependency-groups]
 dev = [
@@ -87,7 +88,7 @@ name = "vja layered architecture (lower layers must not import higher)"
 type = "layers"
 containers = ["vja"]
 layers = [
-    "nightly | api",
+    "nightly | api | repair",
     "pipeline | extract | match | digest",
     "fetchers | verticals",
     "db",

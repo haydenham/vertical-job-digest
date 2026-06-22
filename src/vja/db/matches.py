@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, exists, select
+from sqlalchemy import Engine, delete, exists, select
 from sqlalchemy.engine import Connection
 
+from vja.db.engine import begin
 from vja.db.postings import activity_window_clause
 from vja.db.schema import employers, matches, postings
 
@@ -102,6 +103,24 @@ def postings_needing_match(
         )
         for row in rows
     ]
+
+
+def delete_matches_failing_scope(engine: Engine, vertical: str) -> int:
+    """Delete matches whose posting is no longer in-scope (`in_scope IS NOT TRUE`) for `vertical`.
+
+    The D-043 corpus-repair step: a posting matched while the location gate was blind (a foreign or
+    out-of-level role) now fails Stage B, so its rationale is stale and must go — the corrected gate
+    keeps `vja-match` from recreating it. Returns the row count deleted. Idempotent (a second run
+    finds none).
+    """
+    failing = (
+        select(postings.c.id)
+        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .where(employers.c.vertical == vertical, postings.c.in_scope.is_not(True))
+    )
+    with begin(engine) as conn:
+        result = conn.execute(delete(matches).where(matches.c.posting_id.in_(failing)))
+    return result.rowcount or 0
 
 
 def save_match(

@@ -140,7 +140,7 @@ def test_cleaned_view_param(migrated_engine: Engine) -> None:
     assert set(_titles(resp.json())) == {"matched", "unassessed"}
 
 
-def test_rejected_never_shown_in_either_view(migrated_engine: Engine) -> None:
+def test_rejected_shown_in_cleaned_hidden_in_matched(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)
     matched = _posting(migrated_engine, emp, "matched")
@@ -153,7 +153,7 @@ def test_rejected_never_shown_in_either_view(migrated_engine: Engine) -> None:
         "matched"
     ]
     cleaned = client.get("/api/postings", params={"vertical": _VERTICAL, "view": "cleaned"})
-    assert "rejected" not in _titles(cleaned.json())
+    assert set(_titles(cleaned.json())) == {"matched", "rejected"}
 
 
 @freeze_time(_NOW)
