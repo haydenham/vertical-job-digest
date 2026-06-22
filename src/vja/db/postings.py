@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Engine, and_, case, func, or_, select
+from sqlalchemy import ColumnElement, Engine, and_, case, func, select
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import employers, matches, postings
@@ -252,6 +252,68 @@ def save_extraction(
 
 
 @dataclass(frozen=True)
+class RepairRow:
+    """A posting's fields for the one-time corpus repair (D-043): re-derive `location` from the
+    captured `raw_payload`, recompute `in_scope`, then drop stale matches. `extracted` gates whether
+    `in_scope` is (re)computed — the gate only means anything once the structured fields exist."""
+
+    posting_id: int
+    ats_type: AtsType
+    raw_payload: dict[str, Any]
+    level: str | None
+    location: str | None
+    extracted: bool
+
+
+def postings_for_repair(engine: Engine, vertical: str) -> list[RepairRow]:
+    """Every employer-backed posting for `vertical` + the fields the corpus repair needs (D-043)."""
+    stmt = (
+        select(
+            postings.c.id,
+            employers.c.ats_type,
+            postings.c.raw_payload,
+            postings.c.level,
+            postings.c.location,
+            postings.c.extracted_at,
+        )
+        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .where(employers.c.vertical == vertical)
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [
+        RepairRow(
+            posting_id=row["id"],
+            ats_type=AtsType(row["ats_type"]),
+            raw_payload=row["raw_payload"] or {},
+            level=row["level"],
+            location=row["location"],
+            extracted=row["extracted_at"] is not None,
+        )
+        for row in rows
+    ]
+
+
+def apply_location_repair(
+    conn: Connection, posting_id: int, *, location: str | None, in_scope: bool | None
+) -> None:
+    """Write a re-derived L1 `location` and/or recomputed `in_scope` for one posting (D-043 repair).
+
+    `location` is passed only when it actually changed (the caller keeps the L1-authoritative rule:
+    a re-derived non-null L1 value wins; a null L1 leaves the existing value — possibly a model
+    fill — untouched). `in_scope` is passed only for extracted postings (`None` ⇒ leave it NULL).
+    A call with neither is a no-op.
+    """
+    values: dict[str, Any] = {}
+    if location is not None:
+        values["location"] = location
+    if in_scope is not None:
+        values["in_scope"] = in_scope
+    if values:
+        conn.execute(postings.update().where(postings.c.id == posting_id).values(**values))
+
+
+@dataclass(frozen=True)
 class DashboardPosting:
     """One row for the read-only dashboard (P6 B1, D-041/D-043): an in-scope open posting plus this
     profile's match quality (`None` when not yet assessed).
@@ -259,7 +321,8 @@ class DashboardPosting:
     The dashboard's universe is the durable **in-scope** set — open postings with `in_scope IS TRUE`
     (the persisted Stage-A+B gate, D-043), so out-of-scope and out-of-US/level roles never surface.
     Match fields come from a LEFT JOIN keyed on `(profile_id, resume_version)`, so unassessed rows
-    carry `None`. Rejected (`no`) postings are never returned (mirrors the digest, D-037).
+    carry `None`. The *Cleaned* view returns every in-scope role incl. `no`; *Matched* keeps only
+    relevant verdicts (D-045).
     """
 
     posting_id: int
@@ -301,10 +364,11 @@ def open_postings_with_match_quality(
       window on `first_seen_at` only (the *New today* basis = our detection date, mirroring the
       digest; D-030); else `activity_window_clause(cutoff)` (posted *or* updated within, with the
       `first_seen_at` fallback) — the *This week* / *Two weeks* toggles.
-    - **view** (`cleaned`): the *Matched* view (default, `cleaned=False`) returns only rows with a
-      relevant match (`strong_yes`/`yes`/`maybe`) for this resume. The *Cleaned* view
-      (`cleaned=True`) widens to the whole in-scope US-software universe, including not-yet-assessed
-      rows (`None` match fields). Rejected (`no`) is **never** returned in either view (D-037).
+    - **view** (`cleaned`): the *Matched* view (default, `cleaned=False`) returns only this résumé's
+      relevant matches (`strong_yes`/`yes`/`maybe`) — the AI's recommendation subset. The *Cleaned*
+      view (`cleaned=True`) is the whole in-scope US-software universe — every verdict incl. `no`
+      and not-yet-assessed (objective job list, same set for any profile; match columns decorate).
+      (D-045)
 
     Floor is always the durable in-scope set (`in_scope IS TRUE`, D-043) — out-of-scope and
     out-of-US/level roles never appear. Newest-activity-first (D-010).
@@ -339,8 +403,6 @@ def open_postings_with_match_quality(
             employers.c.vertical == vertical,
             postings.c.status == PostingStatus.OPEN.value,
             postings.c.in_scope.is_(True),
-            # Rejected (`no`) is never shown — only unassessed (null) or relevant verdicts. (D-037)
-            or_(matches.c.verdict.is_(None), matches.c.verdict.in_(RELEVANT_VERDICTS)),
         )
         .order_by(freshness.desc())
     )
@@ -349,8 +411,10 @@ def open_postings_with_match_quality(
             postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
         )
         stmt = stmt.where(in_window)
-    if not cleaned:  # *Matched* view: require a relevant match row (else the *Cleaned* universe)
-        stmt = stmt.where(matches.c.id.is_not(None))
+    if (
+        not cleaned
+    ):  # *Matched* view: only this résumé's relevant verdicts (excludes `no` + unassessed)
+        stmt = stmt.where(matches.c.verdict.in_(RELEVANT_VERDICTS))
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [

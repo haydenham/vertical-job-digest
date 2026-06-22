@@ -51,8 +51,9 @@ class Window(StrEnum):
 
 
 class View(StrEnum):
-    """Match-status view (D-043). `matched` (default) = relevant matches only; `cleaned` = the whole
-    in-scope US-software universe (incl. not-yet-assessed). Rejected (`no`) is never shown."""
+    """Match-status view (D-045). `matched` (default) = this résumé's relevant matches only (the
+    AI's recommendations); `cleaned` = the whole in-scope US-software universe, every verdict incl.
+    `no` and not-yet-assessed (the objective job list, the same set for any profile)."""
 
     MATCHED = "matched"
     CLEANED = "cleaned"

@@ -5,6 +5,48 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-22 — Corpus location repair + stale-match cleanup (D-043 · WS5) · Branch B
+
+**Did:** Built + ran the one-time repair that fixes the corpus Branch A's clobber already damaged.
+- **`src/vja/repair.py`** (`vja-repair` CLI, new top-layer module): per vertical, re-derives `location`
+  from each posting's `raw_payload` (GH `location.name` / Lever `categories.location` / Ashby
+  `location` / Workday `locationsText`), writes it L1-authoritatively (a null snapshot never nulls a
+  model fill), recomputes + persists `in_scope` from `passes_prefilter` on the effective location, then
+  deletes matches whose posting now fails Stage B. Idempotent, offline (no LLM). Repo helpers:
+  `postings_for_repair` + `apply_location_repair` (`db/postings.py`), `delete_matches_failing_scope`
+  (`db/matches.py`). `repair` added to the import-linter top layer.
+- **Ran it on `data/vja.db`** (backup at `data/vja.db.pre-repair.bak`): postings=2335,
+  **locations_repaired=349**, in_scope **42 true / 444 false**, **matches_deleted=48**. Blank-location
+  rate on extracted-open rows went **84/266 + 48/191 + 4/22 → 0/0/0**.
+- **Verified (sqlite spot-checks):** the 3 named foreign roles (Mumbai/Bangalore/Mexico City) are
+  `in_scope=0` with no match; **0** matched postings have `in_scope≠1`; every matched yes/maybe role is
+  now US. The 444 in_scope=False split: 312 senior/mid level + 132 genuinely foreign (Hong Kong, London
+  UK, Pune, Singapore…).
+
+**Also (D-045, found during live dashboard testing):** "rejected never shown" made *Cleaned* collapse
+onto *Matched* once the corpus is fully assessed (both = 8). Redefined **Cleaned = the whole in-scope
+set, every verdict incl. `no`** (the objective US-software job list, profile-independent); *Matched*
+unchanged (this résumé's relevant verdicts). `open_postings_with_match_quality` drops the always-hide-`no`
+clause; the `cleaned` branch now applies no verdict filter. Live: matched=8, **cleaned=41** (8 maybe + 33
+no). Ran `vja-match` (1 straggler, $0.0136). `no` stays hidden from *Matched* + the digest (D-037).
+
+**Decisions:** D-045 (Cleaned = whole in-scope set incl. rejected; amends D-043). The repair itself
+executes D-043. Tests: `test_repair.py` + updated `test_dashboard_query.py`/`test_api.py` (cleaned shows
+rejected; matched hides it).
+
+**Verified:** full Python gate green — ruff, mypy (88 files), lint-imports (1/0), **232 pytest**, lock.
+Frontend 14 vitest green (cleaned now renders `no` rows with their badge — kept, removable later).
+**Heads-up:** a stale `vja-api` (started before these changes) serves the old API — **restart it**.
+
+**Known residuals (coarse-gate, undecidable from a bare token):** (A) foreign cities whose 2-letter
+code = a US state code pass in_scope but Sonnet rejects — `Bogota, CO`, `Buenos Aires, AR` (×2); (B)
+bare US city w/o state code dropped — `Chicago` (×5). Both small; possible follow-up (city list).
+
+**Branch:** `fix/corpus-location-repair` (off merged `main` @ PR #30). `data/vja.db` mutation is local
+(gitignored); the commit is the repair code + tests + this log.
+
+---
+
 ## 2026-06-22 — Location-blind pipeline fix + dashboard two-view redesign (D-043, D-044) · Branch A
 
 **Did:** B2 use exposed foreign roles (Mumbai/Bangalore/Mexico City) rated yes/maybe + confusing

@@ -137,18 +137,20 @@ def test_default_is_matched_relevant_only(migrated_engine: Engine) -> None:
     assert rows[0].score == 70  # type: ignore[attr-defined]
 
 
-def test_cleaned_view_adds_unassessed_with_null_match(migrated_engine: Engine) -> None:
+def test_cleaned_view_is_the_whole_in_scope_set_incl_rejected(migrated_engine: Engine) -> None:
+    # Cleaned = the objective US-software list: every in-scope verdict incl. `no` and unassessed
+    # (D-045). Only `out_of_scope` (in_scope=False) is excluded.
     prof = _seed_tiers(migrated_engine)
     rows = _query(migrated_engine, prof, cutoff=None, cleaned=True)
-    assert set(_titles(rows)) == {"matched", "unassessed"}  # rejected + out_of_scope still excluded
+    assert set(_titles(rows)) == {"matched", "rejected", "unassessed"}
     un = next(r for r in rows if r.title == "unassessed")  # type: ignore[attr-defined]
     assert un.verdict is None and un.score is None  # type: ignore[attr-defined]
 
 
-def test_rejected_never_shown_in_either_view(migrated_engine: Engine) -> None:
+def test_rejected_shown_in_cleaned_hidden_in_matched(migrated_engine: Engine) -> None:
     prof = _seed_tiers(migrated_engine)
-    assert "rejected" not in _titles(_query(migrated_engine, prof, cutoff=None))  # matched view
-    assert "rejected" not in _titles(  # cleaned view
+    assert "rejected" not in _titles(_query(migrated_engine, prof, cutoff=None))  # matched hides it
+    assert "rejected" in _titles(  # cleaned shows it (the objective list)
         _query(migrated_engine, prof, cutoff=None, cleaned=True)
     )
 

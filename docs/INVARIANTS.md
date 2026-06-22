@@ -92,12 +92,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `postings.in_scope IS TRUE` (the durable Stage-A+B marker, stamped at extraction from
   `passes_prefilter`), so out-of-scope *and* out-of-US/level roles never surface. "Full open set"
   means the *in-scope* open set. (D-041, D-043)
-- **Dashboard = single Matched/Cleaned view; rejected (`no`) is never shown.** `view` ∈ {`matched`
-  (default — relevant matches only), `cleaned` (the whole in-scope US-software universe incl.
-  not-yet-assessed, null match)}. `no` is excluded in **both** (mirrors the digest D-037).
-  Orthogonal *recency* axis: `window` ∈ {new_today, week, two_weeks, all} (default all). Match
-  quality is a LEFT JOIN on `(profile_id, resume_version)` via `open_postings_with_match_quality`.
-  *(Supersedes D-041's additive `include_unassessed`/`include_rejected` toggles.)* (D-043, D-037)
+- **Dashboard = single Matched/Cleaned view.** `view` ∈ {`matched` (default — this résumé's relevant
+  verdicts only, the AI recommendation subset), `cleaned` (the whole in-scope US-software universe —
+  **every** verdict incl. `no` and not-yet-assessed; the objective job list, same set for any
+  profile)}. `no` is hidden from *Matched* + the digest (D-037) but **shown in Cleaned** (D-045).
+  Orthogonal *recency* axis: `window` ∈ {new_today, week, two_weeks, all} (default all). Match quality
+  is a LEFT JOIN on `(profile_id, resume_version)` via `open_postings_with_match_quality`.
+  *(Supersedes D-041's additive toggles; amends D-043's "rejected never shown.")* (D-045, D-043, D-037)
 - **Relevant verdicts = `models.RELEVANT_VERDICTS`** (strong_yes/yes/maybe) — one home, shared by
   the digest's `new` set and the dashboard's matched default. (D-037, D-041)
 - **The dashboard never triggers a match** (read-only, D-005), so its window has zero LLM cost —
