@@ -1,11 +1,11 @@
-"""Integration tests for the dashboard query (P6 B1 / D-041) — migrated SQLite.
+"""Integration tests for the dashboard query (P6 B1 / D-041 / D-043) — migrated SQLite.
 
-Pins `open_postings_with_match_quality`: the **Tier-2 floor** (extracted-only; raw out-of-scope
-rows never appear), the **match-status axis** (matched-default + relevant-only, `include_unassessed`
-widens to in-scope rows with `None` match, `include_rejected` un-hides `no`), and the **recency
-axis** (the `COALESCE(source_updated_at, first_seen_at)` activity basis with its `first_seen_at`
-fallback, the first_seen-only "new today" basis, all-open) — with newest-first ordering, vertical
-scoping, and open-only filtering.
+Pins `open_postings_with_match_quality`: the **in-scope floor** (`in_scope IS TRUE`; out-of-scope
+rows never appear), the **view axis** (matched-default + relevant-only; `cleaned=True` widens to the
+whole in-scope universe incl. `None`-match rows; rejected `no` never shown in either view), and the
+**recency axis** (the `COALESCE(source_updated_at, first_seen_at)` activity basis with its
+`first_seen_at` fallback, the first_seen-only "new today" basis, all-open) — with newest-first
+ordering, vertical scoping, and open-only filtering.
 """
 
 from datetime import UTC, datetime
@@ -53,9 +53,9 @@ def _posting(
     first_seen: datetime,
     source_updated: datetime | None = None,
     status: str = "open",
-    extracted: bool = True,
+    in_scope: bool = True,
 ) -> int:
-    """Insert a posting. `extracted` toggles the Tier-2 marker (`extracted_at IS NOT NULL`)."""
+    """Insert a posting. `in_scope` toggles the durable Stage-A+B floor (`in_scope IS TRUE`)."""
     with begin(engine) as conn:
         result = conn.execute(
             postings.insert().values(
@@ -69,7 +69,8 @@ def _posting(
                 first_seen_at=first_seen,
                 last_seen_at=first_seen,
                 source_updated_at=source_updated,
-                extracted_at=first_seen if extracted else None,
+                extracted_at=first_seen,
+                in_scope=in_scope,
             )
         )
     pk = result.inserted_primary_key
@@ -112,17 +113,17 @@ def _query(engine: Engine, profile: Profile, **kwargs: object) -> list[object]:
     )
 
 
-# --- match-status axis + Tier-2 floor ------------------------------------------------------------
+# --- view axis (Matched / Cleaned) + in-scope floor ----------------------------------------------
 
 
 def _seed_tiers(engine: Engine) -> Profile:
-    """matched(yes), rejected(no), unassessed(extracted, no match), out_of_scope(not extracted)."""
+    """matched(yes), rejected(no), unassessed(in-scope, no match), out_of_scope(in_scope=False)."""
     prof = _profile(engine)
     emp = _employer(engine)
     matched = _posting(engine, emp, "matched", first_seen=_NOW)
     rejected = _posting(engine, emp, "rejected", first_seen=_NOW)
     _posting(engine, emp, "unassessed", first_seen=_NOW)
-    _posting(engine, emp, "out_of_scope", first_seen=_NOW, extracted=False)
+    _posting(engine, emp, "out_of_scope", first_seen=_NOW, in_scope=False)
     _match(engine, matched, prof, verdict="yes", score=70)
     _match(engine, rejected, prof, verdict="no", score=10)
     return prof
@@ -136,41 +137,29 @@ def test_default_is_matched_relevant_only(migrated_engine: Engine) -> None:
     assert rows[0].score == 70  # type: ignore[attr-defined]
 
 
-def test_include_unassessed_adds_tier2_with_null_match(migrated_engine: Engine) -> None:
+def test_cleaned_view_adds_unassessed_with_null_match(migrated_engine: Engine) -> None:
     prof = _seed_tiers(migrated_engine)
-    rows = _query(migrated_engine, prof, cutoff=None, include_unassessed=True)
-    assert set(_titles(rows)) == {"matched", "unassessed"}  # rejected hidden, out_of_scope excluded
+    rows = _query(migrated_engine, prof, cutoff=None, cleaned=True)
+    assert set(_titles(rows)) == {"matched", "unassessed"}  # rejected + out_of_scope still excluded
     un = next(r for r in rows if r.title == "unassessed")  # type: ignore[attr-defined]
     assert un.verdict is None and un.score is None  # type: ignore[attr-defined]
 
 
-def test_include_rejected_adds_no_verdict(migrated_engine: Engine) -> None:
+def test_rejected_never_shown_in_either_view(migrated_engine: Engine) -> None:
     prof = _seed_tiers(migrated_engine)
-    rows = _query(migrated_engine, prof, cutoff=None, include_rejected=True)
-    assert set(_titles(rows)) == {"matched", "rejected"}  # unassessed still hidden (matched-only)
-
-
-def test_include_both_axes(migrated_engine: Engine) -> None:
-    prof = _seed_tiers(migrated_engine)
-    rows = _query(
-        migrated_engine, prof, cutoff=None, include_unassessed=True, include_rejected=True
+    assert "rejected" not in _titles(_query(migrated_engine, prof, cutoff=None))  # matched view
+    assert "rejected" not in _titles(  # cleaned view
+        _query(migrated_engine, prof, cutoff=None, cleaned=True)
     )
-    assert set(_titles(rows)) == {
-        "matched",
-        "rejected",
-        "unassessed",
-    }  # out_of_scope still excluded
 
 
 def test_out_of_scope_never_returned_even_if_matched(migrated_engine: Engine) -> None:
-    # A non-extracted posting can't be matched in production, but the Tier-2 floor must hold anyway.
+    # An `in_scope=False` posting can't be matched in production, but the floor must hold anyway.
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)
-    oos = _posting(migrated_engine, emp, "oos", first_seen=_NOW, extracted=False)
+    oos = _posting(migrated_engine, emp, "oos", first_seen=_NOW, in_scope=False)
     _match(migrated_engine, oos, prof, verdict="yes", score=90)
-    rows = _query(
-        migrated_engine, prof, cutoff=None, include_unassessed=True, include_rejected=True
-    )
+    rows = _query(migrated_engine, prof, cutoff=None, cleaned=True)
     assert "oos" not in _titles(rows)
 
 

@@ -18,6 +18,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -179,6 +180,10 @@ postings = Table(
     Column("comp_max", Integer),
     Column("comp_raw", String),
     Column("posted_at", Text),
+    # Durable Stage-A+B in-scope marker (computed at extraction from `passes_prefilter`): the
+    # "cleaned" dashboard tier floors on this instead of re-deriving the geo/level gate in SQL.
+    # NULL until extracted; the gates are vertical config, so it's resume-independent. (D-043)
+    Column("in_scope", Boolean),
     Column("extraction_model", String),
     Column("extracted_at", UTCDateTime()),
     UniqueConstraint("employer_id", "external_id", name="uq_postings_employer_external"),

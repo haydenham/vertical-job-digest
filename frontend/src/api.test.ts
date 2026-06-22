@@ -8,31 +8,23 @@ describe("postingsPath", () => {
   const base: PostingsQuery = {
     vertical: "grid_power_software",
     window: "all",
-    includeUnassessed: false,
-    includeRejected: false,
+    view: "matched",
   };
 
-  it("maps the default state to the matched-only / all-window query", () => {
+  it("maps the default state to the matched / all-window query", () => {
     const params = new URLSearchParams(postingsPath(base).split("?")[1]);
     expect(params.get("vertical")).toBe("grid_power_software");
     expect(params.get("window")).toBe("all");
-    expect(params.get("include_unassessed")).toBe("false");
-    expect(params.get("include_rejected")).toBe("false");
+    expect(params.get("view")).toBe("matched");
     expect(params.has("profile_id")).toBe(false);
   });
 
-  it("maps recency + match-status toggles to their params", () => {
+  it("maps recency + view toggles to their params", () => {
     const params = new URLSearchParams(
-      postingsPath({
-        ...base,
-        window: "two_weeks",
-        includeUnassessed: true,
-        includeRejected: true,
-      }).split("?")[1],
+      postingsPath({ ...base, window: "two_weeks", view: "cleaned" }).split("?")[1],
     );
     expect(params.get("window")).toBe("two_weeks");
-    expect(params.get("include_unassessed")).toBe("true");
-    expect(params.get("include_rejected")).toBe("true");
+    expect(params.get("view")).toBe("cleaned");
   });
 
   it("includes profile_id only when given", () => {

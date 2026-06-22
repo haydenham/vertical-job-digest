@@ -18,8 +18,7 @@ function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
     vertical: "grid_power_software",
     profile_id: 1,
     window: "all",
-    include_unassessed: false,
-    include_rejected: false,
+    view: "matched",
     count: 1,
     postings: [
       {

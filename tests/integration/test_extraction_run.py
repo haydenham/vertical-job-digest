@@ -16,9 +16,11 @@ from vja.db.engine import begin
 from vja.db.schema import employers, postings
 from vja.extract import ExtractedFields, run_extraction
 from vja.models import Level, RemoteType
+from vja.prefilter import PrefilterConfig
 from vja.scope import ScopeConfig
 
 _SCOPE = ScopeConfig(role_include=("engineer", "software", "data"), exclude=("senior", "sales"))
+_PREFILTER = PrefilterConfig(locations=("US",), levels=("intern", "new_grad", "early_career"))
 _NOW = datetime(2026, 6, 19, tzinfo=UTC)
 _FIELDS = ExtractedFields(
     level=Level.NEW_GRAD, location="Houston, TX", remote=RemoteType.HYBRID, stack=["Python"]
@@ -83,6 +85,7 @@ def _posting(
     *,
     extracted: bool = False,
     source_updated_at: datetime | None = None,
+    location: str | None = None,
 ) -> None:
     with begin(engine) as conn:
         conn.execute(
@@ -92,6 +95,7 @@ def _posting(
                 content_hash=f"h-{external_id}",
                 raw_payload={"description": f"{title} — build software."},
                 title=title,
+                location=location,
                 status="open",
                 first_seen_at=_NOW,
                 last_seen_at=_NOW,
@@ -117,6 +121,7 @@ def _run(engine: Engine):  # type: ignore[no-untyped-def]
         engine,
         "grid_power_software",
         scope=_SCOPE,
+        prefilter=_PREFILTER,
         client=cast("Anthropic", _FakeClient()),
         resolve_detail=resolver,
         now=_NOW,
@@ -197,6 +202,7 @@ def test_extraction_fills_source_updated_at_only_when_null(migrated_engine: Engi
         migrated_engine,
         "grid_power_software",
         scope=_SCOPE,
+        prefilter=_PREFILTER,
         client=cast("Anthropic", _ClientReturning(fields)),
         resolve_detail=_detail_resolver_factory()[0],
         now=_NOW,
@@ -204,6 +210,53 @@ def test_extraction_fills_source_updated_at_only_when_null(migrated_engine: Engi
 
     assert _row(migrated_engine, "needs")["source_updated_at"] == datetime(2026, 6, 5, tzinfo=UTC)
     assert _row(migrated_engine, "has")["source_updated_at"] == existing  # unchanged
+
+
+def test_extraction_fills_location_only_when_null(migrated_engine: Engine) -> None:
+    # WS1 / L1-authoritative: the L1 location (e.g. Workday `locationsText` = "Mumbai, India") is
+    # never overwritten by the model — extraction fills `location` only where L1 left it NULL. This
+    # guards the clobber that blanked foreign locations and made Stage B + the matcher geo-blind.
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    _posting(migrated_engine, gh, "needs", "Software Engineer")  # location NULL → should fill
+    _posting(migrated_engine, gh, "has", "Data Engineer", location="Mumbai, India")  # keep L1
+
+    fields = ExtractedFields(level=Level.NEW_GRAD, location="Houston, TX", remote=RemoteType.HYBRID)
+    run_extraction(
+        migrated_engine,
+        "grid_power_software",
+        scope=_SCOPE,
+        prefilter=_PREFILTER,
+        client=cast("Anthropic", _ClientReturning(fields)),
+        resolve_detail=_detail_resolver_factory()[0],
+        now=_NOW,
+    )
+
+    assert _row(migrated_engine, "needs")["location"] == "Houston, TX"  # filled (L1 was NULL)
+    assert _row(migrated_engine, "has")["location"] == "Mumbai, India"  # non-null L1 preserved
+
+
+def test_extraction_stamps_in_scope_on_effective_location(migrated_engine: Engine) -> None:
+    # WS2 (D-043): in_scope is the durable Stage-B gate, computed on the *effective* L1-authored
+    # location. A US row → True; a foreign L1 location whose model read returns null → False (the
+    # clobber case: in_scope must reflect "Mumbai", not the null the model gave).
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    _posting(migrated_engine, gh, "us", "Software Engineer", location="Austin, TX")
+    _posting(migrated_engine, gh, "foreign", "Data Engineer", location="Mumbai, India")
+
+    # Model returns no location (the real clobber pattern) — in_scope must use the stored L1 value.
+    fields = ExtractedFields(level=Level.NEW_GRAD, location=None, remote=RemoteType.ONSITE)
+    run_extraction(
+        migrated_engine,
+        "grid_power_software",
+        scope=_SCOPE,
+        prefilter=_PREFILTER,
+        client=cast("Anthropic", _ClientReturning(fields)),
+        resolve_detail=_detail_resolver_factory()[0],
+        now=_NOW,
+    )
+
+    assert _row(migrated_engine, "us")["in_scope"] is True
+    assert _row(migrated_engine, "foreign")["in_scope"] is False
 
 
 def test_content_change_reopens_extraction(migrated_engine: Engine) -> None:

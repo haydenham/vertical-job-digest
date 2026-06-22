@@ -6,8 +6,7 @@ import { Controls, type ControlState } from "./Controls";
 
 const STATE: ControlState = {
   window: "all",
-  includeUnassessed: false,
-  includeRejected: false,
+  view: "matched",
 };
 
 describe("Controls", () => {
@@ -26,12 +25,14 @@ describe("Controls", () => {
     );
   });
 
-  it("emits match-status toggle changes", async () => {
+  it("emits the chosen match view and marks the active one pressed", async () => {
     const onChange = vi.fn();
     render(<Controls state={STATE} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("unassessed"));
-    expect(onChange).toHaveBeenCalledWith({ ...STATE, includeUnassessed: true });
-    await userEvent.click(screen.getByLabelText("rejected"));
-    expect(onChange).toHaveBeenCalledWith({ ...STATE, includeRejected: true });
+    expect(screen.getByRole("button", { name: "matched" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "all cleaned" }));
+    expect(onChange).toHaveBeenCalledWith({ ...STATE, view: "cleaned" });
   });
 });

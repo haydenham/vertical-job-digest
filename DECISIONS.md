@@ -498,3 +498,38 @@ expandable fits/gaps/rationale), styled to `DESIGN.md`. Decisions:
 **Why:** lock the frontend conventions (stack, tests-as-gate, serving) in one ADR so later frontend work has a current
 head to read instead of re-deriving them, and so the dashboard ships under the same DoD bar as the Python code.
 Read-only/localhost/no-auth still defers multi-user + security to the D-025 cutover (per D-041).
+
+### D-043 · L1-authoritative location + persisted `in_scope` + dashboard two-view · accepted · 2026-06-22
+B2 use surfaced a real bug: foreign roles (Mumbai/Bangalore/Mexico City) were rated yes/maybe and the dashboard's
+"unassessed"/"rejected" toggles confused everyone. Root cause: **L2 extraction was overwriting the L1 `location`
+with `null`.** Fetchers write a structured location at insert (e.g. Workday `locationsText` = "Mumbai, India"), but
+`save_extraction` wrote every extracted column unconditionally, and Haiku frequently returns `location=null` — blanking
+it. With `location` NULL, Stage-B prefilter's coarse keep-null rule passed the role, and `match._posting_text` omitted
+the city, so Sonnet rated it blind. Decisions:
+- **`location` is L1-authoritative** (mirrors `source_updated_at`, D-038): `save_extraction` fills it only when the
+  stored value is NULL; a non-null L1 location is never overwritten by the model's read.
+- **Persist a durable `in_scope` flag** (`postings.in_scope`, bool; migration `d30501b4c8ab`), computed at extraction
+  from `passes_prefilter` on the *effective* (L1-authoritative) location. It's the durable Stage-A+B marker D-041
+  lamented was missing (`extracted_at IS NOT NULL` was a Stage-A-only proxy that ignored geo/level). Resume-independent
+  (the gates are vertical config), so one flag per posting is coherent. The matcher still computes the gate live from
+  the same pure functions — no drift.
+- **Dashboard = single Matched/Cleaned view; rejected (`no`) never shown.** Supersedes D-041's two additive
+  checkboxes (`include_unassessed`/`include_rejected`), which read as exclusive buckets but added rows onto the matched
+  default — the confusion. Now `view` ∈ {`matched` (default, relevant matches only), `cleaned` (the whole in-scope
+  US-software universe incl. unassessed)}; `no` is excluded in **both** (mirrors the digest, D-037). The query floors
+  on `in_scope IS TRUE`. Recency axis (`window`) is unchanged.
+- **Corpus repair is a separate step** (WS5, its own branch): re-derive `location` from `raw_payload` per ATS, recompute
+  `in_scope`, delete matches whose posting now fails Stage B, then re-run `vja-match`.
+**Why:** the cheap deterministic gate is the product's cost governor and the "cleaned list" is itself a useful surface;
+silently nulling the field it keys on broke both. Making location L1-authoritative + persisting the gate makes "cleaned
+= US software" a real, queryable tier and collapses the dashboard to the two views a user actually wants.
+
+### D-044 · Stage-B non-US country override (state-code collision) · accepted · 2026-06-22
+With locations repaired, a residual leak remained: bare 2-letter country codes that double as US state codes
+("Bengaluru, India, **IN**"=Indiana, "Cordoba, Argentina, **AR**"=Arkansas, "**DE**"=Delaware/Germany) passed Stage B
+because the prefilter treats any whole-word state code as a US signal. Decision: add an explicit `_NON_US_COUNTRY_NAMES`
+override in `prefilter.py` — a location naming a foreign country **fails** Stage B even when a state code coincidentally
+matches. Deliberately omits names that are also US places ("mexico"→New Mexico, "georgia"→the US state), which lean on
+the absence of a US signal instead; bare ambiguous codes with no country name ("Munich, DE") stay a coarse-gate residual
+the now-location-aware Sonnet match backstops. **Why:** "City, Country, CODE" is the common foreign ATS pattern, and a
+named country is an unambiguous signal — cheap to catch deterministically rather than spend a Sonnet call to reject.

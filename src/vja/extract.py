@@ -34,6 +34,7 @@ from vja.db.postings import (
 )
 from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType, Employer, Level, RemoteType
+from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
 
 logger = logging.getLogger("vja.extract")
@@ -134,11 +135,16 @@ def run_extraction(
     vertical: str,
     *,
     scope: ScopeConfig,
+    prefilter: PrefilterConfig,
     client: Anthropic | None = None,
     resolve_detail: DetailResolver | None = None,
     now: datetime | None = None,
 ) -> ExtractionSummary:
     """Extract every in-scope, not-yet-extracted open posting for `vertical`; persist + meter cost.
+
+    Also stamps the durable Stage-B `in_scope` gate (D-043) from the *effective* L1-authoritative
+    location (the stored L1 value when present, else the model's read — like `save_extraction`), so
+    the "cleaned" dashboard tier can floor on it without re-deriving the geo/level gate in SQL.
 
     Per-posting isolation: a single posting's failure (Workday detail error, API error, bad parse)
     is logged and skipped — it never aborts the batch. `client`/`resolve_detail` are injected so
@@ -164,11 +170,18 @@ def run_extraction(
             failed += 1
             continue
         cost += call_cost
+        columns = fields_to_columns(fields)
+        # Compute the durable in_scope gate on the effective (L1-authoritative) location: the stored
+        # L1 value wins when present, else the model's read — matching what save_extraction writes.
+        effective_location = (
+            candidate.location if candidate.location is not None else fields.location
+        )
+        columns["in_scope"] = passes_prefilter(fields.level.value, effective_location, prefilter)
         with begin(engine) as conn:
             save_extraction(
                 conn,
                 candidate.posting_id,
-                fields_to_columns(fields),
+                columns,
                 model=_MODEL,
                 now=stamp,
                 source_updated_at=normalize_ats_date(fields.posted_at),
@@ -203,7 +216,14 @@ def extract_main(argv: list[str] | None = None) -> int:
     verticals = [args.vertical] if args.vertical else available_verticals()
     for vertical in verticals:
         cfg = load_vertical_config(vertical)
-        summary = run_extraction(engine, vertical, scope=cfg.scope)
+        summary = run_extraction(
+            engine,
+            vertical,
+            scope=cfg.scope,
+            prefilter=PrefilterConfig(
+                locations=cfg.prefilter_locations, levels=cfg.prefilter_levels
+            ),
+        )
         print(
             f"[{summary.vertical}] extracted {summary.extracted}/{summary.total} "
             f"(failed {summary.failed}) est_cost=${summary.est_cost_usd:.4f}"

@@ -50,9 +50,17 @@ class Window(StrEnum):
     ALL = "all"
 
 
+class View(StrEnum):
+    """Match-status view (D-043). `matched` (default) = relevant matches only; `cleaned` = the whole
+    in-scope US-software universe (incl. not-yet-assessed). Rejected (`no`) is never shown."""
+
+    MATCHED = "matched"
+    CLEANED = "cleaned"
+
+
 class PostingRow(BaseModel):
     """One dashboard row. Match fields are `None` when the posting is in-scope but not yet assessed
-    for this profile (only present when `include_unassessed=true`)."""
+    for this profile (only present in the `cleaned` view)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,8 +85,7 @@ class PostingsResponse(BaseModel):
     vertical: str
     profile_id: int
     window: Window
-    include_unassessed: bool
-    include_rejected: bool
+    view: View
     count: int
     postings: list[PostingRow]
 
@@ -151,9 +158,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         engine: Annotated[Engine, Depends(_get_engine)],
         vertical: str,
         window: Window = Window.ALL,
+        view: View = View.MATCHED,
         profile_id: Annotated[int | None, Query()] = None,
-        include_unassessed: bool = False,
-        include_rejected: bool = False,
     ) -> PostingsResponse:
         profile = _resolve_profile(engine, vertical, profile_id)
         cutoff, by_first_seen = _window_cutoff(window, datetime.now(UTC))
@@ -164,15 +170,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             profile.resume_version,
             cutoff=cutoff,
             by_first_seen=by_first_seen,
-            include_unassessed=include_unassessed,
-            include_rejected=include_rejected,
+            cleaned=view is View.CLEANED,
         )
         return PostingsResponse(
             vertical=vertical,
             profile_id=profile.id,
             window=window,
-            include_unassessed=include_unassessed,
-            include_rejected=include_rejected,
+            view=view,
             count=len(rows),
             postings=[PostingRow.model_validate(r) for r in rows],
         )

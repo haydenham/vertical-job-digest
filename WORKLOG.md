@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-22 — Location-blind pipeline fix + dashboard two-view redesign (D-043, D-044) · Branch A
+
+**Did:** B2 use exposed foreign roles (Mumbai/Bangalore/Mexico City) rated yes/maybe + confusing
+"unassessed"/"rejected" toggles. Root cause found: **L2 extraction was overwriting the L1 `location`
+with `null`** (`save_extraction` wrote every column unconditionally; Haiku returns null location),
+which blinded Stage B (coarse keep-null) *and* Sonnet (`_posting_text` omits a null location). Fixed
+the pipeline + redesigned the dashboard. This is **Branch A** (code+tests+docs); the corpus repair +
+re-match is Branch B (WS5, not yet done — `data/vja.db` still holds the stale matches).
+- **WS1 — location L1-authoritative:** `save_extraction` now fills `location` only when the stored
+  value is NULL, never overwrites a non-null L1 value (mirrors the `source_updated_at` guard).
+- **WS2 — persisted `in_scope`:** new `postings.in_scope` bool (migration `d30501b4c8ab`), stamped at
+  extraction from `passes_prefilter` on the *effective* L1-authoritative location (so a clobbered-null
+  model read can't fake a pass). `ExtractionCandidate` now carries `location`; `run_extraction` takes
+  `PrefilterConfig` (CLI + nightly callers updated).
+- **WS3 — dashboard two-view:** `open_postings_with_match_quality` floors on `in_scope IS TRUE`, always
+  hides `no`, and takes a single `cleaned` bool (Matched default / Cleaned). API `view` enum replaces
+  `include_unassessed`/`include_rejected`. Frontend: segmented Matched/all-cleaned control (replaces
+  the two checkboxes), `api.ts`/`App`/`Controls` + vitest updated.
+- **WS4 — prefilter collision:** `_NON_US_COUNTRY_NAMES` override so "Bengaluru, India, IN" /
+  "Cordoba, Argentina, AR" fail Stage B despite IN/AR doubling as US state codes; omits country names
+  that are US places (New Mexico / Georgia); bare codes w/o a country name ("Munich, DE") stay a
+  residual Sonnet backstops.
+
+**Decisions:** D-043 (L1-authoritative location + persisted `in_scope` + dashboard Matched/Cleaned,
+supersedes D-041's additive toggles), D-044 (Stage-B non-US country override). Per this session's
+sign-off (delete-and-rematch for repair; persist the flag; drop the rejected axis).
+
+**Verified:** full Python gate green — ruff format/check, mypy, lint-imports (1 kept/0 broken), **230
+pytest** (+4 new: location-not-clobbered, in_scope-on-effective-location, prefilter override ×2), `uv
+lock --check`. Frontend lint/typecheck/**14 vitest**/build green. Migration round-trips on a clean DB;
+`alembic check` clean. (Downgrade on the *populated* `data/vja.db` hits a SQLite-batch FK artifact
+shared by the existing postings migrations — upgrade is the only gated path.)
+
+**Next:** **Branch B (WS5)** — tested idempotent repair CLI: re-derive `location` from `raw_payload`
+per ATS (GH `location.name` / Lever `categories.location` / Ashby `location` / Workday `locationsText`),
+recompute `in_scope`, delete matches whose posting now fails Stage B, then `vja-match`. Then the data
+spot-checks (no foreign matched rows; the 3 named rows in_scope=false + no match). Open thread
+(unchanged): grandfathered `db→fetchers` edge refactor.
+
+**Branch:** `fix/location-pipeline-and-dashboard` (off merged `main` @ PR #29).
+
+---
+
 ## 2026-06-21 — Phase 6 · Block B2: React dashboard table over `/api/postings` (D-042)
 
 **Did:** Built the read-only dashboard SPA — the **pull** surface (D-010) — the repo's first frontend. Consumes B1's
