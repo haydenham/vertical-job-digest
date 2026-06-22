@@ -3,6 +3,7 @@
 ## Vibe
 Dense, fast, developer-native. Think a CLI that grew a GUI. No rounded
 marketing fluff, no gradients-as-decoration, no emoji. Signal over chrome.
+Think cloudflare or github interface
 
 ## Color (dark only)
 - bg base        #09090a
