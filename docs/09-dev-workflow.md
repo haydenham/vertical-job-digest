@@ -53,6 +53,7 @@ merge red.
 | Tests | `pytest` (unit+integration+system) | green; `live`/`e2e` excluded (`08`) |
 | Secrets | a secret-scan (e.g. `gitleaks`) | no findings |
 | Lockfile | `uv lock --check` | lock in sync with `pyproject.toml` (D-014) |
+| **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
 | **LLM evals** (path-filtered) | `pytest -m eval` | green — **but only triggered when the PR touches prompts / matching / extraction code** |
 
 Pre-commit mirrors CI so failures surface in seconds, not after a push. CI is the gate that can't be bypassed.

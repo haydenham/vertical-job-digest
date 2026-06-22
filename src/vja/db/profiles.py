@@ -88,6 +88,19 @@ def upsert_profile(
         return int(pk[0])
 
 
+def active_verticals(engine: Engine) -> list[str]:
+    """Distinct verticals with at least one active profile (drives the dashboard's vertical
+    picker so the frontend never hardcodes a slug — D-042). Sorted for a stable default pick."""
+    stmt = (
+        select(profiles.c.vertical)
+        .where(profiles.c.active == 1)
+        .distinct()
+        .order_by(profiles.c.vertical)
+    )
+    with engine.connect() as conn:
+        return [row[0] for row in conn.execute(stmt).all()]
+
+
 def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     """The active matching profiles for `vertical` (drives nightly matching in 5.3)."""
     stmt = select(

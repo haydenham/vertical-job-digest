@@ -40,3 +40,8 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Frontend (Node) — dependencies + build output are generated, not source
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo

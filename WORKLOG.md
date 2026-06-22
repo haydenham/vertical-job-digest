@@ -5,6 +5,41 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-21 — Phase 6 · Block B2: React dashboard table over `/api/postings` (D-042)
+
+**Did:** Built the read-only dashboard SPA — the **pull** surface (D-010) — the repo's first frontend. Consumes B1's
+`GET /api/postings` verbatim and renders the full D-041 surface against live `data/vja.db` (483 in-scope open / 89
+matches).
+- `frontend/` (new): Vite + React + TS, no router/state lib. `src/api.ts` (typed client mirroring B1's
+  `PostingRow`/`PostingsResponse`; `postingsPath` is the one home for the toggle→param mapping), `theme.css`
+  (DESIGN.md tokens as CSS custom properties — dark-only, one accent), `App.tsx` (resolves vertical via
+  `/api/verticals`, fetch-on-toggle, loading/error/empty states), `components/{Controls,PostingsTable,Verdict}`.
+  Table: company · title→apply · location · activity date · match (verdict badge + mono score, color-coded; dim `—`
+  when unassessed). Row expands to fits/gaps/rationale (3px accent spine).
+- Backend (`src/vja/api/app.py`): added `CORSMiddleware` (GET-only, `VJA_CORS_ORIGINS`, default `:5173`), `GET
+  /api/verticals` (→ new `active_verticals` in `db/profiles.py` so no slug is hardcoded), and an optional
+  `frontend/dist` `StaticFiles` mount (prod same-origin; guarded so tests/CI without a build are unaffected).
+- Gates (the D-042 precedent): `frontend` CI job (Node 24 → eslint + `tsc --noEmit` + `vitest run`) + a path-filtered
+  `frontend-checks` pre-commit hook. `frontend/{node_modules,dist}` gitignored; `package-lock.json` committed.
+- Tests: +14 vitest/RTL (`api`, `Controls`, `PostingsTable`, `App`) pinning param mapping, control emission, render
+  rules (no fake score for unassessed, rejected dimming, expand reveals detail), refetch-on-toggle. +2 Python
+  (`test_api.py`: CORS header, `/api/verticals`).
+
+**Decisions:** D-042 — stack (Vite/React/TS), styling (plain CSS vars per DESIGN.md, no Tailwind), frontend tests =
+Vitest+RTL as a path-filtered gate, serving (Vite dev + CORS / prod StaticFiles), `/api/verticals` to avoid a
+hardcoded vertical. Bumped Vitest 2→3 (v2 nests Vite 5, clashing with the top-level Vite 6 plugin types). All per
+this session's sign-off.
+
+**Verified:** frontend `npm run lint` + `typecheck` + `test` (14) green, `npm run build` clean (148.9 kB JS gzip
+47.8). Python `test_api.py` green (11). Full gate run (Python + e2e against live DB) = next task.
+
+**Next:** Phase 7 (aviation vertical — config + curation, any forced code change is a defect). Open thread
+(unchanged): grandfathered `db→fetchers` edge refactor.
+
+**Branch:** `feat/dashboard-react-table` (off merged `main`).
+
+---
+
 ## 2026-06-21 — Phase 6 · Block B1: dashboard read-only API (D-041)
 
 **Did:** Built the FastAPI read API the React table (B2) will consume. Planning surfaced that the dashboard's

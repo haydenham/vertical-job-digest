@@ -124,7 +124,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   two-stage filter (D-023), matching with fits/gaps/verdict (D-007) + eval gate (D-020); digest gains rationale.
 - **Phase 6 — Dashboard.** Read-only FastAPI API + React table (title/company/apply/match) with **recency toggles**
   (new today / 1wk / 2wk / all open) over the full open set (D-030). Consumes the normalized ATS posted/updated date
-  built for the Phase-5 backfill (D-024) — no new backend date work, so nothing reorders.
+  built for the Phase-5 backfill (D-024) — no new backend date work, so nothing reorders. **A1–B1 ✅** (date infra →
+  recency query + backfill → read API, D-041). **B2 ✅** — the Vite/React/TS SPA in `frontend/` over `/api/postings`
+  (in-scope/matched-default, the two match-status toggles + expandable rationale; D-042). Frontend gate = eslint +
+  tsc + vitest (CI + pre-commit).
 - **Phase 7 — Aviation vertical.** The architecture test — config + curation only, **any forced code change is a defect** (D-004).
 - **Phase 8 — Remaining coverage.** Tier-B fetchers (iCIMS/Workable/Oracle/SmartRecruiters), then Layer-2 LLM-read
   for the custom tail + HN/niche sources.
