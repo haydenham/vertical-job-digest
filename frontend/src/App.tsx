@@ -6,8 +6,7 @@ import { PostingsTable } from "./components/PostingsTable";
 
 const INITIAL: ControlState = {
   window: "all",
-  includeUnassessed: false,
-  includeRejected: false,
+  view: "matched",
 };
 
 export default function App() {
@@ -42,8 +41,7 @@ export default function App() {
     fetchPostings({
       vertical,
       window: controls.window,
-      includeUnassessed: controls.includeUnassessed,
-      includeRejected: controls.includeRejected,
+      view: controls.view,
     })
       .then((resp) => setData(resp))
       .catch((e: unknown) => setError(String(e)))

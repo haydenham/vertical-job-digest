@@ -147,11 +147,16 @@ def close_posting(conn: Connection, employer_id: int, external_id: str, now: dat
 
 @dataclass(frozen=True)
 class ExtractionCandidate:
-    """An open, not-yet-extracted posting + its employer (for the Workday detail fetch, P5.2)."""
+    """An open, not-yet-extracted posting + its employer (for the Workday detail fetch, P5.2).
+
+    `location` is the current stored L1 location, carried so the caller can compute the durable
+    `in_scope` gate against the *effective* (L1-authoritative) location, not the model's read.
+    """
 
     posting_id: int
     external_id: str
     title: str | None
+    location: str | None
     raw_payload: dict[str, Any]
     employer: Employer
 
@@ -168,6 +173,7 @@ def postings_needing_extraction(engine: Engine, vertical: str) -> list[Extractio
             postings.c.id,
             postings.c.external_id,
             postings.c.title,
+            postings.c.location,
             postings.c.raw_payload,
             employers.c.id.label("employer_id"),
             employers.c.vertical,
@@ -191,6 +197,7 @@ def postings_needing_extraction(engine: Engine, vertical: str) -> list[Extractio
             posting_id=row["id"],
             external_id=row["external_id"],
             title=row["title"],
+            location=row["location"],
             raw_payload=row["raw_payload"] or {},
             employer=Employer(
                 id=row["employer_id"],
@@ -217,11 +224,21 @@ def save_extraction(
 ) -> None:
     """Persist extracted fields + stamp `extraction_model` / `extracted_at` on a posting (P5.2).
 
-    `source_updated_at` is the normalized extracted `posted_at` (D-038). It fills the column **only
-    when it's still NULL** — i.e. L1 gave no date (Workday) — so a clean L1 `updated_at` is never
-    overwritten by the model's best-effort body-read date (the L1-authoritative rule).
+    Two extracted columns are **L1-authoritative** — they fill only when the existing value is NULL
+    and never overwrite a non-null L1 value, because the fetcher's structured field is more reliable
+    than the model's best-effort body read:
+    - `location`: the L1 location (e.g. Workday `locationsText` = "Mumbai, India") is set at insert;
+      Haiku often returns null for it, and an unconditional write blanked it — which left Stage B
+      and the matcher blind to geography. Extraction now only fills `location` when L1 left it null.
+    - `source_updated_at`: the normalized extracted `posted_at` (D-038), filled only when L1 gave no
+      date (Workday) so a clean L1 `updated_at` survives.
     """
     values = dict(columns)
+    if "location" in values:
+        values["location"] = case(
+            (postings.c.location.is_(None), values["location"]),
+            else_=postings.c.location,
+        )
     if source_updated_at is not None:
         values["source_updated_at"] = case(
             (postings.c.source_updated_at.is_(None), source_updated_at),
@@ -236,13 +253,13 @@ def save_extraction(
 
 @dataclass(frozen=True)
 class DashboardPosting:
-    """One row for the read-only dashboard (P6 B1, D-041): an in-scope open posting plus this
+    """One row for the read-only dashboard (P6 B1, D-041/D-043): an in-scope open posting plus this
     profile's match quality (`None` when not yet assessed).
 
-    The dashboard's universe is **Tier 2** — open *and* extracted (`extracted_at IS NOT NULL`),
-    which is the only durable "in-scope" marker (the Stage-A scope gate, D-034, runs on-the-fly and
-    is never stored, so raw open postings still include out-of-scope roles). Match fields come from
-    a LEFT JOIN keyed on `(profile_id, resume_version)`, so unassessed rows carry `None`.
+    The dashboard's universe is the durable **in-scope** set — open postings with `in_scope IS TRUE`
+    (the persisted Stage-A+B gate, D-043), so out-of-scope and out-of-US/level roles never surface.
+    Match fields come from a LEFT JOIN keyed on `(profile_id, resume_version)`, so unassessed rows
+    carry `None`. Rejected (`no`) postings are never returned (mirrors the digest, D-037).
     """
 
     posting_id: int
@@ -275,22 +292,22 @@ def open_postings_with_match_quality(
     *,
     cutoff: datetime | None,
     by_first_seen: bool = False,
-    include_unassessed: bool = False,
-    include_rejected: bool = False,
+    cleaned: bool = False,
 ) -> list[DashboardPosting]:
-    """In-scope open postings for `vertical`, LEFT-joined to this profile's match (P6 B1, D-041).
+    """In-scope open postings for `vertical`, LEFT-joined to this profile's match (P6 B1, D-043).
 
     Two orthogonal axes (the API maps query params onto them):
     - **recency** via the caller-computed `cutoff`: `None` → all open; `by_first_seen=True` →
       window on `first_seen_at` only (the *New today* basis = our detection date, mirroring the
       digest; D-030); else `activity_window_clause(cutoff)` (posted *or* updated within, with the
       `first_seen_at` fallback) — the *This week* / *Two weeks* toggles.
-    - **match-status**: default is **matched-only** (Tier 3) and relevant-only. `include_unassessed`
-      widens to Tier 2 (in-scope rows with no match yet, surfaced with `None` match fields);
-      `include_rejected` un-hides `no` verdicts (otherwise hidden, mirroring the digest D-037).
+    - **view** (`cleaned`): the *Matched* view (default, `cleaned=False`) returns only rows with a
+      relevant match (`strong_yes`/`yes`/`maybe`) for this resume. The *Cleaned* view
+      (`cleaned=True`) widens to the whole in-scope US-software universe, including not-yet-assessed
+      rows (`None` match fields). Rejected (`no`) is **never** returned in either view (D-037).
 
-    Floor is always Tier 2 (`extracted_at IS NOT NULL`) — raw out-of-scope roles never appear.
-    Newest-activity-first (D-010).
+    Floor is always the durable in-scope set (`in_scope IS TRUE`, D-043) — out-of-scope and
+    out-of-US/level roles never appear. Newest-activity-first (D-010).
     """
     freshness = func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at)
     match_join = and_(
@@ -321,7 +338,9 @@ def open_postings_with_match_quality(
         .where(
             employers.c.vertical == vertical,
             postings.c.status == PostingStatus.OPEN.value,
-            postings.c.extracted_at.is_not(None),
+            postings.c.in_scope.is_(True),
+            # Rejected (`no`) is never shown — only unassessed (null) or relevant verdicts. (D-037)
+            or_(matches.c.verdict.is_(None), matches.c.verdict.in_(RELEVANT_VERDICTS)),
         )
         .order_by(freshness.desc())
     )
@@ -330,12 +349,8 @@ def open_postings_with_match_quality(
             postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
         )
         stmt = stmt.where(in_window)
-    if not include_unassessed:
+    if not cleaned:  # *Matched* view: require a relevant match row (else the *Cleaned* universe)
         stmt = stmt.where(matches.c.id.is_not(None))
-    if not include_rejected:
-        stmt = stmt.where(
-            or_(matches.c.verdict.is_(None), matches.c.verdict.in_(RELEVANT_VERDICTS))
-        )
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [

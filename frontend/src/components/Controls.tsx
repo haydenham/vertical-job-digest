@@ -1,4 +1,4 @@
-import type { Window } from "../api";
+import type { View, Window } from "../api";
 
 const WINDOWS: { value: Window; label: string }[] = [
   { value: "new_today", label: "new today" },
@@ -7,14 +7,18 @@ const WINDOWS: { value: Window; label: string }[] = [
   { value: "all", label: "all open" },
 ];
 
+const VIEWS: { value: View; label: string }[] = [
+  { value: "matched", label: "matched" },
+  { value: "cleaned", label: "all cleaned" },
+];
+
 export interface ControlState {
   window: Window;
-  includeUnassessed: boolean;
-  includeRejected: boolean;
+  view: View;
 }
 
-// The dashboard's two orthogonal axes (D-041): recency (segmented control) and match-status
-// (two checkboxes). Stateless — it renders `state` and emits the next state up via `onChange`.
+// The dashboard's two orthogonal axes (D-043): recency (segmented) and match-status view
+// (segmented: matched vs all-cleaned). Stateless — renders `state` and emits the next state up.
 export function Controls({
   state,
   onChange,
@@ -42,27 +46,17 @@ export function Controls({
 
       <div className="control-group">
         <span className="label">show</span>
-        <div className="checks">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.includeUnassessed}
-              onChange={(e) =>
-                onChange({ ...state, includeUnassessed: e.target.checked })
-              }
-            />
-            unassessed
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.includeRejected}
-              onChange={(e) =>
-                onChange({ ...state, includeRejected: e.target.checked })
-              }
-            />
-            rejected
-          </label>
+        <div className="segmented" role="group" aria-label="match view">
+          {VIEWS.map((v) => (
+            <button
+              key={v.value}
+              type="button"
+              aria-pressed={state.view === v.value}
+              onClick={() => onChange({ ...state, view: v.value })}
+            >
+              {v.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

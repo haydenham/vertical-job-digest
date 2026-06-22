@@ -65,6 +65,7 @@ def _candidate(
         posting_id=1,
         external_id=external_id,
         title=title,
+        location=None,
         raw_payload={"description": "Build power-market software."},
         employer=Employer(id=1, vertical="grid_power_software", name="Co", ats_type=ats),
     )

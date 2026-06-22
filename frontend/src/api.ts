@@ -7,6 +7,10 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 // Recency toggle — one-to-one with the API's `window` enum (D-030).
 export type Window = "new_today" | "week" | "two_weeks" | "all";
 
+// Match-status view — one-to-one with the API's `view` enum (D-043). `matched` = relevant matches
+// only; `cleaned` = the whole in-scope US-software universe. Rejected (`no`) is never shown either way.
+export type View = "matched" | "cleaned";
+
 // Match verdicts (matches `models.RELEVANT_VERDICTS` + the rejecting "no"). Order = strength.
 export type Verdict = "strong_yes" | "yes" | "maybe" | "no";
 
@@ -29,8 +33,7 @@ export interface PostingsResponse {
   vertical: string;
   profile_id: number;
   window: Window;
-  include_unassessed: boolean;
-  include_rejected: boolean;
+  view: View;
   count: number;
   postings: PostingRow[];
 }
@@ -38,8 +41,7 @@ export interface PostingsResponse {
 export interface PostingsQuery {
   vertical: string;
   window: Window;
-  includeUnassessed: boolean;
-  includeRejected: boolean;
+  view: View;
   profileId?: number;
 }
 
@@ -59,8 +61,7 @@ export function postingsPath(q: PostingsQuery): string {
   const params = new URLSearchParams({
     vertical: q.vertical,
     window: q.window,
-    include_unassessed: String(q.includeUnassessed),
-    include_rejected: String(q.includeRejected),
+    view: q.view,
   });
   if (q.profileId !== undefined) {
     params.set("profile_id", String(q.profileId));

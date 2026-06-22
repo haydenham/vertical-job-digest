@@ -41,6 +41,26 @@ def test_clearly_foreign_location_drops() -> None:
         assert not passes_prefilter("new_grad", loc, _CFG), loc
 
 
+def test_foreign_country_name_overrides_colliding_state_code() -> None:
+    # The real leak (WS4 / D-044): a non-US country code that doubles as a US state code —
+    # "IN"=India/Indiana, "AR"=Argentina/Arkansas — must not pass. The named country wins.
+    for loc in ("Bengaluru, India, IN", "Cordoba, Argentina, AR", "Toronto, Ontario, Canada"):
+        assert not passes_prefilter("new_grad", loc, _CFG), loc
+
+
+def test_us_states_with_country_colliding_codes_still_pass() -> None:
+    # No over-correction: a genuine US state whose code collides with a country code stays in
+    # (no foreign country *name* is present) — dropping these would be a false negative.
+    for loc in ("Wilmington, DE", "Little Rock, AR", "Indianapolis, IN"):
+        assert passes_prefilter("new_grad", loc, _CFG), loc
+
+
+def test_us_places_with_country_name_substrings_pass() -> None:
+    # "New Mexico" / "Georgia" are US places that contain country names — they must still pass.
+    for loc in ("Santa Fe, New Mexico", "Atlanta, Georgia"):
+        assert passes_prefilter("new_grad", loc, _CFG), loc
+
+
 def test_level_set_is_config_driven() -> None:
     # A config that allows `mid` keeps a mid-level posting that the default config drops.
     permissive = PrefilterConfig(locations=("US",), levels=("new_grad", "mid"))

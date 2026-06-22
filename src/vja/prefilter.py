@@ -48,6 +48,20 @@ _US_STATE_NAMES = (
     "rhode island,south carolina,south dakota,tennessee,texas,utah,vermont,virginia,washington,"
     "west virginia,wisconsin,wyoming"
 )
+# Explicit non-US country signals (full names): naming one drops the location even when a US state
+# CODE coincidentally collides (e.g. "Bengaluru, India, IN" — "IN" is also Indiana; "Cordoba,
+# Argentina, AR" — "AR" is also Arkansas). Whole-word. Deliberately omits names that are also US
+# places — "mexico" (New Mexico), "georgia" (the US state) — which lean on the absence of a US
+# signal instead (e.g. "Mexico City, MX" has none). Bare ambiguous codes with no country name
+# ("Munich, DE") stay a coarse-gate residual the location-aware match backstops.
+_NON_US_COUNTRY_NAMES = (
+    "india,china,japan,south korea,singapore,philippines,malaysia,thailand,vietnam,indonesia,"
+    "pakistan,bangladesh,sri lanka,united kingdom,england,scotland,wales,ireland,france,germany,"
+    "spain,portugal,italy,netherlands,belgium,switzerland,austria,sweden,norway,denmark,finland,"
+    "poland,romania,hungary,greece,turkey,ukraine,russia,canada,mexico city,brazil,argentina,"
+    "chile,colombia,peru,australia,new zealand,israel,united arab emirates,saudi arabia,"
+    "south africa,egypt,nigeria,kenya"
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +85,13 @@ def _location_matcher(allowed: tuple[str, ...]) -> re.Pattern[str]:
     return re.compile(rf"\b(?:{alternation})\b", re.IGNORECASE)
 
 
+@lru_cache(maxsize=1)
+def _non_us_matcher() -> re.Pattern[str]:
+    """Whole-word, case-insensitive alternation of explicit non-US country names (cached)."""
+    alternation = "|".join(re.escape(name) for name in _NON_US_COUNTRY_NAMES.split(","))
+    return re.compile(rf"\b(?:{alternation})\b", re.IGNORECASE)
+
+
 def _level_ok(level: str | None, cfg: PrefilterConfig) -> bool:
     """Drop only a *concrete* level outside the allowed set; `unknown`/null pass (coarse gate)."""
     if not level or level not in _CONCRETE_LEVELS:
@@ -79,9 +100,15 @@ def _level_ok(level: str | None, cfg: PrefilterConfig) -> bool:
 
 
 def _location_ok(location: str | None, cfg: PrefilterConfig) -> bool:
-    """Keep null/unknown/remote/US locations; drop a location with no allowed signal at all."""
+    """Keep null/unknown/remote/US locations; drop a location with no allowed signal at all.
+
+    An explicit non-US country name drops the location even when a US state *code* coincidentally
+    collides (e.g. "IN"=India/Indiana, "AR"=Argentina/Arkansas) — the foreign name wins.
+    """
     if not location:
         return True
+    if _non_us_matcher().search(location) is not None:
+        return False
     return _location_matcher(cfg.locations).search(location) is not None
 
 

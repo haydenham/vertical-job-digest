@@ -1,8 +1,8 @@
-"""Integration tests for the dashboard API (P6 B1 / D-041) — FastAPI TestClient + migrated SQLite.
+"""Integration tests for the dashboard API (P6 B1 / D-041 / D-043) — FastAPI TestClient + SQLite.
 
 The DB-level query logic is pinned in `test_dashboard_query.py`; this layer pins the HTTP plumbing:
-param → query mapping (`window`, `include_unassessed`, `include_rejected`), the `(vertical,
-profile_id)` profile resolution (default / explicit / 404 / 409), the response envelope, and health.
+param → query mapping (`window`, `view`), the `(vertical, profile_id)` profile resolution (default /
+explicit / 404 / 409), the response envelope, and health.
 """
 
 from datetime import UTC, datetime
@@ -58,6 +58,7 @@ def _posting(engine: Engine, employer_id: int, title: str, *, first_seen: dateti
                 first_seen_at=first_seen,
                 last_seen_at=first_seen,
                 extracted_at=first_seen,
+                in_scope=True,
             )
         )
     pk = result.inserted_primary_key
@@ -120,11 +121,12 @@ def test_default_view_is_matched_only(migrated_engine: Engine) -> None:
     body = resp.json()
     assert body["profile_id"] == prof.id
     assert body["window"] == "all"
+    assert body["view"] == "matched"
     assert body["count"] == 1
     assert _titles(body) == ["matched"]
 
 
-def test_include_unassessed_param(migrated_engine: Engine) -> None:
+def test_cleaned_view_param(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)
     matched = _posting(migrated_engine, emp, "matched")
@@ -132,12 +134,13 @@ def test_include_unassessed_param(migrated_engine: Engine) -> None:
     _match(migrated_engine, matched, prof)
 
     resp = _client(migrated_engine).get(
-        "/api/postings", params={"vertical": _VERTICAL, "include_unassessed": "true"}
+        "/api/postings", params={"vertical": _VERTICAL, "view": "cleaned"}
     )
+    assert resp.json()["view"] == "cleaned"
     assert set(_titles(resp.json())) == {"matched", "unassessed"}
 
 
-def test_include_rejected_param(migrated_engine: Engine) -> None:
+def test_rejected_never_shown_in_either_view(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)
     matched = _posting(migrated_engine, emp, "matched")
@@ -149,8 +152,8 @@ def test_include_rejected_param(migrated_engine: Engine) -> None:
     assert _titles(client.get("/api/postings", params={"vertical": _VERTICAL}).json()) == [
         "matched"
     ]
-    both = client.get("/api/postings", params={"vertical": _VERTICAL, "include_rejected": "true"})
-    assert set(_titles(both.json())) == {"matched", "rejected"}
+    cleaned = client.get("/api/postings", params={"vertical": _VERTICAL, "view": "cleaned"})
+    assert "rejected" not in _titles(cleaned.json())
 
 
 @freeze_time(_NOW)

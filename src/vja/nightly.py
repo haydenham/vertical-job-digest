@@ -43,6 +43,7 @@ from vja.fetchers.registry import get_fetcher
 from vja.match import run_matching
 from vja.models import AtsType
 from vja.pipeline import RunSummary, run_pipeline
+from vja.prefilter import PrefilterConfig
 from vja.verticals import available_verticals, load_vertical_config
 
 logger = logging.getLogger("vja.nightly")
@@ -67,7 +68,14 @@ def _default_layer2(
     """Extract then match one vertical against its config; one client shared across both passes."""
     cli = client or Anthropic()  # auth resolves at construction — the real path needs a key
     vcfg = load_vertical_config(vertical)
-    ext = run_extraction(engine, vertical, scope=vcfg.scope, client=cli, now=now)
+    ext = run_extraction(
+        engine,
+        vertical,
+        scope=vcfg.scope,
+        prefilter=PrefilterConfig(locations=vcfg.prefilter_locations, levels=vcfg.prefilter_levels),
+        client=cli,
+        now=now,
+    )
     mat = run_matching(engine, vertical, config=vcfg, client=cli, now=now)
     return Layer2Summary(
         extracted=ext.extracted,
