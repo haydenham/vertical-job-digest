@@ -5,6 +5,42 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-22 — Phase 7 · Block 2: re-tilt both resumes (config/data only)
+
+**Did:** Re-tilted the matching résumés per vertical (the matching-profile half of the D-004 config —
+still zero `src/` change).
+- **Shared, real-experience edits to both résumés:** added **Optum (UnitedHealth Group) — Technology
+  Development Intern** (current, top of Experience) with two bullets on **data ETL pipelines in
+  Snowflake** + SQL transformations; **removed the LinkUp** role. Tech Stack updated to reflect the
+  now-real tools (FastAPI, pandas, SQL/Snowflake, PostgreSQL, Redis, Google Cloud, TypeScript).
+- **`hayden_aviation_resume.md`** (new): replaced the Nomi project with the **Flight Delay Cascade
+  Simulator** (FastAPI + pandas / React + Vite; tail-cascade + connection-risk propagation over the U.S.
+  DOT BTS dataset); Interests → Aviation & Flight Systems / Real-Time Data Systems. Sudoku Solver kept.
+- **`hayden_grid_resume.md`** (edit): replaced Nomi with the **Strait of Hormuz Event Study** (FastAPI +
+  React/Vite/TS; layered offline compute → read-only API; price-vs-transit event scatter); Interests →
+  Energy Markets & Power Trading / Commodities & Quant.
+- Bullets are **faithful to the facts Hayden gave** (project mechanics, Snowflake ETL) — no invented
+  metrics. **Placeholders to confirm:** the Optum **location ("Remote") and start month ("June 2026")**.
+
+**Decisions:** none new. Per Hayden: replace Nomi with the two projects, add Optum/Snowflake, drop LinkUp.
+Note: re-tilting the grid résumé changes its text → a new `resume_version` on the next `vja-load-profiles`,
+so existing grid matches go stale — Hayden chose to **re-match grid** in Block 4.
+
+**Tests:** none added (résumé content isn't asserted anywhere — the config loader only checks the file
+resolves). `load_vertical_config('grid_power_software')` still loads the re-tilted résumé; the new
+aviation résumé file reads + parses. The aviation config that references it lands in Block 3.
+
+**Verified:** full Python gate green — ruff format/check, **233 pytest**, lint-imports, mypy, lock.
+Both résumés load through the config path. **No `src/` change.**
+
+**Next:** Block 3 — `config/verticals/aviation_software.yaml` (matching_profile → aviation résumé +
+domain vocabulary, Stage-A scope, Stage-B prefilter) + a `test_vertical_config.py` aviation case.
+**STOP here for Hayden to commit + PR.**
+
+**Branch:** `feat/resume-retilt` (off `main` @ the merged Block-1 PR).
+
+---
+
 ## 2026-06-22 — Phase 7 · Block 1: aviation employer seed + ATS resolution (config/data only)
 
 **Did:** Curated + ATS-resolved the **aviation vertical** employer universe — the data half of the

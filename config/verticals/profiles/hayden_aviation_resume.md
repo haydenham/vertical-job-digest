@@ -33,20 +33,20 @@ B.S., Double Major in Computer Science & Economics | Madison, WI
 
 ## Projects
 
-**Strait of Hormuz Event Study**
-
-- Built an event-study web app (FastAPI + React/Vite/TypeScript) quantifying how 2026 Iran-crisis events moved oil prices vs. physical ship transits through the Strait of Hormuz, one data point per event.
-- Architected a layered offline pipeline — raw seed CSVs → pure window-math compute → processed JSON served read-only — separating computation from a thin read-only API.
-- Built the centerpiece visualization: a category-colored scatter of price impact vs. transit impact, surfacing that verbal escalations move prices but not ships while kinetic events move both.
-
 **Flight Delay Cascade Simulator**
 
 - Built a full-stack flight-delay cascade simulator (FastAPI + pandas backend, React + Vite frontend) modeling how a single delayed or cancelled flight propagates through an airline's network.
 - Implemented two deterministic propagation models over the U.S. DOT BTS on-time-performance dataset: aircraft/tail cascade (delay carried across an aircraft's sequential legs until ground slack absorbs it) and passenger-connection risk (connections dropping below the 45-minute minimum).
 - Designed the propagation core as a pure, deterministic function returning every affected downstream flight split by mechanism, with a cancelled flight modeled as an unbounded delay.
 
+**Strait of Hormuz Event Study**
+
+- Built an event-study web app (FastAPI + React/Vite/TypeScript) quantifying how 2026 Iran-crisis events moved oil prices vs. physical ship transits through the Strait of Hormuz, one data point per event.
+- Architected a layered offline pipeline — raw seed CSVs → pure window-math compute → processed JSON served read-only — separating computation from a thin read-only API.
+- Built the centerpiece visualization: a category-colored scatter of price impact vs. transit impact, surfacing that verbal escalations move prices but not ships while kinetic events move both.
+
 ## Skills & Interests
 
 **Tech Stack:** Python, Java, C, Rust, JavaScript, TypeScript, React, FastAPI, pandas, SQL, Snowflake, PostgreSQL, Redis, Google Cloud, HTML, CSS, R, Bash, Linux, Git
 
-**Interests:** Energy Markets & Power Trading, AI and Machine Learning, Commodities & Quantitative Analysis, Water Skiing, Golf
+**Interests:** Aviation & Flight Systems, AI and Machine Learning, Real-Time Data Systems, Water Skiing, Golf
