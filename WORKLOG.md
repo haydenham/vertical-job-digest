@@ -5,6 +5,46 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-22 — Phase 7 · Block 1: aviation employer seed + ATS resolution (config/data only)
+
+**Did:** Curated + ATS-resolved the **aviation vertical** employer universe — the data half of the
+D-004 architecture test (config + curation only, zero `src/` change). Hayden had seeded 16 partial rows
+(names + category); I completed the columns and broadened to **36 employers** across every aviation
+sub-domain (airlines · avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics ·
+ATM/infrastructure · eVTOL/autonomy · travel-tech SaaS).
+- **Resolution = live probing** (same pass as grid, D-015): probed Greenhouse/Lever/Ashby slugs, fetched
+  careers pages to fingerprint the ATS, and POSTed candidate Workday `cxs` endpoints. Result:
+  **8 verified/fetchable** — GH (OAG `oagaviationworldwide`, FLYR `flyr`), Lever (Shield AI `shieldai`,
+  391 open), Ashby (Beacon AI `beaconai`), Workday (Boeing `boeing:wd1`, 1168; Collins/RTX
+  `globalhr:wd5`, 4161; Airbus `ag:wd3`, 2000; Wisk `wisk:wd108`, 24) — **6 detected** (iCIMS: Alaska/
+  SITA/Joby; Avature: Delta; SuccessFactors: JetBlue; Oracle: Honeywell) — **22 layer2** (Phenom/Radancy
+  portals + custom JS-rendered sites).
+- **Caught a name collision:** the Greenhouse `archer` board is **Archer Veterinary Clinic**, not Archer
+  Aviation — exactly why we probe-and-verify instead of guessing slugs. Archer Aviation → custom/Layer 2.
+- Regenerated `data/seed/employers_seed.csv` deterministically (preserved the 54 grid rows byte-for-byte,
+  `csv.writer` for the new aviation block). Updated `data/seed/README.md` with the aviation status block.
+
+**Decisions:** none new (executes D-002/D-004/D-015/D-017/D-018; ADR D-046 lands with the Block-4 result).
+Mega whole-company Workday boards (RTX/Airbus/Boeing, ~7300 mostly non-US/senior postings) kept verified —
+the Stage-A scope gate + Stage-B US/level pre-filter cut them to the early-career US slice, same as grid's
+GE Vernova. **Heads-up for Block 4:** that ~7300-posting first fetch + its Stage-A extraction backlog will
+likely run a few dollars more than the "couple dollars" estimate — I'll surface concrete counts after
+`vja-run` and confirm before the paid extract/match.
+
+**Tests:** updated `test_employers_import.py` — totals auto-adapt; bumped the fetchable assertion (24→32,
+Workday 15→19) and added `test_aviation_vertical_is_fetchable_without_code_change` (aviation resolves to
+8 fetchable via the same code path, no per-vertical branch). These pin data counts, not new src behavior.
+
+**Verified:** full Python gate green — ruff format/check, mypy (37 files), lint-imports (1 kept/0 broken),
+**233 pytest** (+1), `uv lock --check`. **No `src/` change** (the architecture test holds so far).
+
+**Next:** Block 2 — re-tilt both resumes (aviation: skills/interests + flight-delay project; grid:
+Strait-of-Hormuz project + energy skills/interests). **STOP here for Hayden to commit + PR.**
+
+**Branch:** `feat/aviation-seed` (off `main` @ PR #31).
+
+---
+
 ## 2026-06-22 — Corpus location repair + stale-match cleanup (D-043 · WS5) · Branch B
 
 **Did:** Built + ran the one-time repair that fixes the corpus Branch A's clobber already damaged.
