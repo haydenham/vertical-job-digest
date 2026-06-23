@@ -51,4 +51,18 @@ After the ATS-identification pass (see `docs/07-ats-routing.md`):
 
 **Deterministic ceiling ≈ 70%** of the universe via ~8 generic platform fetchers; ~30% routes to Layer 2.
 
-Aviation vertical is not yet seeded.
+## Current seed status (aviation vertical, 36 employers — Phase 7)
+The Week-4 "vertical = config" add (D-002/D-004). Curated across all aviation sub-domains (airlines ·
+avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics · ATM/infrastructure ·
+eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass as grid:
+- **8 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
+  Ashby (1 — Beacon AI), Workday (4 — Boeing, Collins/RTX, Airbus, Wisk Aero).
+- **6 detected** (platform known, no generic fetcher yet → Phase 8): iCIMS (3 — Alaska, SITA, Joby),
+  Avature (Delta), SuccessFactors (JetBlue), Oracle HCM (Honeywell).
+- **22 layer2** (no clean API → LLM-read): Phenom/Radancy portals (United, Southwest, L3Harris, Thales)
+  + custom/JS-rendered sites (the GDS, flight-data, ATM, and remaining OEM/airline tail). Note: the
+  Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer Aviation is custom/Layer 2.
+
+The big aerospace Workday boards are whole-company (Collins/RTX 4161, Airbus 2000, Boeing 1168, mostly
+non-US/senior); the Stage-A scope gate + Stage-B US/level pre-filter cut this to the early-career US
+software slice, same as grid's whole-company boards (GE Vernova etc.).

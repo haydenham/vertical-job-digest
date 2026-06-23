@@ -1,6 +1,7 @@
 """Employer seed import: real CSV loads correctly and is idempotent (Block 1)."""
 
 import csv
+from collections import Counter
 from pathlib import Path
 
 from sqlalchemy import Engine, select
@@ -88,9 +89,25 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # 5 Greenhouse + 3 Lever + 1 Ashby = 9, plus 15 Workday (12 from P4.1 + BP/GE Vernova/Fluence
-    # onboarded in P4.2; Castleton left Workday → Layer 2).
-    assert len(fetchable) == 24
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 15
+    # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday = 24. Aviation (Phase 7): 2 Greenhouse
+    # + 1 Lever + 1 Ashby + 4 Workday = 8. Total 32, of which 19 are Workday.
+    assert len(fetchable) == 32
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 19
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
+
+
+def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Engine) -> None:
+    """Phase 7 architecture test (D-004): the aviation vertical resolves to a fetchable subset
+    purely from seed data — same code path as grid, no per-vertical branching."""
+    import_employers_from_csv(migrated_engine, _SEED)
+
+    aviation = active_fetchable_employers(migrated_engine, vertical="aviation_software")
+    by_type = Counter(e.ats_type for e in aviation)
+
+    assert len(aviation) == 8
+    assert by_type[AtsType.GREENHOUSE] == 2
+    assert by_type[AtsType.LEVER] == 1
+    assert by_type[AtsType.ASHBY] == 1
+    assert by_type[AtsType.WORKDAY] == 4
+    assert all(e.ats_slug for e in aviation)  # Workday endpoints + slug-derived URLs both present
