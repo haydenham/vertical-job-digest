@@ -5,6 +5,53 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-24 — Phase 8 · Block 1: iCIMS Tier-B fetcher via the Jibe `/api/jobs` API (D-048)
+
+**Did:** Built the first Phase-8 (Tier-B) fetcher, kicked off by a coverage-research pass.
+
+- **Research first (Hayden's three questions):** we fetch only **34%** of the seeded universe (grid 24/54,
+  aviation 7/36); the aviation vertical looked empty (3 companies, only Boeing matching) purely for lack of
+  coverage. **Garmin** — a near-perfect missed role — was seeded `custom`/`layer2` but is actually **iCIMS**.
+  Decided iCIMS leads Phase 8 (highest coverage + fixes the felt gap). Shared the 38-row `layer2` tail with
+  Hayden for parallel digging.
+- **Step 0 feasibility probe (the gate):** the legacy `careers-{tenant}.icims.com` portal is a frame-busted
+  SPA (domReplacement, no clean JSON), **but** the modern iCIMS **Career Sites (Jibe)** product exposes a clean,
+  unauthenticated `GET {careers_base}/api/jobs?page&limit` → `{"jobs":[{"data":…}],"totalCount":…}`. Verified
+  **uniform across tenants** (Garmin/Constellation/Exelon/SIG/ICE/SITA share every core field) → **one generic
+  fetcher** works (D-017/D-004 risk retired). Captured `tests/fixtures/icims.json` (D-019).
+- **Fetcher** (`src/vja/fetchers/icims.py`, `IcimsFetcher`): paginate-or-fail like Workday, but the rich list
+  payload gives `apply_url` + full `description` (overview+responsibilities+qualifications joined) + real ISO
+  `update_date` — **no detail fetch**, and `updated_at` populated (D-030 freshness win). `external_id = req_id`
+  (D-016). Wired into the registry; endpoint is explicit per-tenant (careers domains vary), so no `endpoints.py`
+  change.
+- **Seed (config/data):** onboarded 6 Jibe tenants (Garmin custom→icims; Constellation/Exelon/SIG/ICE/SITA
+  detected→verified, `+/api/jobs` endpoints + client_code slugs). **Alaska** (legacy portal, no Jibe API) and
+  **Joby** (`/api/jobs` 404, custom site) reclassified detected→`layer2`. Fixed 2 pre-existing malformed CSV
+  rows (Exelon stray trailing field; Enverus unquoted comma) — seed is now clean 14-col throughout.
+- **Tail re-probe:** D-015 fingerprint over all 38 `layer2` rows found **no other Jibe tenants** (Garmin was
+  the only misfile) but surfaced **Amadeus + Sabre = Workday** candidates → a later data-only PR.
+
+**Decisions:** **D-048** (iCIMS via the Jibe career-site API; legacy/non-Jibe/auth-gated → Layer 2; coverage
+31→37). INVARIANTS (fetcher-order + new iCIMS line), `docs/07`, CLAUDE Phase-8 line, `data/seed/README.md`
+status blocks (also corrected the pre-existing post-D-046 RTX/Workday staleness) updated.
+
+**Tests:** `tests/unit/test_icims.py` (11: fixture mapping, pagination, paginate-or-fail/truncation, transport/
+parse/shape/missing-field errors); `tests/live/test_icims_live.py` (opt-in Garmin smoke); `test_registry.py`
+(iCIMS now supported; unsupported-case switched to Oracle HCM); `test_employers_import.py` counts (31→37, +6
+iCIMS; aviation 7→9).
+
+**Verified:** full Python gate green — ruff format/check, mypy (38 files), lint-imports (1/0), **245 pytest**,
+`uv lock`. Live smoke: Garmin returns **303** postings incl. "Software Engineer - Real Time Aviation Data" (US)
+— the previously-invisible class of role now flows.
+
+**Next:** **STOP for Hayden to commit + PR** (Block 1). Then the rest of Tier-B (Workable/SmartRecruiters/Oracle)
+or the Amadeus/Sabre Workday data-PR, then the Layer-2 tail. No paid extract/match run yet — Hayden authorizes
+after reviewing fetch counts.
+
+**Branch:** `feat/icims-fetcher` (off `main` @ merged PR #34).
+
+---
+
 ## 2026-06-22 — Phase 7 · Blocks 3+4: aviation config + full end-to-end run (D-046) — architecture test PASSED
 
 **Did:** Wrote the aviation vertical config and ran the **whole pipeline end-to-end** on it. **Headline: adding the

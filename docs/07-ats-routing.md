@@ -42,11 +42,16 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 This vindicates the "don't write N custom scrapers" call (D-017): the long tail collapses into a handful of platforms.
 
 ## Recommended build order
-1. **Greenhouse, Lever, Ashby** (Weeks 1–2) — 9 companies, trivial, already verified. Proves the loop.
-2. **Workday** (next) — 15 companies, biggest single win, `cxs` pattern already validated.
-3. **iCIMS, Workable, SmartRecruiters, Oracle HCM** (Tier B) — +9.
-4. **Tier C singletons** — as time allows.
-5. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
+1. **Greenhouse, Lever, Ashby** (Weeks 1–2) — 9 companies, trivial, already verified. Proves the loop. ✅
+2. **Workday** — 15 companies, biggest single win, `cxs` pattern already validated. ✅
+3. **iCIMS** (Tier B, Phase 8 — **done**, D-048) — via the iCIMS **Career Sites (Jibe)**
+   `GET {careers_base}/api/jobs` JSON API, **not** the legacy `careers-{tenant}.icims.com` portal (a
+   frame-busted SPA with no clean JSON). One generic fetcher, uniform across tenants; rich list payload
+   (`apply_url` + full `description` + ISO `update_date`). +6 fetchable (Garmin, Constellation, Exelon,
+   SIG, ICE, SITA). Legacy-portal / non-Jibe tenants (Alaska, Joby) → Layer 2.
+4. **Workable, SmartRecruiters, Oracle HCM** (rest of Tier B) — next.
+5. **Tier C singletons** — as time allows.
+6. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
 
 ## Endpoint encoding in the seed CSV
 - **Greenhouse/Lever/Ashby/Workable:** `ats_slug` = the slug; `endpoint` = constructed API URL.
