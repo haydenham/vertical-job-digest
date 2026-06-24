@@ -133,8 +133,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   for the custom tail + HN/niche sources. *(Likely opens new doors/decisions — kept first because more coverage
   makes the user-facing launch worth more.)* **iCIMS ✅** (D-048) — via the iCIMS **Career Sites (Jibe)**
   `{careers_base}/api/jobs` JSON API (one generic fetcher; legacy portal → Layer 2); +6 fetchable (incl. Garmin).
-  Sabre + Amadeus also onboarded to Workday (config-only) → coverage **31→39**. Next: Workable/SmartRecruiters/
-  Oracle, then the Layer-2 tail.
+  Sabre + Amadeus also onboarded to Workday (config-only) → coverage **31→39**. **Workable ✅** (D-049) —
+  via the embed-widget API `apply.workable.com/api/v1/widget/accounts/{slug}?details=true` (slug-derived,
+  single-response); +2 fetchable (Vortexa, Energy Aspects) → **39→41**. Next: SmartRecruiters/Oracle, then
+  the Layer-2 tail.
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
   upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real

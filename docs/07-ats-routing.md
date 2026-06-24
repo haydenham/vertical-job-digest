@@ -18,7 +18,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Lever** | 3 | clean JSON (`api.lever.co`) | 3 verified | **A** |
 | **Ashby** | 1 | clean JSON (`posting-api`) | 1 verified | **A** |
 | **iCIMS** | 4 | per-company JSON API | detected | **B** |
-| **Workable** | 2 | clean JSON (`widget/accounts`) | 1 verified, 1 detected | **B** |
+| **Workable** | 2 | clean JSON (`widget/accounts`) | 2 verified (built, D-049) | **B** |
 | **Oracle HCM** | 2 | JSON API (recruiting cloud) | detected | **B** |
 | **SmartRecruiters** | 1 | clean public API | detected | **B** |
 | **Jobvite** | 1 | feed/HTML, messy | detected | **C** |
@@ -49,9 +49,13 @@ This vindicates the "don't write N custom scrapers" call (D-017): the long tail 
    frame-busted SPA with no clean JSON). One generic fetcher, uniform across tenants; rich list payload
    (`apply_url` + full `description` + ISO `update_date`). +6 fetchable (Garmin, Constellation, Exelon,
    SIG, ICE, SITA). Legacy-portal / non-Jibe tenants (Alaska, Joby) → Layer 2.
-4. **Workable, SmartRecruiters, Oracle HCM** (rest of Tier B) — next.
-5. **Tier C singletons** — as time allows.
-6. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
+4. **Workable** (Tier B, Phase 8 — **done**, D-049) — via the embed-widget JSON API
+   `GET apply.workable.com/api/v1/widget/accounts/{slug}?details=true` (slug-derived, **single-response**,
+   not paginated → the Greenhouse single-request false-closure guard). Rich list (`apply_url`/`description`/
+   `published_on` inline). +2 fetchable (Vortexa, Energy Aspects).
+5. **SmartRecruiters, Oracle HCM** (rest of Tier B) — next.
+6. **Tier C singletons** — as time allows.
+7. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
 
 ## Endpoint encoding in the seed CSV
 - **Greenhouse/Lever/Ashby/Workable:** `ats_slug` = the slug; `endpoint` = constructed API URL.
@@ -64,5 +68,5 @@ This vindicates the "don't write N custom scrapers" call (D-017): the long tail 
 - **GE Vernova** — Workday tenant `gevernova.wd5`, site path needs correcting (probe returned no total).
 - **Castleton (CCI)** — Workday `cci.wd1/ccicareers`, tenant prefix (`osv-`?) needs checking.
 - **BP Trading** — Workday tenant `bpinternational.wd3`, site path TBD.
-- **Vortexa** — Workable, slug `vortexa` to confirm.
+- **Vortexa** — Workable, slug `vortexa` — **confirmed + built** (D-049; 5 open at probe).
 - **Fluence / Enverus / Aurora** — marked custom but may be Workday / Greenhouse / Teamtailor respectively; worth a second look before defaulting to Layer 2.

@@ -44,10 +44,11 @@ For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from
 For Workday, `endpoint` holds the full `cxs` jobs URL. Portal-detected (iCIMS/Oracle/etc.) and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)
-After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8 iCIMS onboards:
-- **29 verified**: Greenhouse (5), Lever (3), Ashby (1), 15 Workday, 1 Workable, **4 iCIMS/Jibe
-  (Constellation, Exelon, SIG, ICE — Phase 8)**. 28 are **fetchable today** (Workable has no fetcher yet).
-- **10 detected** (platform known, endpoint TBD): Oracle HCM (2), SmartRecruiters, Workable, Jobvite (2),
+After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8 iCIMS/Workable onboards:
+- **30 verified**: Greenhouse (5), Lever (3), Ashby (1), 15 Workday, **2 Workable (Vortexa, Energy
+  Aspects — Phase 8)**, **4 iCIMS/Jibe (Constellation, Exelon, SIG, ICE — Phase 8)**. All 30 are
+  **fetchable today** (Workable now has a generic fetcher, D-049).
+- **9 detected** (platform known, endpoint TBD): Oracle HCM (2), SmartRecruiters, Jobvite (2),
   SuccessFactors, Avature, UKG, Eightfold.
 - **15 layer2** (no clean API → LLM-read): 3 Radancy/Phenom portals + custom sites.
 
