@@ -135,8 +135,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   `{careers_base}/api/jobs` JSON API (one generic fetcher; legacy portal → Layer 2); +6 fetchable (incl. Garmin).
   Sabre + Amadeus also onboarded to Workday (config-only) → coverage **31→39**. **Workable ✅** (D-049) —
   via the embed-widget API `apply.workable.com/api/v1/widget/accounts/{slug}?details=true` (slug-derived,
-  single-response); +2 fetchable (Vortexa, Energy Aspects) → **39→41**. Next: SmartRecruiters/Oracle, then
-  the Layer-2 tail.
+  single-response); +2 fetchable (Vortexa, Energy Aspects) → **39→41**. **SmartRecruiters ✅** (D-050) —
+  via the public postings API (slug-derived; list-only + paginate-or-fail + lazy detail, Workday parity);
+  +1 (Vitol) → **41→42**. **Oracle HCM/ORC ✅** (D-051) — via the Candidate-Experience REST API
+  (explicit per-tenant endpoint; list-only + lazy detail); +1 (Southern Company) → **42→43** (Honeywell +
+  Con Edison hosts not found → Layer 2, onboard config-only when curated). The list-only ATSs' lazy detail
+  is now routed by a per-ATS `extract._DETAIL_RESOLVERS` map (Workday/SmartRecruiters/Oracle). Next: the
+  Layer-2 LLM-read tail.
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
   upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real

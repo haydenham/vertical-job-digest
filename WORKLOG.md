@@ -5,6 +5,68 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-24 — Phase 8 · Block 3: SmartRecruiters + Oracle HCM Tier-B fetchers (D-050, D-051)
+
+**Did:** Built the next two Phase-8 (Tier-B) fetchers in one combined PR (Hayden's call), completing the
+documented build order's Tier-B set (iCIMS → Workable → **SmartRecruiters → Oracle**). Both are list-only
+for the description, so both reuse — and generalize — Workday's lazy-detail path.
+
+- **Step-0 feasibility probe (the gate):** live-probed both APIs. **SmartRecruiters** =
+  `api.smartrecruiters.com/v1/companies/{slug}/postings` — clean JSON, `totalFound`/offset pagination,
+  uniform → one generic fetcher (Vitol slug `Vitol`, 42 open). **Oracle ORC** =
+  `{host}/hcmRestApi/.../recruitingCEJobRequisitions?…&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber={CX_n}`
+  — clean JSON, `TotalJobsCount` pagination (Southern Co: `emje.fa.us6`, `CX_1001`, 105 open). Two probe
+  findings shaped the build: (1) **both lists omit the description** (SR has none; Oracle's `External*Str`
+  are empty in list mode) → both are list-only like Workday, not iCIMS-rich; (2) Oracle's `expand` param
+  is **required** (without it: no `requisitionList`). Captured 4 fixtures (list + detail each, D-019).
+- **SmartRecruiters fetcher** (`src/vja/fetchers/smartrecruiters.py`): list-only + paginate-or-fail on
+  `totalFound` + `fetch_detail` (the `jobAd.sections` body). `apply_url` **constructed**
+  (`jobs.smartrecruiters.com/{slug}/{id}`, verified 200 — no detail fetch for the link, D-008);
+  `external_id = id` (D-016); `location` from `fullLocation` with empty comma-segments collapsed;
+  `updated_at = releasedDate` (D-030). Slug-derivable → added to `endpoints.py` `_DERIVED_TEMPLATES`.
+- **Oracle fetcher** (`src/vja/fetchers/oracle.py`): list-only + paginate-or-fail on `TotalJobsCount`
+  (limit/offset appended as `finder` sub-params) + `fetch_detail` (the `ExternalDescriptionStr` body,
+  host + siteNumber parsed off the seeded list endpoint). `apply_url = {careers_url}/job/{Id}` (verified);
+  `external_id = Id`; `location = PrimaryLocation`; `updated_at = PostedDate`. Explicit per-tenant endpoint
+  (no `endpoints.py` change). Both wired into the registry.
+- **Generalized the lazy-detail dispatch** (`src/vja/extract.py`): the Workday-only `if` in `_source_text`
+  is now a per-ATS `_DETAIL_RESOLVERS` map (Workday + SmartRecruiters + Oracle); the default resolver
+  dispatches by `ats_type`. Adding a list-only ATS is now a one-line wire-up. Injection point stays a
+  single callable (existing tests unchanged in shape).
+- **Seed (config/data):** Vitol `detected → verified` (slug `Vitol`); Southern Company `detected →
+  verified` (Oracle list endpoint w/ `siteNumber=CX_1001`). **Honeywell + Con Edison reclassified
+  `oracle_hcm/detected → custom/layer2`** — their clean ORC host isn't exposed (Honeywell's vanity domain
+  proxies the REST API 302→404; Con Edison stays on coned.com). This preserves the "supported `ats_type` ⟹
+  has a working endpoint" seed invariant (`active_fetchable_employers` filters only on status + supported
+  ATS, so an endpointless oracle_hcm row would otherwise be selected and fail). Notes say to flip back to
+  `oracle_hcm` + add the endpoint when a host is curated. Coverage **41→43** (grid 30→32; aviation 11).
+
+**Decisions:** **D-050** (SmartRecruiters via the public postings API; slug-derived; list-only + lazy
+detail; apply_url constructed; 41→42). **D-051** (Oracle ORC via the CE REST API; explicit per-tenant
+endpoint; list-only + lazy detail; Southern onboarded, Honeywell/ConEd → Layer 2 pending curation; 42→43).
+INVARIANTS (fetcher-order line + SR/Oracle contract lines + the new resolver-map line), `docs/07` (table +
+build-order + encoding + coverage math), CLAUDE Phase-8 line, `data/seed/README.md` both status blocks.
+
+**Tests:** `tests/unit/test_smartrecruiters.py` (19) + `tests/unit/test_oracle.py` (19) — fixture mapping,
+apply_url construction, pagination, paginate-or-fail/truncation, mid-pagination error, location handling,
+`fetch_detail` mapping + siteNumber/host parse, every transport/parse/shape/missing-field → `FetchError`;
+`tests/live/test_{smartrecruiters,oracle}_live.py` (opt-in Vitol/Southern smoke + detail-has-description);
+`test_extract.py` (parametrized SR/Oracle lazy-detail dispatch); `test_registry.py` (both supported;
+unsupported example switched to Jobvite); `test_endpoints.py` (SR slug-derivation); `test_employers_import.py`
+counts (41→43, +SmartRecruiters/+Oracle; grid fetchable 30→32).
+
+**Verified:** full Python gate green — ruff format/check, mypy (100 files), lint-imports (1/0), **295 pytest**
+(+38), `uv lock` in sync (no new deps). Live smoke (4): Vitol 42 well-formed postings + detail body; Southern
+Co 105 + detail body; both `updated_at` populated, apply_url resolves.
+
+**Next:** **STOP for Hayden to commit + PR** (Block 3). Tier-B fetchers are now complete; next is the
+**Layer-2 LLM-read tail** (the custom/portal remainder + HN/niche). Honeywell + Con Edison await curation
+(canonical Oracle host + siteNumber → config-only onboard). No paid extract/match run yet.
+
+**Branch:** `feat/smartrecruiters-oracle-fetchers` (off `main` @ `06b77e4`, post-Workable-PR-#36 merge).
+
+---
+
 ## 2026-06-24 — Phase 8 · Block 2: Workable Tier-B fetcher via the embed-widget API (D-049)
 
 **Did:** Built the second Phase-8 (Tier-B) fetcher — Workable — following the documented build order

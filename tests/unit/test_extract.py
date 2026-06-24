@@ -95,7 +95,7 @@ def test_extract_posting_raises_on_no_parsed_output() -> None:
         extract_posting(client, "text")
 
 
-def test_source_text_uses_raw_payload_for_non_workday() -> None:
+def test_source_text_uses_raw_payload_for_rich_list_ats() -> None:
     calls: list[tuple[str, str]] = []
 
     def resolver(employer: Employer, external_path: str) -> dict[str, Any]:
@@ -104,7 +104,7 @@ def test_source_text_uses_raw_payload_for_non_workday() -> None:
 
     text = _source_text(_candidate(AtsType.GREENHOUSE), resolver)
     assert "Build power-market software" in text  # from raw_payload
-    assert calls == []  # detail resolver NOT called for non-Workday
+    assert calls == []  # detail resolver NOT called for a rich-list ATS
 
 
 def test_source_text_fetches_detail_for_workday() -> None:
@@ -117,3 +117,17 @@ def test_source_text_fetches_detail_for_workday() -> None:
     text = _source_text(_candidate(AtsType.WORKDAY, external_id="/job/X"), resolver)
     assert calls == [("Co", "/job/X")]  # detail fetched lazily with the externalPath
     assert "Senior power trader" in text
+
+
+@pytest.mark.parametrize("ats", [AtsType.SMARTRECRUITERS, AtsType.ORACLE_HCM])
+def test_source_text_fetches_detail_for_list_only_ats(ats: AtsType) -> None:
+    # The list-only Tier-B ATSs (D-048/D-049 siblings) route to their lazy detail like Workday.
+    calls: list[tuple[str, str]] = []
+
+    def resolver(employer: Employer, external_id: str) -> dict[str, Any]:
+        calls.append((employer.name, external_id))
+        return {"body": "Grid software engineer, Atlanta."}
+
+    text = _source_text(_candidate(ats, external_id="42"), resolver)
+    assert calls == [("Co", "42")]  # detail fetched lazily
+    assert "Grid software engineer" in text
