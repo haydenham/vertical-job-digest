@@ -22,6 +22,20 @@ def test_loads_real_grid_config() -> None:
     assert "new_grad" in cfg.prefilter_levels
 
 
+def test_loads_real_aviation_config() -> None:
+    """Phase 7 (D-004): aviation loads through the same loader as grid — config only, no code."""
+    cfg = load_vertical_config("aviation_software")
+    assert cfg.key == "aviation_software"
+    assert cfg.user_email == "haydenham10@gmail.com"
+    assert "Hayden" in cfg.resume_text  # aviation résumé path resolved + read
+    assert "Flight Delay" in cfg.resume_text  # the aviation-tilted project is present
+    assert cfg.domain_vocabulary  # non-empty
+    assert "software" in cfg.scope.role_include
+    assert "pilot" in cfg.scope.exclude  # aviation-specific non-software exclusion
+    assert cfg.prefilter_locations == ("US",)
+    assert "new_grad" in cfg.prefilter_levels
+
+
 def _write(dir_: Path, key: str, body: str, *, resume: str | None = "r.md") -> None:
     (dir_ / f"{key}.yaml").write_text(body)
     if resume is not None:

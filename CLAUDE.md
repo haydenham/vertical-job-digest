@@ -130,10 +130,16 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   tsc + vitest (CI + pre-commit).
 - **Phase 7 — Aviation vertical.** The architecture test — config + curation only, **any forced code change is a defect** (D-004).
 - **Phase 8 — Remaining coverage.** Tier-B fetchers (iCIMS/Workable/Oracle/SmartRecruiters), then Layer-2 LLM-read
-  for the custom tail + HN/niche sources.
-- **Phase 9 — Layer 3: discovery agent.** Weekly agent finds new *employers* → `proposed` rows in a review queue.
-- **Cross-cutting — Hosting & Postgres cutover (D-025).** Triggered by demo users (~2 weeks): VPS + Postgres URL swap
-  + `alembic upgrade`. Slot relative to Phases 3–5 per demo-readiness.
+  for the custom tail + HN/niche sources. *(Likely opens new doors/decisions — kept first because more coverage
+  makes the user-facing launch worth more.)*
+- **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
+  (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
+  upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real
+  users in front of it. The deferred-work ledger in `docs/11` is this phase's checklist (auth, PII, abuse/cost
+  guards, deliverability, observability). *(Was "cross-cutting, triggered by demo users.")*
+- **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
+  `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
+  → new companies into the DB. Deferred because it doesn't gate a user-facing launch.
 
 ## Conventions for this repo
 

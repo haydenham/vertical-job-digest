@@ -25,7 +25,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   *One grandfathered back-edge:* `db.employers → fetchers.registry` (see `pyproject.toml`).
 - **Nothing vertical-specific in code.** A vertical = config (employer list, sources,
   matching profile). Adding a vertical must cost only curation + config; any forced code
-  change is a defect. (D-004; tested by the Phase-7 aviation add)
+  change is a defect. (D-004; **proven** by the Phase-7 aviation add — shipped config-only
+  end-to-end, D-046)
 - **No per-company scrapers.** Route each employer to a generic platform fetcher; if none
   fits, it's Layer 2 — never a bespoke scraper. (D-017)
 
@@ -142,6 +143,7 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (iCIMS/Workable/
   Oracle/SmartRecruiters) → Layer-2 LLM-read for the custom tail + HN/niche. (D-018)
 - **Workday `cxs` fetcher is list-only + paginate-or-fail;** `osv-` Workday hosts route to
-  Layer 2. (D-032)
+  Layer 2; a tenant board exceeding Workday's ~4000 offset cap also routes to Layer 2
+  (paginate-or-fail rejects the truncated page — RTX, D-046). (D-032, D-046)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
-  Week-4 architecture test. (D-022, D-002)
+  Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)
