@@ -587,3 +587,29 @@ discussion): the dominant risk for a free public signup is **cost-abuse** (each 
 addressed by email-verify + signup rate-limit/captcha + a per-user backfill cap (D-039) + a global spend ceiling, with
 résumé **PII** (encrypt at rest, delete path, never log) and standard web hygiene (managed auth, Cloudflare in front,
 secrets in env) as the rest. Supersedes the build-sequence ordering in CLAUDE.md / D-026's P7→P9 tail.
+
+### D-048 · Phase 8 Tier-B starts with iCIMS via the Jibe `/api/jobs` career-site API · accepted · 2026-06-24
+First Phase-8 (D-018 Tier-B) fetcher. A coverage-research pass found we fetch only **34%** of the seeded
+universe (grid 24/54, aviation 7/36) and that the aviation vertical looked empty (3 companies, only Boeing
+matching) purely for lack of coverage — the US-software employers that match (Garmin, Joby, Alaska, …) were
+all dark. **Garmin was the worked example:** seeded `custom`/`layer2` but actually **iCIMS**, so a near-perfect
+role was invisible. iCIMS chosen to lead (over the easier Workable/SmartRecruiters) because it is the
+highest-coverage Tier-B platform *and* fixes that felt gap.
+- **The fetch target is iCIMS *Career Sites* (formerly Jibe), not the legacy portal.** The legacy
+  `careers-{tenant}.icims.com` portal is a frame-busted SPA with no clean JSON (domReplacement obfuscation);
+  the modern product exposes a clean, unauthenticated **`GET {careers_base}/api/jobs?page={n}&limit={N}`**
+  returning `{"jobs":[{"data":{…}}],"totalCount":int}`. Verified **uniform across tenants** (Garmin,
+  Constellation, Exelon, SIG, ICE, SITA share every core field), so **one generic `IcimsFetcher`** covers all
+  — per-platform, not per-company (D-017/D-004). The payload is **richer than Workday's**: `apply_url`, full
+  `description`, and a real ISO `update_date` are in the list response, so there's no lazy detail fetch and
+  `updated_at` is populated (a D-030 freshness win). Contract mirrors Workday: **paginate-or-fail** (short
+  tally → `FetchError`, never a partial list). `external_id = req_id` (D-016).
+- **Auth-gated / non-Jibe iCIMS tenants route to Layer 2**, like SuccessFactors. **Joby** (`/api/jobs` 404 —
+  custom site) and **Alaska** (legacy portal, no Jibe API) reclassified `detected → layer2`; ATS for Joby
+  unconfirmed (re-probe). A full D-015 fingerprint re-probe of the 38 `layer2` rows found **no other Jibe
+  tenants** (Garmin was the only misfiled one) but surfaced **Amadeus + Sabre as Workday** candidates for a
+  later data-only PR.
+- **Coverage:** +6 fetchable employers (~1,333 postings) — grid 24→28, aviation 7→9, total **31 → 37**
+  (iCIMS 6). Live-verified: Garmin returns 303 postings incl. US aviation-software SWE roles.
+**Why:** the long tail collapses into a few platforms (D-017); iCIMS's modern career-site API is one clean
+generic fetcher that both advances the D-018 coverage tier and resolves a concrete missed-match the builder hit.

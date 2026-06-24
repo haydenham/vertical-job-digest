@@ -1,0 +1,876 @@
+{
+  "jobs": [
+    {
+      "data": {
+        "slug": "18921",
+        "language": "en-us",
+        "languages": [
+          "en-us"
+        ],
+        "req_id": "18921",
+        "title": "Aircraft Systems Engineer 2 (Project Lead)",
+        "description": "Overview We are seeking a full-time Aircraft Systems Engineer 2 - Project Lead in our New Century, KS location. In this role, you will be responsible for leading avionics systems STC projects, coordin …[trimmed for fixture]",
+        "location_name": "New Century",
+        "street_address": "151 N NEW CENTURY PARKWAY",
+        "city": "New Century",
+        "state": "Kansas",
+        "country": "United States",
+        "country_code": "US",
+        "postal_code": "66031",
+        "location_type": "LAT_LNG",
+        "latitude": 38.8421694,
+        "longitude": -94.89469790000001,
+        "categories": [
+          {
+            "name": "Engineering"
+          }
+        ],
+        "tags": [
+          "Hiring Only"
+        ],
+        "tags1": [
+          "Aviation Operations & Aircraft Certification"
+        ],
+        "tags2": [
+          "Core Business Hours"
+        ],
+        "tags3": [
+          "Regular Full-Time"
+        ],
+        "tags6": [
+          "On-site"
+        ],
+        "tags7": [
+          "Garmin International"
+        ],
+        "tags9": [
+          "#LI-TB1"
+        ],
+        "promotion_value": 0,
+        "employment_type": "FULL_TIME",
+        "qualifications": "Basic Qualifications Bachelor’s Degree in Electrical, Mechanical, Aerospace, or Computer Engineering AND a minimum of 1 year relevant experience OR an equivalent combination of education and experienc …[trimmed for fixture]",
+        "hiring_organization": "Garmin International, Inc.",
+        "responsibilities": "Essential Functions Lead avionics and flight control system installation STC projects of simple to medium size and complexity with the ability to lead multiple simple STC projects simultaneously Gener …[trimmed for fixture]",
+        "posted_date": "2026-06-24T15:02:00+0000",
+        "apply_url": "https://careers-garmin.icims.com/jobs/18921/login",
+        "internal": false,
+        "external": false,
+        "searchable": true,
+        "applyable": true,
+        "li_easy_applyable": true,
+        "ats_code": "icims",
+        "isFrontLineAIJob": false,
+        "update_date": "2026-06-24T15:37:58+0000",
+        "create_date": "2026-06-24T15:03:44+0000",
+        "category": [
+          " Engineering"
+        ],
+        "full_location": "New Century, Kansas",
+        "short_location": "New Century, Kansas",
+        "multipleLocations": false
+      }
+    },
+    {
+      "data": {
+        "slug": "18411",
+        "language": "en-us",
+        "languages": [
+          "en-us"
+        ],
+        "req_id": "18411",
+        "title": "Material Handler Equipment (Weekend Shift)",
+        "description": "Overview We are seeking a full-time Material Handler - Equipment (Weekend Shift: Saturday-Tuesday 6am to 4:30pm) at Garmin's U.S. headquarters in the Greater Kansas City area. In this role, you will b …[trimmed for fixture]",
+        "location_name": "Olathe Building 5",
+        "street_address": "1100 E 151st St",
+        "city": "Olathe",
+        "state": "Kansas",
+        "country": "United States",
+        "country_code": "US",
+        "postal_code": "66062",
+        "location_type": "LAT_LNG",
+        "latitude": 38.8544725,
+        "longitude": -94.79733329999999,
+        "categories": [
+          {
+            "name": "Warehouse"
+          }
+        ],
+        "tags": [
+          "Hiring Only"
+        ],
+        "tags1": [
+          "Equipment Operation"
+        ],
+        "tags2": [
+          "Weekend"
+        ],
+        "tags3": [
+          "Regular Full-Time"
+        ],
+        "tags6": [
+          "On-site"
+        ],
+        "tags7": [
+          "Garmin International"
+        ],
+        "promotion_value": 0,
+        "employment_type": "FULL_TIME",
+        "qualifications": "Basic Qualifications High School Diploma or GED Possess a high degree of dexterity and eye coordination Must possess previous equipment related experience Must possess the ability to lift up to 55 pou …[trimmed for fixture]",
+        "hiring_organization": "Garmin International, Inc.",
+        "responsibilities": "Essential Functions Examine, sort, arrange, count, store, pick and pack items for storage/or shipment in accordance with established procedures/customer requirements Responsible for accuracy of invent …[trimmed for fixture]",
+        "posted_date": "2026-06-22T15:28:00+0000",
+        "apply_url": "https://careers-garmin.icims.com/jobs/18411/login",
+        "internal": false,
+        "external": false,
+        "searchable": true,
+        "applyable": true,
+        "li_easy_applyable": true,
+        "ats_code": "icims",
+        "isFrontLineAIJob": false,
+        "update_date": "2026-06-22T15:37:49+0000",
+        "create_date": "2026-06-16T20:56:27+0000",
+        "category": [
+          " Warehouse"
+        ],
+        "full_location": "Olathe, Kansas",
+        "short_location": "Olathe, Kansas",
+        "multipleLocations": false
+      }
+    },
+    {
+      "data": {
+        "slug": "18683",
+        "language": "en-us",
+        "languages": [
+          "en-us"
+        ],
+        "req_id": "18683",
+        "title": "Software Engineer - Fitness",
+        "description": "Overview We are seeking a full-time Software Engineer - Fitness at Garmin's U.S. headquarters in the Greater Kansas City area. In this role, you will be responsible for developing moderately complex s …[trimmed for fixture]",
+        "location_name": "Olathe",
+        "street_address": "1200 E 151st STREET",
+        "city": "Olathe",
+        "state": "Kansas",
+        "country": "United States",
+        "country_code": "US",
+        "postal_code": "66062",
+        "location_type": "LAT_LNG",
+        "latitude": 38.8563105,
+        "longitude": -94.8012047,
+        "categories": [
+          {
+            "name": "Engineering"
+          }
+        ],
+        "tags": [
+          "Hiring Only"
+        ],
+        "tags1": [
+          "Software Engineering"
+        ],
+        "tags2": [
+          "Core Business Hours"
+        ],
+        "tags3": [
+          "Regular Full-Time"
+        ],
+        "tags6": [
+          "On-site"
+        ],
+        "tags7": [
+          "Garmin International"
+        ],
+        "tags9": [
+          "#LI-MK1"
+        ],
+        "promotion_value": 0,
+        "employment_type": "FULL_TIME",
+        "qualifications": "Basic Qualifications Bachelor’s Degree in Computer Science, Electrical Engineering, Computer Engineering, Software Engineering, Aerospace Engineering, Math, Physics or related field AND a minimum of 5 …[trimmed for fixture]",
+        "hiring_organization": "Garmin International, Inc.",
+        "responsibilities": "Essential Functions Serves in a leadership capacity as an individual contributor for carrying out software development in C, C++, or other selected languages for new products and/or applications May s …[trimmed for fixture]",
+        "posted_date": "2026-05-15T20:00:00+0000",
+        "apply_url": "https://careers-garmin.icims.com/jobs/18683/login",
+        "internal": false,
+        "external": false,
+        "searchable": true,
+        "applyable": true,
+        "li_easy_applyable": true,
+        "ats_code": "icims",
+        "isFrontLineAIJob": false,
+        "update_date": "2026-05-21T15:30:43+0000",
+        "create_date": "2026-05-15T20:00:29+0000",
+        "category": [
+          " Engineering"
+        ],
+        "full_location": "Olathe, Kansas",
+        "short_location": "Olathe, Kansas",
+        "multipleLocations": false
+      }
+    }
+  ],
+  "locations": [],
+  "totalCount": 303,
+  "request_id": false,
+  "count": 303,
+  "languageCounts": {
+    "en-us": {
+      "displayName": "English",
+      "count": 303
+    }
+  },
+  "filter": {
+    "facetList": {
+      "tags1": [
+        {
+          "term": "Software Engineering",
+          "count": 81
+        },
+        {
+          "term": "Electrical/Design Engineering",
+          "count": 22
+        },
+        {
+          "term": "Aviation Operations & Aircraft Certification",
+          "count": 20
+        },
+        {
+          "term": "Aviation Support & Training",
+          "count": 17
+        },
+        {
+          "term": "Fitness Product Support",
+          "count": 13
+        },
+        {
+          "term": "Outdoor Product Support",
+          "count": 12
+        },
+        {
+          "term": "Mechanical Engineering",
+          "count": 11
+        },
+        {
+          "term": "Project Management",
+          "count": 9
+        },
+        {
+          "term": "Manufacturing Support",
+          "count": 8
+        },
+        {
+          "term": "Cyber Security",
+          "count": 7
+        },
+        {
+          "term": "Marine Product Support",
+          "count": 7
+        },
+        {
+          "term": "Media Marketing",
+          "count": 6
+        },
+        {
+          "term": "Assembly",
+          "count": 5
+        },
+        {
+          "term": "User Experience Design",
+          "count": 5
+        },
+        {
+          "term": "Accounting",
+          "count": 4
+        },
+        {
+          "term": "Business Analysts",
+          "count": 4
+        },
+        {
+          "term": "Cartography",
+          "count": 4
+        },
+        {
+          "term": "Equipment Operation",
+          "count": 4
+        },
+        {
+          "term": "Quality Engineering",
+          "count": 4
+        },
+        {
+          "term": "Systems Engineering",
+          "count": 4
+        },
+        {
+          "term": "Bilingual Product Support",
+          "count": 3
+        },
+        {
+          "term": "Consumer Sales",
+          "count": 3
+        },
+        {
+          "term": "Material Handling",
+          "count": 3
+        },
+        {
+          "term": "Purchasing",
+          "count": 3
+        },
+        {
+          "term": "Regional Sales",
+          "count": 3
+        },
+        {
+          "term": "Reliability / Calibration / EMC",
+          "count": 3
+        },
+        {
+          "term": "Accounts Receivable/Payable",
+          "count": 2
+        },
+        {
+          "term": "Administration",
+          "count": 2
+        },
+        {
+          "term": "Database Applications",
+          "count": 2
+        },
+        {
+          "term": "Engineering Business Development",
+          "count": 2
+        },
+        {
+          "term": "ERP Applications",
+          "count": 2
+        },
+        {
+          "term": "Industrial Design",
+          "count": 2
+        },
+        {
+          "term": "IT Service",
+          "count": 2
+        },
+        {
+          "term": "Machine Operation",
+          "count": 2
+        },
+        {
+          "term": "Manufacturing Engineering",
+          "count": 2
+        },
+        {
+          "term": "National Sales",
+          "count": 2
+        },
+        {
+          "term": "Warehouse Support",
+          "count": 2
+        },
+        {
+          "term": "Automotive Product Support",
+          "count": 1
+        },
+        {
+          "term": "CMF Engineering",
+          "count": 1
+        },
+        {
+          "term": "Creative Design",
+          "count": 1
+        },
+        {
+          "term": "Employment Law",
+          "count": 1
+        },
+        {
+          "term": "Facilities",
+          "count": 1
+        },
+        {
+          "term": "Field Services",
+          "count": 1
+        },
+        {
+          "term": "Inspection",
+          "count": 1
+        },
+        {
+          "term": "International Trade Compliance",
+          "count": 1
+        },
+        {
+          "term": "IT Infrastructure",
+          "count": 1
+        },
+        {
+          "term": "IT Operations",
+          "count": 1
+        },
+        {
+          "term": "Order Support",
+          "count": 1
+        },
+        {
+          "term": "Public Relations",
+          "count": 1
+        },
+        {
+          "term": "Retail Sales",
+          "count": 1
+        },
+        {
+          "term": "Support Services",
+          "count": 1
+        },
+        {
+          "term": "Talent Aquisition",
+          "count": 1
+        },
+        {
+          "term": "Technical Writing",
+          "count": 1
+        }
+      ],
+      "tags2": [
+        {
+          "term": "Core Business Hours",
+          "count": 260
+        },
+        {
+          "term": "Day - 1st Shift",
+          "count": 17
+        },
+        {
+          "term": "Evening - 2nd Shift",
+          "count": 14
+        },
+        {
+          "term": "Weekend",
+          "count": 11
+        },
+        {
+          "term": "Night - 3rd Shift",
+          "count": 1
+        }
+      ],
+      "tags3": [
+        {
+          "term": "Regular Full-Time",
+          "count": 302
+        },
+        {
+          "term": "Regular Part-Time",
+          "count": 1
+        }
+      ]
+    },
+    "displayLimit": 10,
+    "brands": {
+      "all": [],
+      "shortlist": []
+    },
+    "categories": {
+      "all": [
+        {
+          "category": "Engineering",
+          "numJobs": 160
+        },
+        {
+          "category": "Finance",
+          "numJobs": 6
+        },
+        {
+          "category": "Human Resources",
+          "numJobs": 1
+        },
+        {
+          "category": "Information Technology",
+          "numJobs": 30
+        },
+        {
+          "category": "Legal",
+          "numJobs": 1
+        },
+        {
+          "category": "Manufacturing",
+          "numJobs": 13
+        },
+        {
+          "category": "Marketing and Communications",
+          "numJobs": 9
+        },
+        {
+          "category": "Operations",
+          "numJobs": 21
+        },
+        {
+          "category": "Product Support",
+          "numJobs": 37
+        },
+        {
+          "category": "Quality",
+          "numJobs": 6
+        },
+        {
+          "category": "Sales",
+          "numJobs": 11
+        },
+        {
+          "category": "Warehouse",
+          "numJobs": 8
+        }
+      ],
+      "shortlist": [
+        {
+          "category": "Engineering",
+          "numJobs": 160
+        },
+        {
+          "category": "Finance",
+          "numJobs": 6
+        },
+        {
+          "category": "Human Resources",
+          "numJobs": 1
+        },
+        {
+          "category": "Information Technology",
+          "numJobs": 30
+        },
+        {
+          "category": "Legal",
+          "numJobs": 1
+        },
+        {
+          "category": "Manufacturing",
+          "numJobs": 13
+        },
+        {
+          "category": "Marketing and Communications",
+          "numJobs": 9
+        },
+        {
+          "category": "Operations",
+          "numJobs": 21
+        },
+        {
+          "category": "Product Support",
+          "numJobs": 37
+        },
+        {
+          "category": "Quality",
+          "numJobs": 6
+        },
+        {
+          "category": "Sales",
+          "numJobs": 11
+        },
+        {
+          "category": "Warehouse",
+          "numJobs": 8
+        }
+      ]
+    },
+    "locations": {
+      "all": [
+        {
+          "city": "Atlanta",
+          "state": "Georgia",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Austin",
+          "state": "Texas",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Boulder",
+          "state": "Colorado",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Cary",
+          "state": "North Carolina",
+          "country": "United States",
+          "count": 10
+        },
+        {
+          "city": "Chandler",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 11
+        },
+        {
+          "city": "Chanhassen",
+          "state": "Minnesota",
+          "country": "United States",
+          "count": 2
+        },
+        {
+          "city": "Chicago",
+          "state": "Illinois",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Cochrane",
+          "state": "Alberta",
+          "country": "Canada",
+          "count": 2
+        },
+        {
+          "city": "Dartmouth",
+          "state": "Massachusetts",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Lenexa",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Mesa",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 7
+        },
+        {
+          "city": "Miramar",
+          "state": "Florida",
+          "country": "United States",
+          "count": 8
+        },
+        {
+          "city": "New Century",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 5
+        },
+        {
+          "city": "Olathe",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 215
+        },
+        {
+          "city": "Orlando",
+          "state": "Florida",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Portland",
+          "state": "Oregon",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Salem",
+          "state": "Oregon",
+          "country": "United States",
+          "count": 27
+        },
+        {
+          "city": "Salt Lake City",
+          "state": "Utah",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Scottsdale",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "St. Louis",
+          "state": "Missouri",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Tucson",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 5
+        },
+        {
+          "city": "Tulsa",
+          "state": "Oklahoma",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Wichita",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Yarmouth",
+          "state": "Maine",
+          "country": "United States",
+          "count": 5
+        }
+      ],
+      "shortlist": [
+        {
+          "city": "Atlanta",
+          "state": "Georgia",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Austin",
+          "state": "Texas",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Boulder",
+          "state": "Colorado",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Cary",
+          "state": "North Carolina",
+          "country": "United States",
+          "count": 10
+        },
+        {
+          "city": "Chandler",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 11
+        },
+        {
+          "city": "Chanhassen",
+          "state": "Minnesota",
+          "country": "United States",
+          "count": 2
+        },
+        {
+          "city": "Chicago",
+          "state": "Illinois",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Cochrane",
+          "state": "Alberta",
+          "country": "Canada",
+          "count": 2
+        },
+        {
+          "city": "Dartmouth",
+          "state": "Massachusetts",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Lenexa",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Mesa",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 7
+        },
+        {
+          "city": "Miramar",
+          "state": "Florida",
+          "country": "United States",
+          "count": 8
+        },
+        {
+          "city": "New Century",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 5
+        },
+        {
+          "city": "Olathe",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 215
+        },
+        {
+          "city": "Orlando",
+          "state": "Florida",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Portland",
+          "state": "Oregon",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Salem",
+          "state": "Oregon",
+          "country": "United States",
+          "count": 27
+        },
+        {
+          "city": "Salt Lake City",
+          "state": "Utah",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Scottsdale",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "St. Louis",
+          "state": "Missouri",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Tucson",
+          "state": "Arizona",
+          "country": "United States",
+          "count": 5
+        },
+        {
+          "city": "Tulsa",
+          "state": "Oklahoma",
+          "country": "United States",
+          "count": 1
+        },
+        {
+          "city": "Wichita",
+          "state": "Kansas",
+          "country": "United States",
+          "count": 3
+        },
+        {
+          "city": "Yarmouth",
+          "state": "Maine",
+          "country": "United States",
+          "count": 5
+        }
+      ]
+    },
+    "experienceLevels": {
+      "all": [],
+      "shortlist": []
+    }
+  }
+}

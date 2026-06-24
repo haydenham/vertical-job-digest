@@ -140,10 +140,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Coverage / fetchers
 
-- **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (iCIMS/Workable/
-  Oracle/SmartRecruiters) → Layer-2 LLM-read for the custom tail + HN/niche. (D-018)
+- **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS done** →
+  Workable/Oracle/SmartRecruiters next) → Layer-2 LLM-read for the custom tail + HN/niche. (D-018, D-048)
 - **Workday `cxs` fetcher is list-only + paginate-or-fail;** `osv-` Workday hosts route to
   Layer 2; a tenant board exceeding Workday's ~4000 offset cap also routes to Layer 2
   (paginate-or-fail rejects the truncated page — RTX, D-046). (D-032, D-046)
+- **iCIMS fetcher targets the Career Sites (Jibe) `GET {careers_base}/api/jobs` JSON API, not the
+  legacy portal.** One generic fetcher (uniform payload across tenants); paginate-or-fail; rich list
+  (`apply_url` + full `description` + ISO `update_date`, no detail fetch). Legacy-portal / non-Jibe /
+  auth-gated iCIMS tenants route to Layer 2. (D-048)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
   Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)
