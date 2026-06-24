@@ -6,7 +6,9 @@ from vja.fetchers.ashby import AshbyFetcher
 from vja.fetchers.greenhouse import GreenhouseFetcher
 from vja.fetchers.icims import IcimsFetcher
 from vja.fetchers.lever import LeverFetcher
+from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.registry import SUPPORTED_ATS_TYPES, get_fetcher
+from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workable import WorkableFetcher
 from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType
@@ -19,6 +21,8 @@ def test_each_layer1_ats_maps_to_its_fetcher() -> None:
     assert isinstance(get_fetcher(AtsType.WORKDAY), WorkdayFetcher)
     assert isinstance(get_fetcher(AtsType.ICIMS), IcimsFetcher)
     assert isinstance(get_fetcher(AtsType.WORKABLE), WorkableFetcher)
+    assert isinstance(get_fetcher(AtsType.SMARTRECRUITERS), SmartRecruitersFetcher)
+    assert isinstance(get_fetcher(AtsType.ORACLE_HCM), OracleFetcher)
 
 
 def test_returned_fetcher_reports_matching_ats_type() -> None:
@@ -27,7 +31,7 @@ def test_returned_fetcher_reports_matching_ats_type() -> None:
 
 
 def test_unsupported_ats_type_raises() -> None:
-    # Oracle HCM is a known ATS but has no Layer-1 fetcher yet (Tier B, docs/07).
-    assert AtsType.ORACLE_HCM not in SUPPORTED_ATS_TYPES
+    # Jobvite is a known ATS but has no Layer-1 fetcher yet (Tier B/C, docs/07).
+    assert AtsType.JOBVITE not in SUPPORTED_ATS_TYPES
     with pytest.raises(ValueError, match="no Layer-1 fetcher"):
-        get_fetcher(AtsType.ORACLE_HCM)
+        get_fetcher(AtsType.JOBVITE)

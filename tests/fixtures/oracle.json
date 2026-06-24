@@ -1,0 +1,418 @@
+{
+  "items" : [ {
+    "SearchId" : 1,
+    "Keyword" : null,
+    "CorrectedKeyword" : null,
+    "UseExactKeywordFlag" : false,
+    "SuggestedKeyword" : null,
+    "ExecuteSpellCheckFlag" : true,
+    "Location" : null,
+    "LocationId" : null,
+    "Radius" : 0,
+    "RadiusUnit" : "MI",
+    "SelectedTitlesFacet" : null,
+    "SelectedCategoriesFacet" : null,
+    "SelectedPostingDatesFacet" : null,
+    "SelectedLocationsFacet" : null,
+    "LastSelectedFacet" : null,
+    "Facets" : "TITLES;LOCATIONS;LOCATION_LEVEL1;LOCATION_LEVEL2;LOCATION_LEVEL3;CATEGORIES;POSTING_DATES;WORK_LOCATIONS;FLEX_FIELDS;ORGANIZATIONS;WORKPLACE_TYPES",
+    "Offset" : 0,
+    "Limit" : 3,
+    "SortBy" : "RELEVANCY",
+    "TotalJobsCount" : 105,
+    "Latitude" : null,
+    "Longitude" : null,
+    "SiteNumber" : "CX_1001",
+    "JobFamilyId" : null,
+    "PostingStartDate" : null,
+    "PostingEndDate" : null,
+    "SelectedWorkLocationsFacet" : null,
+    "RequisitionId" : null,
+    "CandidateNumber" : null,
+    "WorkLocationZipCode" : null,
+    "WorkLocationCountryCode" : null,
+    "SelectedFlexFieldsFacets" : null,
+    "OrganizationId" : null,
+    "SelectedOrganizationsFacet" : null,
+    "UserTargetFacetName" : null,
+    "UserTargetFacetInputTerm" : null,
+    "HotJobFlag" : null,
+    "WorkplaceType" : null,
+    "SelectedWorkplaceTypesFacet" : null,
+    "BotQRShortCode" : null,
+    "requisitionList" : [ {
+      "Id" : "16280",
+      "Title" : "Radiation Protection Supervisor - Plant Hatch",
+      "PostedDate" : "2026-06-23",
+      "PostingEndDate" : null,
+      "Language" : "US",
+      "PrimaryLocationCountry" : "US",
+      "GeographyId" : 300000003990811,
+      "HotJobFlag" : false,
+      "WorkplaceTypeCode" : null,
+      "JobFamily" : null,
+      "JobFunction" : null,
+      "WorkerType" : null,
+      "ContractType" : null,
+      "ManagerLevel" : null,
+      "JobSchedule" : null,
+      "JobShift" : null,
+      "JobType" : null,
+      "StudyLevel" : null,
+      "DomesticTravelRequired" : null,
+      "InternationalTravelRequired" : null,
+      "WorkDurationYears" : null,
+      "WorkDurationMonths" : null,
+      "WorkHours" : null,
+      "WorkDays" : null,
+      "LegalEmployer" : null,
+      "BusinessUnit" : null,
+      "Department" : null,
+      "Organization" : null,
+      "BusinessUnitId" : 300000003607653,
+      "LegalEmployerId" : 300000003947290,
+      "OrganizationId" : 300000003947290,
+      "MediaThumbURL" : null,
+      "ShortDescriptionStr" : "",
+      "PrimaryLocation" : "Baxley, GA, United States",
+      "Distance" : 9,
+      "TrendingFlag" : false,
+      "BeFirstToApplyFlag" : true,
+      "Relevancy" : 9,
+      "WorkplaceType" : "",
+      "ExternalQualificationsStr" : null,
+      "ExternalResponsibilitiesStr" : null,
+      "secondaryLocations" : [ ]
+    }, {
+      "Id" : "17305",
+      "Title" : "Corrosion Technician III",
+      "PostedDate" : "2026-06-24",
+      "PostingEndDate" : null,
+      "Language" : "US",
+      "PrimaryLocationCountry" : "US",
+      "GeographyId" : 300000003993893,
+      "HotJobFlag" : false,
+      "WorkplaceTypeCode" : null,
+      "JobFamily" : null,
+      "JobFunction" : null,
+      "WorkerType" : null,
+      "ContractType" : null,
+      "ManagerLevel" : null,
+      "JobSchedule" : null,
+      "JobShift" : null,
+      "JobType" : null,
+      "StudyLevel" : null,
+      "DomesticTravelRequired" : null,
+      "InternationalTravelRequired" : null,
+      "WorkDurationYears" : null,
+      "WorkDurationMonths" : null,
+      "WorkHours" : null,
+      "WorkDays" : null,
+      "LegalEmployer" : null,
+      "BusinessUnit" : null,
+      "Department" : null,
+      "Organization" : null,
+      "BusinessUnitId" : 300000003607590,
+      "LegalEmployerId" : 300000003609432,
+      "OrganizationId" : 300000003606345,
+      "MediaThumbURL" : null,
+      "ShortDescriptionStr" : "",
+      "PrimaryLocation" : "Riverdale, GA, United States",
+      "Distance" : 9,
+      "TrendingFlag" : false,
+      "BeFirstToApplyFlag" : false,
+      "Relevancy" : 9,
+      "WorkplaceType" : "",
+      "ExternalQualificationsStr" : null,
+      "ExternalResponsibilitiesStr" : null,
+      "secondaryLocations" : [ ]
+    }, {
+      "Id" : "18868",
+      "Title" : "Solar Operations Technician – Henrietta Solar Project",
+      "PostedDate" : "2026-06-23",
+      "PostingEndDate" : null,
+      "Language" : "US",
+      "PrimaryLocationCountry" : "US",
+      "GeographyId" : 300000004009809,
+      "HotJobFlag" : false,
+      "WorkplaceTypeCode" : null,
+      "JobFamily" : null,
+      "JobFunction" : null,
+      "WorkerType" : null,
+      "ContractType" : null,
+      "ManagerLevel" : null,
+      "JobSchedule" : null,
+      "JobShift" : null,
+      "JobType" : null,
+      "StudyLevel" : null,
+      "DomesticTravelRequired" : null,
+      "InternationalTravelRequired" : null,
+      "WorkDurationYears" : null,
+      "WorkDurationMonths" : null,
+      "WorkHours" : null,
+      "WorkDays" : null,
+      "LegalEmployer" : null,
+      "BusinessUnit" : null,
+      "Department" : null,
+      "Organization" : null,
+      "BusinessUnitId" : 300000003607659,
+      "LegalEmployerId" : 300000003606306,
+      "OrganizationId" : 300000003606306,
+      "MediaThumbURL" : null,
+      "ShortDescriptionStr" : "",
+      "PrimaryLocation" : "Lemoore, CA, United States",
+      "Distance" : 9,
+      "TrendingFlag" : false,
+      "BeFirstToApplyFlag" : false,
+      "Relevancy" : 9,
+      "WorkplaceType" : "",
+      "ExternalQualificationsStr" : null,
+      "ExternalResponsibilitiesStr" : null,
+      "secondaryLocations" : [ ]
+    } ],
+    "categoriesFacet" : [ {
+      "Id" : 300004178005052,
+      "Name" : "Engineering",
+      "TotalCount" : 25
+    }, {
+      "Id" : 300004178005133,
+      "Name" : "Information Technology",
+      "TotalCount" : 12
+    }, {
+      "Id" : 300004178004933,
+      "Name" : "Accounting & Auditing",
+      "TotalCount" : 7
+    }, {
+      "Id" : 300004178005212,
+      "Name" : "Power Plant Operations & Maintenance",
+      "TotalCount" : 7
+    }, {
+      "Id" : 300004178005022,
+      "Name" : "Construction",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300004178005058,
+      "Name" : "Environmental & Forestry",
+      "TotalCount" : 4
+    }, {
+      "Id" : 300004178005064,
+      "Name" : "Facilities & Building Services",
+      "TotalCount" : 4
+    }, {
+      "Id" : 300004178005206,
+      "Name" : "Power Line Operations & Maintenance",
+      "TotalCount" : 4
+    }, {
+      "Id" : 300004178005572,
+      "Name" : "Safety & Health",
+      "TotalCount" : 4
+    }, {
+      "Id" : 300004178005077,
+      "Name" : "Fleet & Automotive Services",
+      "TotalCount" : 3
+    } ],
+    "locationsFacet" : [ {
+      "Id" : 300000000317426,
+      "Name" : "United States",
+      "TotalCount" : 105
+    }, {
+      "Id" : 300000003949074,
+      "Name" : "GA, United States",
+      "TotalCount" : 75
+    }, {
+      "Id" : 300000004003688,
+      "Name" : "Atlanta, GA, United States",
+      "TotalCount" : 50
+    }, {
+      "Id" : 300000003949062,
+      "Name" : "AL, United States",
+      "TotalCount" : 31
+    }, {
+      "Id" : 300000004008676,
+      "Name" : "Birmingham, AL, United States",
+      "TotalCount" : 27
+    }, {
+      "Id" : 300000003990811,
+      "Name" : "Baxley, GA, United States",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300000003997210,
+      "Name" : "Waynesboro, GA, United States",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300000003949078,
+      "Name" : "IL, United States",
+      "TotalCount" : 5
+    }, {
+      "Id" : 300000003949090,
+      "Name" : "MS, United States",
+      "TotalCount" : 5
+    }, {
+      "Id" : 300000003993884,
+      "Name" : "Forest Park, GA, United States",
+      "TotalCount" : 5
+    } ],
+    "postingDatesFacet" : [ {
+      "Id" : 7,
+      "Name" : "Less than 7 days",
+      "TotalCount" : 50
+    }, {
+      "Id" : 30,
+      "Name" : "Less than 30 days",
+      "TotalCount" : 104
+    }, {
+      "Id" : 31,
+      "Name" : "Greater than 30 days",
+      "TotalCount" : 1
+    } ],
+    "titlesFacet" : [ {
+      "Id" : "ENGIN",
+      "Name" : "Engineering",
+      "TotalCount" : 21
+    }, {
+      "Id" : "IT",
+      "Name" : "Information Technology",
+      "TotalCount" : 9
+    }, {
+      "Id" : "ACCFINTRE",
+      "Name" : "Accounting/Finance/Treasury",
+      "TotalCount" : 8
+    }, {
+      "Id" : "PROJMAN",
+      "Name" : "Project/Program Management",
+      "TotalCount" : 8
+    }, {
+      "Id" : "016",
+      "Name" : "Gas Operations",
+      "TotalCount" : 5
+    }, {
+      "Id" : "ADMINSER",
+      "Name" : "Administrative Services",
+      "TotalCount" : 5
+    }, {
+      "Id" : "ENVHEALTH",
+      "Name" : "Environmental Health and Safety",
+      "TotalCount" : 5
+    }, {
+      "Id" : "MN1",
+      "Name" : "Lineworker",
+      "TotalCount" : 4
+    }, {
+      "Id" : "POWDEL",
+      "Name" : "Power Delivery",
+      "TotalCount" : 4
+    }, {
+      "Id" : "REALEST",
+      "Name" : "Real Estate and Facilities",
+      "TotalCount" : 4
+    } ],
+    "workLocationsFacet" : [ {
+      "Id" : 300000442396335,
+      "Name" : "Georgia Power Corp HQ",
+      "TotalCount" : 17
+    }, {
+      "Id" : 300000442975454,
+      "Name" : "The Energy Center",
+      "TotalCount" : 10
+    }, {
+      "Id" : 300000442396377,
+      "Name" : "Georgia Power Corp HQ",
+      "TotalCount" : 9
+    }, {
+      "Id" : 300000442980099,
+      "Name" : "Plant Hatch",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300008431526637,
+      "Name" : "Southern Co Gas Corp HQ-West Peachtree",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300000442395882,
+      "Name" : "Gen Sv Hdqr-Forest Park",
+      "TotalCount" : 5
+    }, {
+      "Id" : 300000442396455,
+      "Name" : "Alabama Power Corp HQ",
+      "TotalCount" : 5
+    }, {
+      "Id" : 300000442909763,
+      "Name" : "Plant Vogtle 3 & 4",
+      "TotalCount" : 5
+    }, {
+      "Id" : 300000442396437,
+      "Name" : "Alabama Power Corp HQ",
+      "TotalCount" : 4
+    }, {
+      "Id" : 300000442909552,
+      "Name" : "Plant Vogtle 1 & 2",
+      "TotalCount" : 4
+    } ],
+    "flexFieldsFacet" : [ ],
+    "organizationsFacet" : [ {
+      "Id" : 300000003947233,
+      "Name" : "Georgia Power Company",
+      "TotalCount" : 37
+    }, {
+      "Id" : 300000003607396,
+      "Name" : "Southern Company Services, Inc.",
+      "TotalCount" : 30
+    }, {
+      "Id" : 300000003947290,
+      "Name" : "Southern Nuclear Company",
+      "TotalCount" : 12
+    }, {
+      "Id" : 300000003606345,
+      "Name" : "AGL Services Company",
+      "TotalCount" : 10
+    }, {
+      "Id" : 300000003609413,
+      "Name" : "Alabama Power Company",
+      "TotalCount" : 6
+    }, {
+      "Id" : 300000003607434,
+      "Name" : "Nicor Gas Company",
+      "TotalCount" : 3
+    }, {
+      "Id" : 300000003608524,
+      "Name" : "Mississippi Power Company",
+      "TotalCount" : 3
+    }, {
+      "Id" : 300000003606306,
+      "Name" : "Southern Power Company",
+      "TotalCount" : 2
+    }, {
+      "Id" : 300000003608543,
+      "Name" : "Southern Communications Services, Inc.",
+      "TotalCount" : 1
+    }, {
+      "Id" : 300000003608581,
+      "Name" : "Virginia Natural Gas, Inc.",
+      "TotalCount" : 1
+    } ],
+    "workplaceTypesFacet" : [ {
+      "Id" : "ORA_ON_SITE",
+      "Name" : "On-site",
+      "TotalCount" : 105
+    } ]
+  } ],
+  "count" : 1,
+  "hasMore" : false,
+  "limit" : 200,
+  "offset" : 0,
+  "links" : [ {
+    "rel" : "self",
+    "href" : "https://emje.fa.us6.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions",
+    "name" : "recruitingCEJobRequisitions",
+    "kind" : "collection"
+  }, {
+    "rel" : "action",
+    "href" : "https://emje.fa.us6.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionsLocationCoordinates",
+    "name" : "getRequisitionsLocationCoordinates",
+    "kind" : "other"
+  }, {
+    "rel" : "action",
+    "href" : "https://emje.fa.us6.oraclecloud.com:443/hcmRestApi/resources/11.13.18.05/recruitingCEJobRequisitions/action/getRequisitionDetailsForMap",
+    "name" : "getRequisitionDetailsForMap",
+    "kind" : "other"
+  } ]
+}

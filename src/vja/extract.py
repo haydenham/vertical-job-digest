@@ -6,9 +6,11 @@ schema-validated result. Runs only on open postings with `extracted_at IS NULL` 
 Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once, then pennies a
 night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
 
-Source text per posting: for Workday (list-only, D-032) the description is fetched lazily via the
-cxs detail endpoint; every other ATS already carries it in `raw_payload`. Either way the raw
-payload is handed to the model, which extracts from messy input — the point of all-LLM extraction.
+Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM — their list
+endpoints omit the job description) fetch it lazily, per in-scope survivor, via their `fetch_detail`
+(routed by `_DETAIL_RESOLVERS`); every other ATS already carries the description in `raw_payload`.
+Either way the raw payload is handed to the model, which extracts from messy input — the point of
+all-LLM extraction.
 """
 
 from __future__ import annotations
@@ -32,6 +34,8 @@ from vja.db.postings import (
     postings_needing_extraction,
     save_extraction,
 )
+from vja.fetchers.oracle import OracleFetcher
+from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType, Employer, Level, RemoteType
 from vja.prefilter import PrefilterConfig, passes_prefilter
@@ -61,6 +65,22 @@ only what the posting states; use the unknown/empty value when a field is absent
 - posted_at: the posting/start date if present (ISO 8601 preferred); null otherwise."""
 
 DetailResolver = Callable[[Employer, str], dict[str, Any]]
+
+#: The **list-only** ATSs whose list endpoint omits the job description, keyed to the fetcher method
+#: that lazily fetches one posting's full body (called only for in-scope survivors — cost
+#: discipline, D-035). Membership here *is* "needs a lazy detail fetch"; every other ATS carries the
+#: description in `raw_payload`. One map, so adding a list-only ATS is a one-line wire-up (no `if`).
+_DETAIL_RESOLVERS: dict[AtsType, DetailResolver] = {
+    AtsType.WORKDAY: WorkdayFetcher().fetch_detail,
+    AtsType.SMARTRECRUITERS: SmartRecruitersFetcher().fetch_detail,
+    AtsType.ORACLE_HCM: OracleFetcher().fetch_detail,
+}
+
+
+def _default_detail_resolver(employer: Employer, external_id: str) -> dict[str, Any]:
+    """Route a list-only employer to its ATS's `fetch_detail`. Only called for ATSs in
+    `_DETAIL_RESOLVERS` (see `_source_text`), so the lookup always hits."""
+    return _DETAIL_RESOLVERS[employer.ats_type](employer, external_id)
 
 
 class ExtractedFields(BaseModel):
@@ -104,8 +124,9 @@ def fields_to_columns(fields: ExtractedFields) -> dict[str, Any]:
 
 
 def _source_text(candidate: ExtractionCandidate, resolve_detail: DetailResolver) -> str:
-    """The text handed to the model: the raw payload (Workday: the lazily-fetched cxs detail)."""
-    if candidate.employer.ats_type == AtsType.WORKDAY:
+    """The text handed to the model: the raw payload, or — for the list-only ATSs
+    (`_DETAIL_RESOLVERS`) — the lazily-fetched detail body."""
+    if candidate.employer.ats_type in _DETAIL_RESOLVERS:
         payload: Any = resolve_detail(candidate.employer, candidate.external_id)
     else:
         payload = candidate.raw_payload
@@ -152,7 +173,7 @@ def run_extraction(
     """
     stamp = now or datetime.now(UTC)
     cli = client or Anthropic()
-    detail = resolve_detail or WorkdayFetcher().fetch_detail
+    detail = resolve_detail or _default_detail_resolver
 
     candidates = [
         c for c in postings_needing_extraction(engine, vertical) if in_scope(c.title, scope)

@@ -19,23 +19,24 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Ashby** | 1 | clean JSON (`posting-api`) | 1 verified | **A** |
 | **iCIMS** | 4 | per-company JSON API | detected | **B** |
 | **Workable** | 2 | clean JSON (`widget/accounts`) | 2 verified (built, D-049) | **B** |
-| **Oracle HCM** | 2 | JSON API (recruiting cloud) | detected | **B** |
-| **SmartRecruiters** | 1 | clean public API | detected | **B** |
+| **Oracle HCM** | 1 | CE REST API (recruiting cloud) | 1 verified (built, D-051); 2 → Layer 2 (host not found) | **B** |
+| **SmartRecruiters** | 1 | clean public API | 1 verified (built, D-050) | **B** |
 | **Jobvite** | 1 | feed/HTML, messy | detected | **C** |
 | **SuccessFactors** | 1 | OData, often auth-gated | detected | **C** |
 | **Avature** | 1 | per-client, no std API | detected | **C** |
 | **UKG/UltiPro** | 1 | recruiting API | detected | **C** |
 | **Eightfold** | 1 | JSON API | detected | **C** |
 | **Radancy/Phenom** | 3 | enterprise portal, no clean JSON | layer2 | **D** |
-| **Custom** | 13 | no API | layer2 | **D** |
+| **Custom** | 14 | no API | layer2 | **D** |
 
 ## What this means for the build
 
 - **4 fetchers (Tier A: Workday, Greenhouse, Lever, Ashby) cover 24/54 (44%)** — and they're the cleanest APIs.
   Workday alone is 15 and is **live-verified** (the `cxs` POST returns job counts: AES 111, Vistra 193, S&P 234, Shell 174, etc.).
-- **+4 fetchers (Tier B: iCIMS, Workable, Oracle HCM, SmartRecruiters) → 33/54 (61%)** with 8 fetchers total.
+- **+4 fetchers (Tier B: iCIMS 4, Workable 2, SmartRecruiters 1, Oracle HCM 1 built) → 32/54 (59%)** with 8 fetchers
+  total. (Con Edison's Oracle host wasn't found → Layer 2; so 1 of the 2 grid Oracle tenants is fetchable, D-051.)
 - **Tier C is 5 singletons** — build opportunistically (SmartRecruiters/Workable-grade easy ones first; defer auth-gated SuccessFactors).
-- **Tier D (16/54, 30%) → Layer 2 LLM-read**, exactly as the architecture intends. These are the Radancy/Phenom
+- **Tier D (17/54, 31%) → Layer 2 LLM-read**, exactly as the architecture intends. These are the Radancy/Phenom
   enterprise portals + truly custom sites. No per-company scrapers — the LLM-read fallback handles them generically.
 
 **Deterministic ceiling ≈ 38/54 (70%)** reachable with ~8 generic platform fetchers; the remaining ~30% is Layer 2.
@@ -53,15 +54,27 @@ This vindicates the "don't write N custom scrapers" call (D-017): the long tail 
    `GET apply.workable.com/api/v1/widget/accounts/{slug}?details=true` (slug-derived, **single-response**,
    not paginated → the Greenhouse single-request false-closure guard). Rich list (`apply_url`/`description`/
    `published_on` inline). +2 fetchable (Vortexa, Energy Aspects).
-5. **SmartRecruiters, Oracle HCM** (rest of Tier B) — next.
-6. **Tier C singletons** — as time allows.
-7. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
+5. **SmartRecruiters** (Tier B, Phase 8 — **done**, D-050) — via the public postings API
+   `GET api.smartrecruiters.com/v1/companies/{slug}/postings` (slug-derived; limit/offset per page).
+   **List-only + paginate-or-fail** on `totalFound` (Workday parity): the list omits the description +
+   apply URL, so `apply_url` is constructed (`jobs.smartrecruiters.com/{slug}/{id}`) and the description
+   is a lazy `fetch_detail`. +1 fetchable (Vitol).
+6. **Oracle HCM / ORC** (Tier B, Phase 8 — **done**, D-051) — via the Candidate-Experience REST API
+   `GET {host}/hcmRestApi/.../recruitingCEJobRequisitions?…&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber={CX_n}`
+   (explicit per-tenant endpoint; **list-only + paginate-or-fail** on `TotalJobsCount`; `apply_url`
+   constructed from `careers_url`; description a lazy `fetch_detail`). +1 fetchable (Southern Company).
+   Honeywell (vanity domain proxies the REST API 302→404) + Con Edison (host not exposed) → Layer 2
+   until a canonical host + siteNumber is curated (then config-only onboard).
+7. **Tier C singletons** — as time allows.
+8. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
 
 ## Endpoint encoding in the seed CSV
-- **Greenhouse/Lever/Ashby/Workable:** `ats_slug` = the slug; `endpoint` = constructed API URL.
+- **Greenhouse/Lever/Ashby/Workable/SmartRecruiters:** `ats_slug` = the slug; `endpoint` derived from it.
 - **Workday:** `ats_slug` = `tenant:dc:site` (e.g. `aes:wd1:AES_US`); `endpoint` = full `cxs` jobs URL.
   Fetch = `POST {endpoint}` with body `{"limit":20,"offset":0,"appliedFacets":{},"searchText":""}`, paginate by `offset`.
-- **iCIMS/Oracle/SmartRecruiters/etc. (detected):** `careers_url` holds the portal; `ats_slug`/`endpoint` to be filled when the fetcher is built.
+- **iCIMS/Oracle (explicit per-tenant):** `endpoint` holds the full API URL (iCIMS Jibe `/api/jobs`;
+  Oracle the CE `recruitingCEJobRequisitions` URL incl. `siteNumber`); `careers_url` is the apply base.
+- **Still-detected portals (Jobvite/SuccessFactors/etc.):** `careers_url` holds the portal; `ats_slug`/`endpoint` to be filled when the fetcher is built.
 - **layer2:** `careers_url` only; routed to LLM-read.
 
 ## Known fixups (detected, not yet verified)

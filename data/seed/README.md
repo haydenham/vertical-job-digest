@@ -44,13 +44,16 @@ For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from
 For Workday, `endpoint` holds the full `cxs` jobs URL. Portal-detected (iCIMS/Oracle/etc.) and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)
-After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8 iCIMS/Workable onboards:
-- **30 verified**: Greenhouse (5), Lever (3), Ashby (1), 15 Workday, **2 Workable (Vortexa, Energy
-  Aspects — Phase 8)**, **4 iCIMS/Jibe (Constellation, Exelon, SIG, ICE — Phase 8)**. All 30 are
-  **fetchable today** (Workable now has a generic fetcher, D-049).
-- **9 detected** (platform known, endpoint TBD): Oracle HCM (2), SmartRecruiters, Jobvite (2),
-  SuccessFactors, Avature, UKG, Eightfold.
-- **15 layer2** (no clean API → LLM-read): 3 Radancy/Phenom portals + custom sites.
+After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8
+iCIMS/Workable/SmartRecruiters/Oracle onboards:
+- **32 verified**: Greenhouse (5), Lever (3), Ashby (1), 15 Workday, **2 Workable (Vortexa, Energy
+  Aspects — Phase 8)**, **4 iCIMS/Jibe (Constellation, Exelon, SIG, ICE — Phase 8)**,
+  **1 SmartRecruiters (Vitol — Phase 8, D-050)**, **1 Oracle ORC (Southern Company — Phase 8, D-051)**.
+  All 32 are **fetchable today**.
+- **6 detected** (platform known, no generic fetcher yet): Jobvite (2), SuccessFactors, Avature,
+  UKG, Eightfold.
+- **16 layer2** (no clean API → LLM-read): 3 Radancy/Phenom portals + custom sites, incl. **Con
+  Edison** (Oracle ORC but its host isn't exposed — curate canonical host+siteNumber to onboard).
 
 **Deterministic ceiling ≈ 70%** of the universe via ~8 generic platform fetchers; ~30% routes to Layer 2.
 
@@ -61,13 +64,14 @@ eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass 
 - **11 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
   Ashby (1 — Beacon AI), Workday (5 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**),
   **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**.
-- **2 detected** (platform known, no generic fetcher yet): SuccessFactors (JetBlue), Oracle HCM (Honeywell).
-- **23 layer2** (no clean API → LLM-read): Phenom/Radancy portals (United, Southwest, L3Harris, Thales)
+- **1 detected** (platform known, no generic fetcher yet): SuccessFactors (JetBlue).
+- **24 layer2** (no clean API → LLM-read): Phenom/Radancy portals (United, Southwest, L3Harris, Thales)
   + custom/JS-rendered sites (the flight-data, ATM, and remaining OEM/airline tail). Includes
   Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046),
   **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`), **Joby** (no Jibe API; ATS unconfirmed —
-  re-probe), and **Delta** (Avature: per-job JSON-LD but a 202 bot-challenge blocks server-side list
-  fetch). Note: the Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer
+  re-probe), **Honeywell** (Oracle ORC, but its vanity domain proxies the REST API 302→404 — curate
+  canonical host+siteNumber to onboard), and **Delta** (Avature: per-job JSON-LD but a 202 bot-challenge
+  blocks server-side list fetch). Note: the Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer
   Aviation is custom/Layer 2.
 
 The big aerospace Workday boards are whole-company (Collins/RTX 4161, Airbus 2000, Boeing 1168, mostly

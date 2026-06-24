@@ -644,3 +644,66 @@ per-platform fetcher (D-017/D-004), not a per-company scraper.
 **Why:** the long tail collapses into a few platforms (D-017); Workable's embed widget is the cleanest
 remaining Tier-B API (clean JSON, slug-derivable, single-response), so it's the lowest-risk next coverage
 step and follows the documented build order (D-018).
+
+### D-050 · Phase 8 Tier-B: SmartRecruiters fetcher via the public postings API · accepted · 2026-06-24
+Third Phase-8 (D-018 Tier-B) fetcher, after iCIMS (D-048) + Workable (D-049). SmartRecruiters exposes
+a clean, unauthenticated **public postings API** on a uniform host, so — like Greenhouse/Workable — it
+is one generic per-platform fetcher (D-017/D-004), not a per-company scraper.
+- **The fetch target is the postings list:** `GET api.smartrecruiters.com/v1/companies/{slug}/postings`
+  `?limit={N}&offset={M}` → `{"totalFound": int, "content": [ {...} ]}`. Endpoint is **slug-derivable**
+  (`endpoints.py`, bare — the fetcher adds limit/offset per page), so the seed carries only `ats_slug`.
+  Live-verified against Vitol (slug `Vitol`, 42 open).
+- **List-only + lazy detail (Workday parity, NOT iCIMS-rich).** The list omits the job description and
+  any apply URL. The public apply URL is **constructed** (`https://jobs.smartrecruiters.com/{slug}/{id}`
+  — verified to resolve), so the apply link needs no detail fetch (D-008). The description lives only on
+  the per-posting detail endpoint (`…/postings/{id}` → `jobAd.sections`) and is fetched lazily, per
+  in-scope survivor, by Layer-2 extraction via `fetch_detail` (cost discipline, D-035) — exactly like
+  Workday (D-032). Contract: **paginate-or-fail** on `totalFound` (short tally → `FetchError`, never a
+  partial list → no false closures, `docs/08`).
+- **Mapping:** `external_id = id` (the stable posting id + diff key D-016), `title = name`,
+  `location` from `location.fullLocation` with empty comma-segments collapsed ("Singapore, , Singapore"
+  → "Singapore, Singapore"; the full country name beats the bare ISO `country` for the Stage-B US signal,
+  D-036), `updated_at = releasedDate` (a D-030 freshness win).
+- **Lazy-detail dispatch generalized.** `extract.py` had a Workday-only `if`; it now routes on a per-ATS
+  `_DETAIL_RESOLVERS` map (Workday + SmartRecruiters + Oracle), so adding a list-only ATS is a one-line
+  wire-up with no per-company branching. The default resolver dispatches by `ats_type`; the injection
+  point stays a single callable (tests unchanged in shape).
+- **Coverage:** +1 fetchable (Vitol — grid/power; `detected → verified`), **41 → 42**. Adds the
+  SmartRecruiters *platform*; more SmartRecruiters Tier-C singletons land on it later.
+**Why:** the long tail collapses into a few platforms (D-017); SmartRecruiters' public API is clean and
+slug-derivable, and its list-only shape reuses the Workday lazy-detail path already in the system — low
+risk, follows the build order (D-018).
+
+### D-051 · Phase 8 Tier-B: Oracle HCM / ORC fetcher via the Candidate-Experience REST API · accepted · 2026-06-24
+Fourth Phase-8 (D-018 Tier-B) fetcher. Oracle Recruiting Cloud exposes a clean, unauthenticated
+**Candidate-Experience REST API** on each tenant's Oracle Cloud host; the shape is uniform across
+tenants, so it is one generic per-platform fetcher (D-017/D-004).
+- **The fetch target is the CE requisitions resource:** `GET {host}/hcmRestApi/resources/latest/`
+  `recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;`
+  `siteNumber={CX_n}` → `{"items":[{"TotalJobsCount": int, "requisitionList":[…]}]}`. **The `expand`
+  param is required** (without it the response is search metadata with no `requisitionList`). Hosts +
+  site numbers differ per tenant, so — like iCIMS/Workday — the seed `endpoint` is **explicit
+  per-tenant** (not slug-derived). Pagination appends `,limit={N},offset={M}` as `finder` sub-params;
+  **paginate-or-fail** on `TotalJobsCount`. Live-verified against Southern Company (host
+  `emje.fa.us6.oraclecloud.com`, site `CX_1001`, 105 open).
+- **List-only + lazy detail (Workday parity).** The list's `External*Str` description fields are empty
+  in list mode; the apply URL is **constructed** (`{careers_url}/job/{Id}` — verified to resolve), and
+  the description is fetched lazily per in-scope survivor via `fetch_detail` against the detail resource
+  (`recruitingCEJobRequisitionDetails?finder=ById;Id={Id},siteNumber={CX_n}` → `ExternalDescriptionStr`).
+  `fetch_detail` parses the host + `siteNumber` off the seeded list endpoint, so one seed field drives
+  both calls. Routed by the same `_DETAIL_RESOLVERS` map introduced in D-050.
+- **Mapping:** `external_id = Id` (the stable requisition id + diff key D-016 + apply-URL path),
+  `title = Title`, `location = PrimaryLocation` (already readable, e.g. "Baxley, GA, United States"),
+  `updated_at = PostedDate`.
+- **Only Southern Company onboarded; Honeywell + Con Edison deferred to curation.** Of the 3 seeded
+  Oracle tenants, only Southern resolves to a clean public host now. **Honeywell**'s vanity domain
+  `careers.honeywell.com` serves the CE UI but proxies the REST path (302→404); **Con Edison**'s Oracle
+  host isn't exposed (careers stay on coned.com). Both were reclassified `oracle_hcm/detected →
+  custom/layer2` (the iCIMS Joby/Alaska precedent, D-048) so the "supported `ats_type` ⟹ has a working
+  endpoint" seed invariant holds — `active_fetchable_employers` filters only on status + supported ATS,
+  so a supported-but-endpointless row would otherwise be selected and fail. They onboard config-only
+  (flip `ats_type` back to `oracle_hcm` + add the endpoint) once a canonical host + siteNumber is found.
+- **Coverage:** +1 fetchable (Southern Company — grid/power; `detected → verified`), **42 → 43**.
+**Why:** Oracle ORC is a high-frequency utility/aerospace ATS; its CE REST API is one clean generic
+fetcher that reuses the Workday lazy-detail path, advancing the D-018 coverage tier. Per-tenant host
+discovery is curation, not code — the fetcher is the deliverable.

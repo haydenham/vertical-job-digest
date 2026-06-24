@@ -39,6 +39,12 @@ def test_workable_url_is_derived_from_slug() -> None:
     assert url == "https://apply.workable.com/api/v1/widget/accounts/vortexa?details=true"
 
 
+def test_smartrecruiters_url_is_derived_from_slug() -> None:
+    # The limit/offset are added per-page by the fetcher, so the template is the bare list URL.
+    url = build_endpoint(_employer(AtsType.SMARTRECRUITERS, slug="Vitol"))
+    assert url == "https://api.smartrecruiters.com/v1/companies/Vitol/postings"
+
+
 def test_derived_ats_without_slug_raises() -> None:
     with pytest.raises(ValueError, match="no ats_slug"):
         build_endpoint(_employer(AtsType.GREENHOUSE, slug=None))
