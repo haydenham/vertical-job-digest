@@ -57,15 +57,16 @@ After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Work
 The Week-4 "vertical = config" add (D-002/D-004). Curated across all aviation sub-domains (airlines ·
 avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics · ATM/infrastructure ·
 eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass as grid:
-- **9 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
-  Ashby (1 — Beacon AI), Workday (3 — Boeing, Airbus, Wisk Aero), **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**.
-- **3 detected** (platform known, no generic fetcher yet): Avature (Delta), SuccessFactors (JetBlue),
-  Oracle HCM (Honeywell).
-- **24 layer2** (no clean API → LLM-read): Phenom/Radancy portals (United, Southwest, L3Harris, Thales)
-  + custom/JS-rendered sites (the GDS, flight-data, ATM, and remaining OEM/airline tail). Includes
-  Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046), and
-  **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`) + **Joby** (no Jibe API; ATS unconfirmed —
-  re-probe). Note: the Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer
+- **11 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
+  Ashby (1 — Beacon AI), Workday (5 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**),
+  **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**.
+- **2 detected** (platform known, no generic fetcher yet): SuccessFactors (JetBlue), Oracle HCM (Honeywell).
+- **23 layer2** (no clean API → LLM-read): Phenom/Radancy portals (United, Southwest, L3Harris, Thales)
+  + custom/JS-rendered sites (the flight-data, ATM, and remaining OEM/airline tail). Includes
+  Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046),
+  **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`), **Joby** (no Jibe API; ATS unconfirmed —
+  re-probe), and **Delta** (Avature: per-job JSON-LD but a 202 bot-challenge blocks server-side list
+  fetch). Note: the Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer
   Aviation is custom/Layer 2.
 
 The big aerospace Workday boards are whole-company (Collins/RTX 4161, Airbus 2000, Boeing 1168, mostly

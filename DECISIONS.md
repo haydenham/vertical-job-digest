@@ -607,9 +607,14 @@ highest-coverage Tier-B platform *and* fixes that felt gap.
 - **Auth-gated / non-Jibe iCIMS tenants route to Layer 2**, like SuccessFactors. **Joby** (`/api/jobs` 404 —
   custom site) and **Alaska** (legacy portal, no Jibe API) reclassified `detected → layer2`; ATS for Joby
   unconfirmed (re-probe). A full D-015 fingerprint re-probe of the 38 `layer2` rows found **no other Jibe
-  tenants** (Garmin was the only misfiled one) but surfaced **Amadeus + Sabre as Workday** candidates for a
-  later data-only PR.
-- **Coverage:** +6 fetchable employers (~1,333 postings) — grid 24→28, aviation 7→9, total **31 → 37**
-  (iCIMS 6). Live-verified: Garmin returns 303 postings incl. US aviation-software SWE roles.
+  tenants** (Garmin was the only misfiled one) but surfaced **Amadeus + Sabre as Workday** (onboarded this
+  session — see below).
+- **Coverage:** +6 iCIMS fetchable employers (~1,333 postings) — grid 24→28, aviation 7→9 (iCIMS 6).
+  Live-verified: Garmin returns 303 postings incl. US aviation-software SWE roles.
+- **Same-session Workday onboards (config-only, D-004):** Hayden supplied two board URLs; **Sabre**
+  (`sabre:wd1:SabreJobs`, 150) and **Amadeus** (`amadeus:wd502:jobs`, 135) live-verified and onboarded to
+  the existing Workday fetcher → aviation 9→11, total **31 → 39** (Workday 18→20). **Delta/Avature** probed
+  and left at Layer 2: it serves per-job schema.org JSON-LD but `delta.avature.net` returns a **202
+  bot-challenge** (empty body) to non-browser clients, so there's no clean server-side list API.
 **Why:** the long tail collapses into a few platforms (D-017); iCIMS's modern career-site API is one clean
 generic fetcher that both advances the D-018 coverage tier and resolves a concrete missed-match the builder hit.

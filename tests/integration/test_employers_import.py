@@ -90,11 +90,12 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     fetchable = active_fetchable_employers(migrated_engine)
 
     # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS = 28. Aviation: 2 Greenhouse
-    # + 1 Lever + 1 Ashby + 3 Workday + 2 iCIMS = 9. Total 37, of which 18 are Workday and 6 are
-    # iCIMS/Jibe (Phase 8). (Collins/RTX's whole-conglomerate Workday board exceeds the ~4000 offset
-    # cap → Layer 2; the iCIMS legacy-portal tenants Alaska/Joby have no clean Jibe API → Layer 2.)
-    assert len(fetchable) == 37
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 18
+    # + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS = 11. Total 39, of which 20 are Workday and 6 are
+    # iCIMS/Jibe (Phase 8 — Sabre + Amadeus onboarded to Workday from config). (Collins/RTX exceeds
+    # the ~4000 offset cap → Layer 2; iCIMS legacy-portal tenants Alaska/Joby have no clean Jibe API
+    # → Layer 2; Delta/Avature is bot-challenged → Layer 2.)
+    assert len(fetchable) == 39
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 20
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
@@ -108,10 +109,10 @@ def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Eng
     aviation = active_fetchable_employers(migrated_engine, vertical="aviation_software")
     by_type = Counter(e.ats_type for e in aviation)
 
-    assert len(aviation) == 9
+    assert len(aviation) == 11
     assert by_type[AtsType.GREENHOUSE] == 2
     assert by_type[AtsType.LEVER] == 1
     assert by_type[AtsType.ASHBY] == 1
-    assert by_type[AtsType.WORKDAY] == 3
+    assert by_type[AtsType.WORKDAY] == 5  # Boeing, Airbus, Wisk + Sabre, Amadeus (Phase 8)
     assert by_type[AtsType.ICIMS] == 2  # Garmin, SITA (Phase 8)
     assert all(e.ats_slug for e in aviation)  # Workday endpoints + slug-derived URLs both present

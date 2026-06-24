@@ -44,9 +44,14 @@ iCIMS; aviation 7→9).
 `uv lock`. Live smoke: Garmin returns **303** postings incl. "Software Engineer - Real Time Aviation Data" (US)
 — the previously-invisible class of role now flows.
 
-**Next:** **STOP for Hayden to commit + PR** (Block 1). Then the rest of Tier-B (Workable/SmartRecruiters/Oracle)
-or the Amadeus/Sabre Workday data-PR, then the Layer-2 tail. No paid extract/match run yet — Hayden authorizes
-after reviewing fetch counts.
+**Plus (same session, config-only Workday onboards from Hayden's probing):** Hayden pulled board URLs for the
+dark tail. **Sabre** (`sabre:wd1:SabreJobs`, 150) and **Amadeus** (`amadeus:wd502:jobs`, 135) live-verified and
+onboarded to the existing Workday fetcher (zero code) → aviation **9→11**, total **37→39** (Workday 18→20).
+**Delta/Avature** investigated and left at Layer 2: `delta.avature.net` serves per-job schema.org JSON-LD but
+returns a **202 bot-challenge** (empty body) server-side, so no clean list API. Counts/README/D-048 updated.
+
+**Next:** **STOP for Hayden to commit + PR** (Block 1). Then the rest of Tier-B (Workable/SmartRecruiters/Oracle),
+then the Layer-2 tail. No paid extract/match run yet — Hayden authorizes after reviewing fetch counts.
 
 **Branch:** `feat/icims-fetcher` (off `main` @ merged PR #34).
 
