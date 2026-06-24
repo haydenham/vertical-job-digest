@@ -25,6 +25,7 @@ secrets/
 *.sqlite
 *.sqlite3
 data/*.db
+data/*.db.*
 data/*.sqlite3
 
 # Logs

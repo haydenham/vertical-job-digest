@@ -90,9 +90,10 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     fetchable = active_fetchable_employers(migrated_engine)
 
     # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday = 24. Aviation (Phase 7): 2 Greenhouse
-    # + 1 Lever + 1 Ashby + 4 Workday = 8. Total 32, of which 19 are Workday.
-    assert len(fetchable) == 32
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 19
+    # + 1 Lever + 1 Ashby + 3 Workday = 7. Total 31, of which 18 are Workday. (Collins/RTX's whole-
+    # conglomerate Workday board exceeds the ~4000 offset cap → reclassified Layer 2; see seed.)
+    assert len(fetchable) == 31
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 18
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
 
@@ -105,9 +106,9 @@ def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Eng
     aviation = active_fetchable_employers(migrated_engine, vertical="aviation_software")
     by_type = Counter(e.ats_type for e in aviation)
 
-    assert len(aviation) == 8
+    assert len(aviation) == 7
     assert by_type[AtsType.GREENHOUSE] == 2
     assert by_type[AtsType.LEVER] == 1
     assert by_type[AtsType.ASHBY] == 1
-    assert by_type[AtsType.WORKDAY] == 4
+    assert by_type[AtsType.WORKDAY] == 3
     assert all(e.ats_slug for e in aviation)  # Workday endpoints + slug-derived URLs both present

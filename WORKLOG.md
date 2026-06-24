@@ -5,6 +5,57 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-22 — Phase 7 · Blocks 3+4: aviation config + full end-to-end run (D-046) — architecture test PASSED
+
+**Did:** Wrote the aviation vertical config and ran the **whole pipeline end-to-end** on it. **Headline: adding the
+aviation vertical forced ZERO `src/` changes** — the D-004 architecture test passes. (Blocks 3+4 combined into one PR
+per Hayden.)
+- **Block 3 — config:** `config/verticals/aviation_software.yaml` (aviation `domain_vocabulary` + Stage-A `scope`
+  with aviation-specific excludes [pilot, flight attendant, ramp, …] + Stage-B `prefilter` US/early-career).
+  Auto-discovered by `available_verticals()`'s glob; loaded by the same `load_vertical_config`. Added
+  `test_loads_real_aviation_config`.
+- **Block 4 — end-to-end run** (local `data/vja.db`, gitignored; backup `data/vja.db.pre-aviation.bak`):
+  - `vja-import-employers` → 36 aviation inserted, 54 grid updated, **ats-unresolved=0** (every ATS value a valid
+    enum). `vja-load-profiles` → aviation profile active; **grid bumped to a new `resume_version`** (the re-tilt).
+  - `vja-run --vertical aviation_software` → **3612 postings / 7 employers** (Airbus 2000, Boeing 1169, Shield AI
+    391, Wisk 24, Beacon AI 17, OAG 10, FLYR 1). Stage-A in-scope **874 (24%)**.
+  - `vja-extract` → **871/874** extracted (3 isolated failures), **$3.68** (Haiku). Stage-B persisted `in_scope`
+    cut 874 → **110** (Airbus's mostly-EU + Boeing's senior roles correctly dropped on US/level).
+  - `vja-match --vertical aviation_software` → **110/110**, **$1.71** (Sonnet). Verdicts: **1 yes · 16 maybe ·
+    93 no**. The 17 relevant are **all US** entry-level/associate SWE roles (geo filter clean — no foreign leak);
+    the 85% `no` rate is the willingness-to-say-no (D-007) working for a junior CS candidate vs whole-company
+    aerospace boards.
+  - **Grid re-match** (résumé changed → stale matches): `vja-match --vertical grid_power_software` → **41/41**,
+    **$0.68**, 17 relevant. `/api/verticals` now returns **both** verticals (dashboard picker surfaces aviation).
+  - **Total LLM spend: ~$6.07.**
+
+**Finding (logged, not a defect):** the run **stress-tested the Workday fetcher** — Collins/RTX's whole-conglomerate
+`cxs` board (4160) exceeds Workday's **~4000 offset cap**, so the paginate-or-fail guard (D-032) correctly refused
+the truncated page rather than reading 160 roles as closures. Per the **Castleton precedent (D-032)**, RTX was
+**reclassified to Layer 2 in config** (seed edit, no code) — so aviation fetchable is **7, not 8** (3 Workday). This
+is the first Workday tenant big enough to hit the cap (grid's max was GE Vernova ~2376). Candidate future fetcher
+improvement: offset-cap-aware Workday pagination. Probing also caught a Greenhouse **name collision** (`archer` = a
+veterinary clinic, not Archer Aviation → Layer 2).
+
+**Decisions:** **D-046** (Phase 7 aviation shipped config-only; the architecture test + the RTX finding). Also this
+session, **D-047** — roadmap resequence: **P8 remaining coverage → P9 cloud migration + full product frontend
+(promoted from the floating D-025 cutover, widened to auth/upload/vertical-toggle) → P10 discovery agent (demoted)**;
+security posture for a free public launch folded in (cost-abuse is the dominant risk; `docs/11` is the P9 checklist).
+CLAUDE.md build sequence + INVARIANTS (D-004/D-022/D-032 lines) updated.
+
+**Tests:** `test_loads_real_aviation_config` (config loads via the same path); `test_employers_import` updated for the
+RTX reclassification (aviation fetchable 8→7, Workday 4→3; combined 32→31/18). Data/config-count tests, not new src.
+
+**Verified:** full Python gate green — ruff format/check, mypy, lint-imports (1/0), pytest, `uv lock`. **No `src/`
+change in the entire phase.** Spot-checks: 17/17 aviation relevant matches US; `/api/verticals` lists both verticals.
+
+**Next:** **STOP for Hayden to commit + PR** (Blocks 3+4). Then **Phase 8** (Tier-B fetchers + Layer-2 tail). The
+aviation detected/Layer-2 tail (Delta/Avature, JetBlue/SuccessFactors, Joby/iCIMS, RTX cap, …) lights up there.
+
+**Branch:** `feat/aviation-vertical` (off `main` @ the merged Block-2 PR).
+
+---
+
 ## 2026-06-22 — Phase 7 · Block 2: re-tilt both resumes (config/data only)
 
 **Did:** Re-tilted the matching résumés per vertical (the matching-profile half of the D-004 config —

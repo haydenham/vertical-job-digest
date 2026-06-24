@@ -544,3 +544,46 @@ filter; the per-profile match columns are decoration on a profile-independent se
 relevant verdicts only). **Amends D-043**: `no` is hidden from *Matched* and the digest (D-037), but **shown in Cleaned**.
 **Why:** the cleaned list's job is coverage/browse, not recommendation — filtering it by the AI verdict defeats its
 purpose and made the toggle inert. Matched stays the curated recommendation surface.
+
+### D-046 · Phase 7: aviation vertical shipped as config-only (the D-004 architecture test) · accepted · 2026-06-22
+Phase 7 stood up the **aviation_software** vertical — the Week-4 architecture test D-002/D-004 reserved — and it
+required **zero `src/` changes**: a vertical is (still) just curation + config. The deliverable was exactly the three
+data artifacts `docs/06` predicted:
+- **Seed:** 36 aviation employers across every sub-domain (airlines · avionics · OEM/manufacturers · GDS/airline-IT ·
+  flight-data/analytics · ATM/infrastructure · eVTOL/autonomy · travel-tech), ATS-resolved by the same live-probing
+  pass as grid (D-015) — 7 verified/fetchable (Boeing/Airbus/Wisk Workday, Shield AI Lever, Beacon AI Ashby, OAG/FLYR
+  Greenhouse), the rest detected/Layer 2. Probing caught a Greenhouse name collision (`archer` = a veterinary clinic,
+  not Archer Aviation) — the probe-don't-guess discipline (D-015) paying off.
+- **Config:** `config/verticals/aviation_software.yaml` (aviation domain vocabulary + Stage-A scope + Stage-B
+  prefilter) — auto-discovered by `available_verticals()`'s glob, loaded by the same `load_vertical_config`.
+- **Résumé:** `hayden_aviation_resume.md` (aviation-tilted; the grid résumé was re-tilted in the same Phase-7 work).
+The whole pipeline ran end-to-end with no per-vertical branch: import → load-profiles → fetch/diff (Stage-A) →
+extract → match, the same code as grid.
+**Bonus finding (not a defect):** the run **stress-tested the Workday fetcher** — Collins/RTX's whole-conglomerate
+`cxs` board (4160) exceeds Workday's ~4000 offset cap, so the paginate-or-fail guard (D-032) correctly refused the
+truncated page rather than reading 160 roles as closures. Per the **Castleton precedent (D-032)**, RTX was
+**reclassified to Layer 2 in config** (no code change) — a known-incomplete board routes to Layer 2 until a
+capped-board fetch strategy exists. This is the first Workday tenant large enough to hit the cap (grid's biggest was
+GE Vernova ~2376). Logged as a candidate future fetcher improvement (offset-cap-aware Workday pagination).
+**Why:** the entire expansion thesis (D-001/D-002) rests on "a vertical is config." Adding aviation with zero code
+change — and only a *config* reclassification when a real fetcher limit surfaced — is the thesis holding under test.
+Run metrics (postings fetched, in-scope, verdict spread, grid re-match) are in WORKLOG.
+
+### D-047 · Roadmap resequence: cloud + full frontend pulled ahead of the discovery agent · accepted · 2026-06-22
+Reordered the back half of the roadmap. **Was:** P8 remaining coverage → P9 Layer-3 discovery agent → cross-cutting
+hosting/Postgres cutover (D-025, "triggered by demo users"). **Now:**
+- **Phase 8 — Remaining coverage** (unchanged; kept first — more coverage makes a user-facing launch worth more, and
+  it likely surfaces new decisions worth having before exposing the product).
+- **Phase 9 — Cloud migration + full product frontend.** Promotes the floating D-025 cutover into a real numbered
+  phase **and widens it** to the multi-user product surface: auth/login, résumé **upload** (the D-033 adapter at the
+  signup boundary), vertical toggle, signup→backfill. The existing Phase-6 dashboard SPA goes from read-only/
+  single-user to authed/multi-user. `docs/11` (multi-user & hosting ledger) is this phase's checklist.
+- **Phase 10 — Layer-3 discovery agent.** Demoted from P9. Non-essential nice-to-have; relatively simple (shell +
+  formatting around an Opus deep-web-search that writes `proposed` employer rows). Doesn't gate a launch, so it waits.
+**Why:** the goal shifted to *getting something real in front of users* sooner — that makes hosting + the product
+frontend the priority and the discovery agent a later add-on. D-025 stops being an ambient "slot it whenever" item
+and becomes Phase 9's spine. **Security/abuse posture is explicitly in Phase 9 scope** (per the launch-readiness
+discussion): the dominant risk for a free public signup is **cost-abuse** (each signup spends LLM tokens on backfill),
+addressed by email-verify + signup rate-limit/captcha + a per-user backfill cap (D-039) + a global spend ceiling, with
+résumé **PII** (encrypt at rest, delete path, never log) and standard web hygiene (managed auth, Cloudflare in front,
+secrets in env) as the rest. Supersedes the build-sequence ordering in CLAUDE.md / D-026's P7→P9 tail.
