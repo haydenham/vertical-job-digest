@@ -89,14 +89,16 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS = 28. Aviation: 2 Greenhouse
-    # + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS = 11. Total 39, of which 20 are Workday and 6 are
-    # iCIMS/Jibe (Phase 8 — Sabre + Amadeus onboarded to Workday from config). (Collins/RTX exceeds
-    # the ~4000 offset cap → Layer 2; iCIMS legacy-portal tenants Alaska/Joby have no clean Jibe API
-    # → Layer 2; Delta/Avature is bot-challenged → Layer 2.)
-    assert len(fetchable) == 39
+    # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS + 2 Workable = 30. Aviation:
+    # 2 Greenhouse + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS = 11. Total 41, of which 20 are
+    # Workday, 6 are iCIMS/Jibe, and 2 are Workable (Phase 8 — Sabre + Amadeus onboarded to Workday
+    # from config; Vortexa + Energy Aspects via the Workable widget API). (Collins/RTX exceeds the
+    # ~4000 offset cap → Layer 2; iCIMS legacy-portal tenants Alaska/Joby have no clean Jibe API →
+    # Layer 2; Delta/Avature is bot-challenged → Layer 2.)
+    assert len(fetchable) == 41
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 20
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
 

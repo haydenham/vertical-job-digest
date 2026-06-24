@@ -618,3 +618,29 @@ highest-coverage Tier-B platform *and* fixes that felt gap.
   bot-challenge** (empty body) to non-browser clients, so there's no clean server-side list API.
 **Why:** the long tail collapses into a few platforms (D-017); iCIMS's modern career-site API is one clean
 generic fetcher that both advances the D-018 coverage tier and resolves a concrete missed-match the builder hit.
+
+### D-049 · Phase 8 Tier-B: Workable fetcher via the embed-widget JSON API · accepted · 2026-06-24
+Second Phase-8 (D-018 Tier-B) fetcher, after iCIMS (D-048). Workable exposes a clean, unauthenticated
+**embed-widget JSON API** on a uniform host, so — like Greenhouse/Lever/Ashby — it is one generic
+per-platform fetcher (D-017/D-004), not a per-company scraper.
+- **The fetch target is the embed widget:** `GET https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true`
+  → `{"name", "description", "jobs":[{…}]}`. **`?details=true` is required** for the inline
+  `description` HTML (a D-030 freshness win — no lazy detail fetch; `updated_at = published_on`).
+  Endpoint is **slug-derivable** (`endpoints.py` `_DERIVED_TEMPLATES`), so the seed carries only
+  `ats_slug` — verified live uniform across the two seed tenants (Vortexa, Energy Aspects — D-019).
+- **Single response, not paginated** — unlike iCIMS/Workday, the widget returns *all* open jobs in one
+  `jobs` array (no `total`/offset). So the false-closure guard (`docs/08`) is the **single-request
+  contract** (the Greenhouse/Lever/Ashby pattern, not paginate-or-fail): a clean 200 is the
+  authoritative complete set; an empty `jobs` array is a legitimate "0 open"; any transport/parse/shape
+  error raises `FetchError` and the diff never runs on a partial list.
+- **Mapping:** `external_id = shortcode` (the stable Workable req id, the diff key D-016),
+  `apply_url = url` (the public posting page), `title`, `location` = `city, state, country` joined
+  (full names feed the Stage-B US-signal prefilter D-036 better than the bare ISO codes in `locations[]`),
+  `updated_at = published_on`. Any missing required field (`shortcode`/`title`/`url`) raises `FetchError`.
+- **Coverage:** +2 fetchable employers (Vortexa, Energy Aspects — both grid/power; Vortexa
+  `detected → verified`), **39 → 41**. Live-verified: Vortexa returns 5 open postings with populated
+  `updated_at`; Energy Aspects re-verified (API valid, 0 open). Modest in count, but it adds the Workable
+  *platform* (more Workable-grade Tier-C singletons land on it later). **Next:** SmartRecruiters / Oracle HCM.
+**Why:** the long tail collapses into a few platforms (D-017); Workable's embed widget is the cleanest
+remaining Tier-B API (clean JSON, slug-derivable, single-response), so it's the lowest-risk next coverage
+step and follows the documented build order (D-018).

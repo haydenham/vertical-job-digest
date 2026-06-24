@@ -5,6 +5,52 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-24 — Phase 8 · Block 2: Workable Tier-B fetcher via the embed-widget API (D-049)
+
+**Did:** Built the second Phase-8 (Tier-B) fetcher — Workable — following the documented build order
+(iCIMS → **Workable** → SmartRecruiters/Oracle → Layer-2 tail). Chose Workable over the other Tier-B
+targets because it's the most de-risked (clean slug-derivable JSON, one tenant already verified).
+
+- **Step 0 feasibility probe (the gate):** live-probed `apply.workable.com/api/v1/widget/accounts/{slug}`
+  across both seed tenants. Clean, unauthenticated JSON, **uniform** → one generic fetcher (D-017/D-004).
+  Two findings that shaped the contract: (1) the widget returns **all open jobs in one response** —
+  `{"name","description","jobs":[…]}`, **no `total`/pagination** — so it's a single-response ATS like
+  Greenhouse/Lever, *not* paginate-or-fail like iCIMS/Workday; (2) **`?details=true` is required** for the
+  inline `description` HTML. Vortexa = 5 open, Energy Aspects = 0 (matches its historical probe). Captured
+  `tests/fixtures/workable.json` (Vortexa, D-019).
+- **Fetcher** (`src/vja/fetchers/workable.py`, `WorkableFetcher`): modeled on Greenhouse (single GET +
+  map-all). False-closure guard = the **single-request contract** (clean 200 = complete set; empty `jobs`
+  = legitimate 0 open; any transport/parse/shape error → `FetchError`, diff never runs on a partial). Map:
+  `external_id = shortcode` (D-016), `apply_url = url` (public posting page), `location` = `city, state,
+  country` joined (full names → better Stage-B US signal than the bare ISO codes in `locations[]`),
+  `updated_at = published_on` (a D-030 freshness win — no detail fetch), `description` inline HTML.
+- **Endpoint derivation:** added Workable to `endpoints.py` `_DERIVED_TEMPLATES` (slug-derived, per
+  `docs/07`; host is uniform, unlike iCIMS's per-tenant careers domains), template includes `?details=true`.
+  Wired into the registry.
+- **Seed (config/data):** Vortexa `detected → verified` (slug `vortexa`, 5 open); Energy Aspects re-verified
+  (API valid, 0 open). Both now fetchable → grid 28→30, total **39→41**.
+
+**Decisions:** **D-049** (Workable via the embed-widget API; slug-derivable; single-response false-closure
+guard; coverage 39→41). INVARIANTS (fetcher-order line + new Workable contract line), `docs/07` (table +
+build-order + resolved Vortexa fixup), CLAUDE Phase-8 line, `data/seed/README.md` grid status block updated.
+
+**Tests:** `tests/unit/test_workable.py` (11: fixture mapping, single-response/all-jobs, empty board,
+`created_at` fallback, missing-location→None, transport/HTTP-500/non-JSON/missing-`jobs`/missing-`shortcode`/
+empty-field → `FetchError`); `tests/live/test_workable_live.py` (opt-in Vortexa smoke); `test_endpoints.py`
+(Workable slug-derivation); `test_registry.py` (Workable now supported); `test_employers_import.py` counts
+(39→41, +2 Workable; grid fetchable 28→30).
+
+**Verified:** full Python gate green — ruff format/check, mypy (94 files), lint-imports (1/0), **257 pytest**
+(+12), `uv lock` in sync (no new deps). Live smoke: Vortexa returns 5 well-formed postings with populated
+`updated_at`.
+
+**Next:** **STOP for Hayden to commit + PR** (Block 2). Then the rest of Tier-B (SmartRecruiters — 1, clean
+public API; Oracle HCM — 3, per-tenant ORC), then the Layer-2 LLM-read tail. No paid extract/match run yet.
+
+**Branch:** `feat/workable-fetcher` (off `main` @ `ae5cb12`, post-Block-1 merge + Sabre/Amadeus).
+
+---
+
 ## 2026-06-24 — Phase 8 · Block 1: iCIMS Tier-B fetcher via the Jibe `/api/jobs` API (D-048)
 
 **Did:** Built the first Phase-8 (Tier-B) fetcher, kicked off by a coverage-research pass.

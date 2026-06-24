@@ -7,6 +7,7 @@ from vja.fetchers.greenhouse import GreenhouseFetcher
 from vja.fetchers.icims import IcimsFetcher
 from vja.fetchers.lever import LeverFetcher
 from vja.fetchers.registry import SUPPORTED_ATS_TYPES, get_fetcher
+from vja.fetchers.workable import WorkableFetcher
 from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType
 
@@ -17,6 +18,7 @@ def test_each_layer1_ats_maps_to_its_fetcher() -> None:
     assert isinstance(get_fetcher(AtsType.ASHBY), AshbyFetcher)
     assert isinstance(get_fetcher(AtsType.WORKDAY), WorkdayFetcher)
     assert isinstance(get_fetcher(AtsType.ICIMS), IcimsFetcher)
+    assert isinstance(get_fetcher(AtsType.WORKABLE), WorkableFetcher)
 
 
 def test_returned_fetcher_reports_matching_ats_type() -> None:

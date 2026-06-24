@@ -34,6 +34,11 @@ def test_ashby_url_is_derived_from_slug() -> None:
     assert url == "https://api.ashbyhq.com/posting-api/job-board/weave-grid"
 
 
+def test_workable_url_is_derived_from_slug() -> None:
+    url = build_endpoint(_employer(AtsType.WORKABLE, slug="vortexa"))
+    assert url == "https://apply.workable.com/api/v1/widget/accounts/vortexa?details=true"
+
+
 def test_derived_ats_without_slug_raises() -> None:
     with pytest.raises(ValueError, match="no ats_slug"):
         build_endpoint(_employer(AtsType.GREENHOUSE, slug=None))

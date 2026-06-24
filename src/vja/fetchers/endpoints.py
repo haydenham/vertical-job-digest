@@ -10,11 +10,14 @@ from __future__ import annotations
 
 from vja.models import AtsType, Employer
 
-# ATSs whose endpoint is derived from the slug alone (verified live 2026-06-11).
+# ATSs whose endpoint is derived from the slug alone (GH/Lever/Ashby verified live
+# 2026-06-11; Workable's embed-widget API verified live 2026-06-24 — `?details=true`
+# is required for the inline description).
 _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.GREENHOUSE: "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     AtsType.LEVER: "https://api.lever.co/v0/postings/{slug}?mode=json",
     AtsType.ASHBY: "https://api.ashbyhq.com/posting-api/job-board/{slug}",
+    AtsType.WORKABLE: "https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true",
 }
 
 
