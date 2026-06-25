@@ -40,6 +40,7 @@ class SyncResult:
     employer_id: int
     status: str  # "ok" | "failed"
     new: int = 0
+    reopened: int = 0
     closed: int = 0
     updated: int = 0
     unchanged: int = 0
@@ -76,16 +77,35 @@ def sync_employer(
         stored = postings_repo.open_index(conn, employer.id)
         diff = compute_diff(by_id.keys(), stored.keys())
 
+        # A "new" id (absent from the open index) may already exist as a *closed* row — a
+        # posting that vanished, then reappeared. It must be reopened in place, not inserted
+        # (UNIQUE(employer_id, external_id) — D-009 never deletes the closed row).
+        previously_closed = postings_repo.closed_index(conn, employer.id)
+        reopened = 0
         for external_id in diff.new:
             posting = by_id[external_id]
-            postings_repo.insert_posting(
-                conn,
-                employer.id,
-                posting,
-                _hash(posting),
-                stamp,
-                source_updated_at=normalize_ats_date(posting.updated_at),
-            )
+            new_hash = _hash(posting)
+            source_updated_at = normalize_ats_date(posting.updated_at)
+            if external_id in previously_closed:
+                postings_repo.reopen_posting(
+                    conn,
+                    employer.id,
+                    posting,
+                    new_hash,
+                    stamp,
+                    source_updated_at=source_updated_at,
+                    content_changed=new_hash != previously_closed[external_id],
+                )
+                reopened += 1
+            else:
+                postings_repo.insert_posting(
+                    conn,
+                    employer.id,
+                    posting,
+                    new_hash,
+                    stamp,
+                    source_updated_at=source_updated_at,
+                )
 
         updated = 0
         for external_id in diff.still_present:
@@ -114,7 +134,8 @@ def sync_employer(
     return SyncResult(
         employer_id=employer.id,
         status="ok",
-        new=len(diff.new),
+        new=len(diff.new) - reopened,
+        reopened=reopened,
         closed=len(diff.closed),
         updated=updated,
         unchanged=len(diff.still_present) - updated,
@@ -130,6 +151,7 @@ class RunSummary:
     employers_fetched: int
     fetch_failures: int
     postings_new: int
+    postings_reopened: int
     postings_closed: int
     results: list[SyncResult]
     errors: list[dict[str, Any]]
@@ -185,6 +207,7 @@ def run_pipeline(
     failures = sum(1 for result in results if result.status == "failed")
     status = _run_status(total=len(results), failures=failures)
     postings_new = sum(result.new for result in results)
+    postings_reopened = sum(result.reopened for result in results)
     postings_closed = sum(result.closed for result in results)
     finished = now or datetime.now(UTC)
 
@@ -207,6 +230,7 @@ def run_pipeline(
         employers_fetched=len(results),
         fetch_failures=failures,
         postings_new=postings_new,
+        postings_reopened=postings_reopened,
         postings_closed=postings_closed,
         results=results,
         errors=errors,
@@ -225,7 +249,8 @@ def run_main(argv: list[str] | None = None) -> int:
     print(
         f"run {summary.run_id}: status={summary.status} "
         f"employers={summary.employers_fetched} failures={summary.fetch_failures} "
-        f"new={summary.postings_new} closed={summary.postings_closed}"
+        f"new={summary.postings_new} reopened={summary.postings_reopened} "
+        f"closed={summary.postings_closed}"
     )
     for err in summary.errors:
         print(f"  ! {err['name']}: {err['error']}")

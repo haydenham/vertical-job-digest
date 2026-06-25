@@ -70,6 +70,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Diff identity is the ATS `external_id`, never fuzzy title-match.** (D-016)
 - **Vanished postings are marked `closed`, never deleted** — death detection keeps dead
   links out of the digest and yields lifespan stats. (D-009)
+- **A closed posting that reappears is reopened in place, never re-inserted** — `sync_employer`
+  routes a `diff.new` id that matches `closed_index` to `reopen_posting` (UPDATE the surviving row,
+  not `INSERT` — which would violate `UNIQUE(employer_id, external_id)`). The reopen resets
+  `first_seen_at`, so the role **re-enters the `new` set** (surfaces as new again); it re-extracts
+  only if the body's `content_hash` moved. (D-053, D-009)
 - **DB access = SQLAlchemy Core + Alembic.** SQLite now → Postgres at first hosted deploy
   (`alembic upgrade`, URL swap). (D-025)
 

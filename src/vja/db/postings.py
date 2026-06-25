@@ -47,6 +47,24 @@ def open_index(conn: Connection, employer_id: int) -> dict[str, str]:
     return {external_id: content_hash for external_id, content_hash in rows}
 
 
+def closed_index(conn: Connection, employer_id: int) -> dict[str, str]:
+    """`{external_id: content_hash}` for this employer's currently-closed postings.
+
+    The diff sees a reappeared posting as "new" (it's absent from the open index), but a row
+    already exists for its `(employer_id, external_id)` — inserting would violate the UNIQUE
+    constraint. The caller intersects `diff.new` with this set to route a reappeared posting to
+    `reopen_posting` instead of `insert_posting`; the stored hash lets it tell a content-changed
+    reopen from an identical one (so extraction is only invalidated when the body actually moved).
+    """
+    rows = conn.execute(
+        select(postings.c.external_id, postings.c.content_hash).where(
+            postings.c.employer_id == employer_id,
+            postings.c.status == PostingStatus.CLOSED.value,
+        )
+    ).all()
+    return {external_id: content_hash for external_id, content_hash in rows}
+
+
 def insert_posting(
     conn: Connection,
     employer_id: int,
@@ -75,6 +93,51 @@ def insert_posting(
             last_seen_at=now,
             source_updated_at=source_updated_at,
         )
+    )
+
+
+def reopen_posting(
+    conn: Connection,
+    employer_id: int,
+    posting: RawPosting,
+    content_hash: str,
+    now: datetime,
+    *,
+    source_updated_at: datetime | None = None,
+    content_changed: bool,
+) -> None:
+    """Resurrect a previously-`closed` posting that reappeared in a fetch (D-009 lifecycle).
+
+    A closed row is never deleted, so a reappeared posting can't be re-inserted (UNIQUE
+    `(employer_id, external_id)`); we update the existing row in place. **`first_seen_at` is reset
+    to `now`** so the role re-enters the digest's `new` set (which keys on
+    `first_seen_at > last_sent_at`) and the dashboard's "new today" — a role that's open again is
+    freshly actionable. `source_updated_at` is written only when non-None (same guard as
+    `bump_last_seen` — never null a previously-good date). When `content_changed`, `extracted_at`/
+    `extraction_model` are cleared so Layer-2 re-extracts against the new body (mirrors
+    `update_changed`); the stale extracted fields + `in_scope` are left until that re-extraction
+    overwrites them. When the body is identical, the cached extraction is preserved (D-035).
+    """
+    values: dict[str, Any] = {
+        "content_hash": content_hash,
+        "raw_payload": posting.raw,
+        "apply_url": posting.apply_url,
+        "title": posting.title,
+        "location": posting.location,
+        "status": PostingStatus.OPEN.value,
+        "closed_at": None,
+        "first_seen_at": now,
+        "last_seen_at": now,
+    }
+    if source_updated_at is not None:
+        values["source_updated_at"] = source_updated_at
+    if content_changed:
+        values["extracted_at"] = None
+        values["extraction_model"] = None
+    conn.execute(
+        postings.update()
+        .where(postings.c.employer_id == employer_id, postings.c.external_id == posting.external_id)
+        .values(**values)
     )
 
 

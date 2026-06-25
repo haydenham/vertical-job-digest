@@ -123,12 +123,13 @@ def run_nightly(
 
     run = run_pipeline(engine, vertical=None, now=stamp, resolve_fetcher=resolve_fetcher)
     logger.info(
-        "pipeline run %s: status=%s employers=%d fetch_failures=%d new=%d closed=%d",
+        "pipeline run %s: status=%s employers=%d fetch_failures=%d new=%d reopened=%d closed=%d",
         run.run_id,
         run.status,
         run.employers_fetched,
         run.fetch_failures,
         run.postings_new,
+        run.postings_reopened,
         run.postings_closed,
     )
 
@@ -194,7 +195,8 @@ def run_nightly(
 def _failure_summary(run: RunSummary, digests: list[DigestSendResult]) -> str:
     lines = [
         f"pipeline: status={run.status} employers={run.employers_fetched} "
-        f"fetch_failures={run.fetch_failures} new={run.postings_new} closed={run.postings_closed}"
+        f"fetch_failures={run.fetch_failures} new={run.postings_new} "
+        f"reopened={run.postings_reopened} closed={run.postings_closed}"
     ]
     lines += [f"  fetch error — {e.get('name')}: {e.get('error')}" for e in run.errors]
     for d in digests:

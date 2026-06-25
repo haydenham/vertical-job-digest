@@ -26,6 +26,7 @@ def _run(status: str = "failed", fetch_failures: int = 2) -> RunSummary:
         employers_fetched=3,
         fetch_failures=fetch_failures,
         postings_new=0,
+        postings_reopened=0,
         postings_closed=0,
         results=[],
         errors=[{"employer_id": 5, "name": "Beta", "error": "FetchError('outage')"}],

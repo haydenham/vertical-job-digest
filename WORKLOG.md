@@ -5,6 +5,52 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-25 — Re-opened-posting fix (D-053) — unblocking the Phase-8 cash-in run
+
+**Did:** Session task was "reason on next steps." Reasoned that Phase 8 had shipped 5 fetchers (39→44
+coverage) with **zero paid pipeline runs** since the aviation vertical — coverage was theoretical. Chose
+to **cash in the coverage** with a real extract→match run before building more (Phenom). The free
+count-gate (`vja-run`) surfaced **two blockers** before any spend:
+- **Stale DB (free fix):** `vja-import-employers` was never re-run after the Phase-8 seed edits → the 8
+  verified P8 tenants (Constellation/Exelon/SIG/ICE/SITA/NextEra/Southern/Vitol) sat as stale
+  `detected`/`layer2` rows with no endpoint ("cannot build endpoint"); 7 correctly-parked tenants were
+  stale-`active` and wrongly attempted. Seed is correct + importer is a `(vertical,name)` upsert → one
+  re-import fixes all 15. **Deferred to the operational Part B** (after this PR merges).
+- **Re-opened-posting bug (this PR):** 10 employers (Vistra, S&P Global, Jane Street, AES, Xcel, Fluence,
+  Shell Trading, Yes Energy, Wood Mac, Kraken) crashed with `UNIQUE constraint failed:
+  postings.employer_id, postings.external_id` — a posting that closed (D-009, never deleted) then
+  reappeared landed in `diff.new`, and `insert_posting` collided with the surviving closed row, aborting
+  the employer's whole transaction (new + closures discarded).
+
+**Fix:** `sync_employer` now intersects `diff.new` with a new `closed_index` and routes a reappeared id to
+a new `reopen_posting` (UPDATE in place) instead of `insert_posting`. Reopen **resets `first_seen_at`** so
+the role surfaces as new again (Hayden's call over "reopen silently"); clears `extracted_at` only when the
+body's `content_hash` moved (cache-aware, D-035); same non-NULL `source_updated_at` guard as `bump`.
+`diff.py` stays pure set arithmetic. A `reopened` counter rides `SyncResult`/`RunSummary` + the
+`vja-run`/nightly summary lines (observability only — `pipeline_runs.postings_new` keeps counting true
+inserts; no schema change).
+
+**Decisions:** **D-053** (reopen-in-place + surface-as-new + cache-aware re-extract + reopened
+observability-only). INVARIANTS diff/data-model section gains the reopen line (next to D-009).
+
+**Tests:** `tests/integration/test_pipeline.py` +3 — reopen resurrects the same row (no IntegrityError,
+`first_seen_at` advanced, counted `reopened` not `new`); changed-body reopen clears `extracted_at`;
+identical-body reopen preserves the cached extraction. The production `vja-run` crash is the
+failing-in-prod repro (D-021). 14 pass in the file.
+
+**Verified:** full Python gate green — ruff format/check, mypy (42 files), lint-imports (1 kept/0 broken),
+**315 pytest** (+3), `uv lock --check` in sync (no new deps).
+
+**Next:** **STOP for Hayden to commit + PR.** Then **Part B (operational, no code):** `vja-import-employers`
+→ `vja-run` (now clean) → count-gate + authorize → `vja-extract` (Haiku) → `vja-match` (Sonnet) → look at
+the digest/dashboard. The BP Trading single Workday job missing `externalPath` is an isolated, non-blocking
+upstream data quirk to note, not fix. Then Phenom (the deferred Phase-8 build order) once the cash-in
+proves the current coverage's worth.
+
+**Branch:** `fix/reopen-closed-postings` (off `main` @ `78693c0`, post-Radancy-PR-#38 merge).
+
+---
+
 ## 2026-06-24 — Phase 8 · Block 4: Radancy/TalentBrew Tier-C fetcher + platform-probe resequence (D-052)
 
 **Did:** With Tier-B done, the docs' next item was the generic Layer-2 **LLM-read** tail. A Step-0
