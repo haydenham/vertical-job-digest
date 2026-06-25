@@ -273,6 +273,98 @@ def test_later_null_ats_date_does_not_clobber_existing(
     )
 
 
+def _set_extracted(engine: Engine, external_id: str, when: datetime) -> None:
+    """Stamp a posting as already-extracted (to assert reopen's cache-invalidation behavior)."""
+    with begin(engine) as conn:
+        conn.execute(
+            postings.update()
+            .where(postings.c.external_id == external_id)
+            .values(extracted_at=when, extraction_model="haiku-test")
+        )
+
+
+def test_reopened_posting_is_resurrected_not_inserted(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # Seen, then it vanishes (closed), then it reappears — must reopen the SAME row, not insert
+    # a second one (the UNIQUE(employer_id, external_id) crash this fixes).
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    sync_employer(  # "a" disappears → closed
+        migrated_engine, employer, FakeFetcher([]), now=datetime(2026, 6, 17, tzinfo=UTC)
+    )
+    assert _by_id(migrated_engine)["a"]["status"] == PostingStatus.CLOSED.value
+
+    reopen_day = datetime(2026, 6, 20, tzinfo=UTC)
+    result = sync_employer(  # "a" comes back
+        migrated_engine, employer, FakeFetcher([_posting("a")]), now=reopen_day
+    )
+
+    assert result.reopened == 1
+    assert result.new == 0  # a reopen is not a fresh insert
+    rows = _rows(migrated_engine)
+    assert len(rows) == 1  # the closed row was reused, not duplicated
+    row = rows[0]
+    assert row["status"] == PostingStatus.OPEN.value
+    assert row["closed_at"] is None
+    # Surfaces as new again: first_seen_at is reset so it re-enters the digest's `new` set.
+    assert row["first_seen_at"] == reopen_day
+    assert row["last_seen_at"] == reopen_day
+
+
+def test_reopen_with_changed_content_reextracts(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="original")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    _set_extracted(migrated_engine, "a", datetime(2026, 6, 16, tzinfo=UTC))
+    sync_employer(migrated_engine, employer, FakeFetcher([]), now=datetime(2026, 6, 17, tzinfo=UTC))
+
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="EDITED while closed")]),
+        now=datetime(2026, 6, 20, tzinfo=UTC),
+    )
+
+    row = _by_id(migrated_engine)["a"]
+    assert row["extracted_at"] is None  # body moved → Layer-2 must re-extract
+    assert row["extraction_model"] is None
+
+
+def test_reopen_with_identical_content_preserves_extraction(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="unchanged")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    extracted_when = datetime(2026, 6, 16, tzinfo=UTC)
+    _set_extracted(migrated_engine, "a", extracted_when)
+    sync_employer(migrated_engine, employer, FakeFetcher([]), now=datetime(2026, 6, 17, tzinfo=UTC))
+
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="unchanged")]),
+        now=datetime(2026, 6, 20, tzinfo=UTC),
+    )
+
+    row = _by_id(migrated_engine)["a"]
+    assert row["extracted_at"] == extracted_when  # identical body → cached extraction kept (D-035)
+    assert row["extraction_model"] == "haiku-test"
+
+
 def test_failed_fetch_closes_nothing(migrated_engine: Engine, employer: Employer) -> None:
     # Seed two open postings on a good night.
     sync_employer(

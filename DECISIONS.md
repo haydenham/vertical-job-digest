@@ -756,3 +756,31 @@ The fetcher (`src/vja/fetchers/radancy.py`, `RadancyFetcher`):
 LLM-read step had near-zero reach on the platforms that hold the volume — so cracking Radancy's
 server-rendered endpoint is both higher-coverage and stays in the deterministic, no-LLM, testable lane.
 The LLM-read fallback is still coming, but for the genuinely structureless remainder, where it earns its cost.
+
+### D-053 · Re-opened postings: reopen the closed row in place, surface as new again · accepted · 2026-06-25
+A `vja-run` over the matured corpus crashed 10 employers (Vistra, S&P Global, Jane Street, AES, Xcel,
+Fluence, Shell Trading, Yes Energy, Wood Mackenzie, Kraken) with `UNIQUE constraint failed:
+postings.employer_id, postings.external_id`, aborting each one's whole transaction (new postings *and*
+genuine closures discarded). Root cause: a posting that previously vanished (marked `closed`, never
+deleted — D-009) and then **reappears** in a fetch is absent from the open index, so `compute_diff` puts
+it in `diff.new`, and `insert_posting` then collides with the still-present closed row. The persist layer
+had no resurrection path. Decision:
+- **Reopen in place, never re-insert.** `sync_employer` intersects `diff.new` with a new
+  `closed_index(employer_id)` (`{external_id: content_hash}` of closed rows); a match routes to
+  `reopen_posting` (UPDATE the existing row) instead of `insert_posting`. `diff.py` stays pure set
+  arithmetic — the insert-vs-reopen split is a persist-layer concern, like the existing
+  still_present→update/bump branch.
+- **Surface as new again.** `reopen_posting` resets `first_seen_at = now`, so the role re-enters the
+  digest's `new` set (which keys on `first_seen_at > last_sent_at`, D-037) and the dashboard's "new today"
+  — a role that's open again is freshly actionable (consistent with the D-024 freshness thesis). Decided
+  with Hayden over the quieter "reopen silently" alternative.
+- **Cache-aware re-extraction.** When the reappeared body's `content_hash` differs from the stored closed
+  row's, `extracted_at`/`extraction_model` are cleared so Layer-2 re-extracts (mirrors `update_changed`);
+  an identical body keeps the cached extraction (D-035). `source_updated_at` follows the same non-NULL
+  guard as `bump_last_seen`; `location`/`title`/`apply_url`/`raw_payload` refresh from the new L1 read.
+- **`reopened` is observability-only.** A `reopened` count rides on `SyncResult`/`RunSummary` and the
+  `vja-run`/nightly summary lines; `pipeline_runs.postings_new` keeps counting *true* inserts (no schema
+  change — a persisted reopened metric would be a separate column/migration if ever wanted).
+**Why:** D-009's "never delete" makes resurrection inevitable as the corpus ages, and a crash that silently
+drops an employer's entire diff for the night is exactly the kind of trust-eroding gap the no-mass-close
+guard exists to prevent — the fix closes the lifecycle (open → closed → open) the data model always implied.
