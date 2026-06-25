@@ -5,6 +5,63 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-24 — Phase 8 · Block 4: Radancy/TalentBrew Tier-C fetcher + platform-probe resequence (D-052)
+
+**Did:** With Tier-B done, the docs' next item was the generic Layer-2 **LLM-read** tail. A Step-0
+reconnaissance pass changed the plan.
+
+- **Research → decision (both run through Hayden):** live-probed the `custom`/`layer2` tail and found it's
+  mostly **JS-rendered SPAs or bot-blocked** (United/Southwest = Phenom shells, NextEra = Radancy, Aurora =
+  React, GridStatus = 403, Mercuria = marketing page) — served HTML carries almost no job content, so a
+  literal "LLM-read-the-page" fetcher would read nothing on the employers that matter. **Decision 1:** probe
+  the two big multi-tenant platforms (Phenom, Radancy) for a clean API *before* the LLM-read (the iCIMS
+  lesson, D-048; faithful to D-017). **Decision 2:** Radancy first (grid priority, D-022); Phenom next.
+- **Step-0 crack (Radancy):** the JS landing page is empty, but `GET {endpoint}/search-jobs/results?
+  CurrentPage=&RecordsPerPage=&SearchType=5` returns the jobs **server-rendered** in a
+  `<table id="searchresults">` (uniform TalentBrew markup → one generic fetcher). Always HTML
+  (`Accept: json` ignored) → an **HTML-parse** fetcher (the repo's first; +`beautifulsoup4`). Total from the
+  table `aria-label` ("Results 1 to 25 of 288"); rows in `tr.data-row`; the `/job/{slug}/{id}` link gives id
+  + apply_url, the `jobLocation`/`jobDate` cells give location + a real date. Captured 2 fixtures (NextEra
+  list + one job detail, D-019).
+- **Fetcher** (`src/vja/fetchers/radancy.py`): list-only + **paginate-or-fail** on the aria-label total
+  (mis-parse/short-tally → `FetchError`, never a partial → no false closures) + lazy `fetch_detail`
+  (`div.jobdescription`, routed by the same `extract._DETAIL_RESOLVERS` map — now 4). `external_id` = the
+  `/job/{slug}/{id}` **path** (Workday `externalPath` parity — the detail URL needs the slug; the id alone
+  302s to an error page; and `fetch_detail(employer, external_id)` can't widen without coupling fetchers to
+  the db layer / breaking import-linter). `updated_at` from `jobDate` parsed `%b %d, %Y` → ISO (a D-030 win
+  Workday lacks). Endpoint is **explicit per-tenant** (no slug). Wired into the registry + resolver map.
+- **Seed:** NextEra `layer2 → verified` (endpoint = search base; 288 open at probe). NRG/National Grid/
+  L3Harris **parked `proposed`/`detected`, kept `radancy`** (NRG 200 but different results markup; National
+  Grid 403; L3Harris 301) — because wiring `RADANCY` into `SUPPORTED_ATS_TYPES` means
+  `active_fetchable_employers` would otherwise select an endpointless active row and fail (the D-051
+  invariant; Workday P4.2 parked-tenant precedent, D-032). Coverage **43→44** (grid 32→33).
+
+**Decisions:** **D-052** (probe-platforms-before-LLM-read resequence + Radancy via server-rendered
+`/search-jobs/results` HTML; HTML-parse fetcher; list-only + paginate-or-fail + lazy detail; path-as-id;
+`bs4` dep; NextEra onboarded, 3 parked; 43→44). INVARIANTS (fetcher-order line + new Radancy contract line +
+the resolver-map line now 4), `docs/07` (platform table split, build-order items 7–10, endpoint encoding,
+coverage math 59%→61%), CLAUDE Phase-8 line, `data/seed/README.md` both status blocks.
+
+**Tests:** `tests/unit/test_radancy.py` (16: real-fixture golden mapping + total parse, single-page,
+pagination by CurrentPage, paginate-or-fail/truncation, mid-pagination error, empty board, missing
+table/total, row missing link/title, missing location+date, unparseable date, HTTP 500, `fetch_detail`
+description + error-page redirect + HTTP error); `tests/live/test_radancy_live.py` (opt-in NextEra smoke +
+detail-has-description); `test_extract.py` (parametrized Radancy lazy-detail dispatch); `test_registry.py`
+(Radancy supported); `test_employers_import.py` counts (43→44, +Radancy; endpoint-or-slug invariant relaxed
+since Radancy is endpoint-only).
+
+**Verified:** full Python gate green — ruff format/check, mypy (103 files), lint-imports (1/0, no new layer
+edge), **312 pytest** (+17), `uv lock` in sync (1 new dep: `beautifulsoup4`). Live smoke (2): NextEra returns
+well-formed postings + apply_url under `/job/`; `fetch_detail` returns a real description body.
+
+**Next:** **STOP for Hayden to commit + PR** (Block 4). Then **Phenom** (the `/widgets/` JSON API — United/
+Southwest/Thales), then Tier-C singletons, then the Layer-2 LLM-read tail for the genuinely-custom remainder.
+NRG/National Grid/L3Harris await a verified search base (config-only onboard). No paid extract/match run yet.
+
+**Branch:** `feat/radancy-fetcher` (off `main` @ `bad8ede`, post-Block-3-PR-#37 merge).
+
+---
+
 ## 2026-06-24 — Phase 8 · Block 3: SmartRecruiters + Oracle HCM Tier-B fetchers (D-050, D-051)
 
 **Did:** Built the next two Phase-8 (Tier-B) fetchers in one combined PR (Hayden's call), completing the

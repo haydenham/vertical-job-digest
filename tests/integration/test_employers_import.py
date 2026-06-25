@@ -90,19 +90,23 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     fetchable = active_fetchable_employers(migrated_engine)
 
     # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
-    # + 1 Oracle = 32. Aviation: 2 Greenhouse + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS = 11. Total
-    # 43, of which 20 are Workday, 6 iCIMS/Jibe, 2 Workable, 1 SmartRecruiters (Vitol), 1 Oracle ORC
-    # (Southern Company) — Phase 8. (Collins/RTX exceeds the ~4000 offset cap → Layer 2; iCIMS
-    # legacy-portal Alaska/Joby and Oracle Honeywell/Con Edison have no clean host → Layer 2;
-    # Delta/Avature is bot-challenged → Layer 2.)
-    assert len(fetchable) == 43
+    # + 1 Oracle + 1 Radancy = 33. Aviation: 2 Greenhouse + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS
+    # = 11. Total 44, of which 20 are Workday, 6 iCIMS/Jibe, 2 Workable, 1 SmartRecruiters (Vitol),
+    # 1 Oracle ORC (Southern Company), 1 Radancy (NextEra) — Phase 8. (Collins/RTX exceeds the ~4000
+    # offset cap → Layer 2; iCIMS legacy-portal Alaska/Joby and Oracle Honeywell/Con Edison have no
+    # clean host → Layer 2; Delta/Avature is bot-challenged → Layer 2; NRG/National Grid/L3Harris
+    # Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
+    assert len(fetchable) == 44
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 20
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
     assert sum(1 for e in fetchable if e.ats_type == AtsType.SMARTRECRUITERS) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ORACLE_HCM) == 1
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.RADANCY) == 1
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
-    assert all(e.ats_slug for e in fetchable)  # needed to build endpoints
+    # Every fetchable row can build its endpoint: a slug (GH/Lever/Ashby/Workable/SR) OR an explicit
+    # endpoint (Workday/iCIMS/Oracle/Radancy — per-tenant, no slug). (D-052: Radancy endpoint-only.)
+    assert all(e.ats_slug or e.endpoint for e in fetchable)
 
 
 def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Engine) -> None:

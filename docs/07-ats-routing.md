@@ -26,7 +26,8 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Avature** | 1 | per-client, no std API | detected | **C** |
 | **UKG/UltiPro** | 1 | recruiting API | detected | **C** |
 | **Eightfold** | 1 | JSON API | detected | **C** |
-| **Radancy/Phenom** | 3 | enterprise portal, no clean JSON | layer2 | **D** |
+| **Radancy/TalentBrew** | 3 | server-rendered `/search-jobs/results` HTML | 1 verified (built, D-052); 2 parked (endpoint not yet confirmed) | **C** |
+| **Phenom** | 0 grid (United/Southwest/Thales are aviation) | JS shell + `/widgets/` JSON API | next block | **C** |
 | **Custom** | 14 | no API | layer2 | **D** |
 
 ## What this means for the build
@@ -35,9 +36,13 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
   Workday alone is 15 and is **live-verified** (the `cxs` POST returns job counts: AES 111, Vistra 193, S&P 234, Shell 174, etc.).
 - **+4 fetchers (Tier B: iCIMS 4, Workable 2, SmartRecruiters 1, Oracle HCM 1 built) → 32/54 (59%)** with 8 fetchers
   total. (Con Edison's Oracle host wasn't found → Layer 2; so 1 of the 2 grid Oracle tenants is fetchable, D-051.)
-- **Tier C is 5 singletons** — build opportunistically (SmartRecruiters/Workable-grade easy ones first; defer auth-gated SuccessFactors).
-- **Tier D (17/54, 31%) → Layer 2 LLM-read**, exactly as the architecture intends. These are the Radancy/Phenom
-  enterprise portals + truly custom sites. No per-company scrapers — the LLM-read fallback handles them generically.
+- **+1 fetcher (Tier C: Radancy/TalentBrew built, D-052) → 33/54 (61%)** with 9 fetchers total — NextEra onboarded
+  via the server-rendered `/search-jobs/results` HTML; NRG/National Grid parked until their search base verifies.
+- **Tier C also has 5 singletons + Phenom (next)** — build opportunistically; Phenom's `/widgets/` JSON covers the
+  airline portals (aviation), then the singletons (defer auth-gated SuccessFactors).
+- **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
+  (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
+  near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
 
 **Deterministic ceiling ≈ 38/54 (70%)** reachable with ~8 generic platform fetchers; the remaining ~30% is Layer 2.
 This vindicates the "don't write N custom scrapers" call (D-017): the long tail collapses into a handful of platforms.
@@ -65,15 +70,26 @@ This vindicates the "don't write N custom scrapers" call (D-017): the long tail 
    constructed from `careers_url`; description a lazy `fetch_detail`). +1 fetchable (Southern Company).
    Honeywell (vanity domain proxies the REST API 302→404) + Con Edison (host not exposed) → Layer 2
    until a canonical host + siteNumber is curated (then config-only onboard).
-7. **Tier C singletons** — as time allows.
-8. **Layer 2 LLM-read** — absorbs Tier D (and is needed for HN/niche sources anyway).
+7. **Radancy/TalentBrew** (Tier C, Phase 8 — **done**, D-052) — via the **server-rendered**
+   `GET {endpoint}/search-jobs/results` HTML (the JS landing page is empty; one generic bs4 HTML-parse
+   fetcher, **list-only + paginate-or-fail** on the table `aria-label` total + lazy `fetch_detail`).
+   `external_id` = the `/job/{slug}/{id}` path (Workday parity — the id alone 404s). +1 fetchable
+   (NextEra); NRG/National Grid/L3Harris parked `proposed` until their search base verifies.
+8. **Phenom** (Tier C — **next block**) — the JS landing page is a shell but the product exposes a
+   `/widgets/` JSON search API (covers United/Southwest/Thales). Probe-and-build, same playbook.
+9. **Tier C singletons** (Jobvite/SuccessFactors/Avature/UKG/Eightfold) — as time allows.
+10. **Layer 2 LLM-read** — absorbs the genuinely-custom Tier D + HN/niche sources (where structure truly
+    runs out — the platform-probe pass, D-052, showed the literal LLM-read had near-zero reach on the
+    platform portals, so it now sits *after* the platform fetchers, not before).
 
 ## Endpoint encoding in the seed CSV
 - **Greenhouse/Lever/Ashby/Workable/SmartRecruiters:** `ats_slug` = the slug; `endpoint` derived from it.
 - **Workday:** `ats_slug` = `tenant:dc:site` (e.g. `aes:wd1:AES_US`); `endpoint` = full `cxs` jobs URL.
   Fetch = `POST {endpoint}` with body `{"limit":20,"offset":0,"appliedFacets":{},"searchText":""}`, paginate by `offset`.
-- **iCIMS/Oracle (explicit per-tenant):** `endpoint` holds the full API URL (iCIMS Jibe `/api/jobs`;
-  Oracle the CE `recruitingCEJobRequisitions` URL incl. `siteNumber`); `careers_url` is the apply base.
+- **iCIMS/Oracle/Radancy (explicit per-tenant):** `endpoint` holds the per-tenant base (iCIMS Jibe
+  `/api/jobs`; Oracle the CE `recruitingCEJobRequisitions` URL incl. `siteNumber`; Radancy the
+  search base, e.g. `https://jobs.nexteraenergy.com`, to which the fetcher appends `/search-jobs/results`);
+  `careers_url` is the apply base. Radancy carries no `ats_slug` (endpoint-only).
 - **Still-detected portals (Jobvite/SuccessFactors/etc.):** `careers_url` holds the portal; `ats_slug`/`endpoint` to be filled when the fetcher is built.
 - **layer2:** `careers_url` only; routed to LLM-read.
 
