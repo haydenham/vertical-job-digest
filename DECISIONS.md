@@ -707,3 +707,52 @@ tenants, so it is one generic per-platform fetcher (D-017/D-004).
 **Why:** Oracle ORC is a high-frequency utility/aerospace ATS; its CE REST API is one clean generic
 fetcher that reuses the Workday lazy-detail path, advancing the D-018 coverage tier. Per-tenant host
 discovery is curation, not code — the fetcher is the deliverable.
+
+### D-052 · Phase 8: probe platform APIs before the LLM-read tail; Radancy/TalentBrew fetcher · accepted · 2026-06-24
+With Tier-B (iCIMS/Workable/SmartRecruiters/Oracle) done, the docs' next item was the generic Layer-2
+**LLM-read** fallback for the `custom`/`layer2` tail. A Step-0 reconnaissance pass (live probes) found the
+tail is mostly **JS-rendered SPAs or bot-blocked** (United/Southwest = Phenom shells, NextEra = Radancy,
+Aurora = React, GridStatus = 403, Mercuria = a marketing page) — the served HTML carries almost no job
+content, so a literal "LLM-read-the-page" fetcher would read nothing on the employers that matter, at
+recurring token cost. Two decisions (both run through Hayden):
+- **Resequence: probe the two big multi-tenant platforms (Phenom, Radancy) for a clean API *before* the
+  generic LLM-read fallback.** This applies the iCIMS lesson (D-048) — the visible portal had no JSON but
+  the *product* exposed one — and is faithful to D-017 (route to a generic platform fetcher if one fits;
+  Layer 2 is for what truly doesn't). It buys deterministic, testable, no-LLM coverage of the high-volume
+  airline/utility portals. The generic LLM-read fallback still comes after, for the truly-custom remainder.
+- **Radancy first** (Phenom is the next block). Radancy covers 3 grid utilities (NextEra, NRG, National
+  Grid) + L3Harris (aviation); grid is the priority/seeded vertical (D-022).
+
+The fetcher (`src/vja/fetchers/radancy.py`, `RadancyFetcher`):
+- **Target = the server-rendered search-results endpoint, not the JS landing page.**
+  ``GET {endpoint}/search-jobs/results?CurrentPage={n}&RecordsPerPage={N}&SearchType=5`` → an HTML page
+  with a ``<table id="searchresults">`` of ``<tr class="data-row">`` jobs (same TalentBrew markup across
+  tenants → one generic per-platform fetcher, not a per-company scraper, D-017/D-004). Always HTML
+  (`Accept: application/json` still returns HTML), so it's an **HTML-parse fetcher** (the repo's first) —
+  one new runtime dep, **`beautifulsoup4`** (pure-Python `html.parser` backend, no lxml/C build).
+- **Contract mirrors Workday: list-only + paginate-or-fail + lazy detail.** The grand total comes from the
+  table's ``aria-label`` ("Results 1 to 25 **of 288**"); pagination is by ``CurrentPage`` until the
+  collected count reaches it; a short tally or an unparseable total is a hard `FetchError` (a truncated or
+  mis-parsed scrape must never read as mass closures — the false-closure guard, `docs/08`). The rows carry
+  no description, so it's fetched lazily per in-scope survivor via ``fetch_detail`` (the per-job page's
+  ``div.jobdescription``), routed by the same `extract._DETAIL_RESOLVERS` map (now 4 entries).
+- **Mapping:** ``external_id`` = the ``/job/{slug}/{id}`` **path** (D-016). The detail URL needs the slug —
+  the numeric id alone redirects to an error page — and ``fetch_detail`` takes only ``(employer,
+  external_id)``, so the path *is* the id (widening that signature would couple fetchers to the db layer,
+  an import-linter violation). This is the same **path-as-id shape Workday's ``externalPath`` uses**, and
+  carries Workday's same accepted (low) retitle-churn risk. ``apply_url`` = that path made absolute;
+  ``location`` from the ``jobLocation`` cell; ``updated_at`` from the ``jobDate`` cell parsed (`%b %d, %Y`)
+  to an ISO date (a D-030 freshness win, unlike Workday).
+- **Only NextEra onboarded; NRG/National Grid/L3Harris parked.** NextEra `layer2 → verified` (endpoint =
+  search base, 288 open at probe). The other three didn't cleanly verify at probe (NRG 200 but different
+  results markup; National Grid 403 bot-blocked; L3Harris 301-redirects), so — since wiring `RADANCY` into
+  `SUPPORTED_ATS_TYPES` means `active_fetchable_employers` would now *select* any active `radancy` row and
+  fail on the missing endpoint — they're parked `status=proposed`/`verification=detected`, kept as
+  `radancy` (the Workday P4.2 parked-tenant precedent, D-032), with their probe result in the notes. They
+  onboard config-only (flip `active` + add the verified endpoint) once a working search base is curated.
+- **Coverage:** +1 fetchable (NextEra — grid/power), **43 → 44** (grid 32 → 33). Adds the Radancy
+  *platform*; the parked tenants + Phenom land next.
+**Why:** the long tail collapses into a few platforms (D-017), and the probe pass showed the literal
+LLM-read step had near-zero reach on the platforms that hold the volume — so cracking Radancy's
+server-rendered endpoint is both higher-coverage and stays in the deterministic, no-LLM, testable lane.
+The LLM-read fallback is still coming, but for the genuinely structureless remainder, where it earns its cost.

@@ -6,9 +6,10 @@ schema-validated result. Runs only on open postings with `extracted_at IS NULL` 
 Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once, then pennies a
 night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
 
-Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM — their list
-endpoints omit the job description) fetch it lazily, per in-scope survivor, via their `fetch_detail`
-(routed by `_DETAIL_RESOLVERS`); every other ATS already carries the description in `raw_payload`.
+Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy —
+their list endpoints omit the job description) fetch it lazily, per in-scope survivor, via their
+`fetch_detail` (routed by `_DETAIL_RESOLVERS`); every other ATS carries the description in
+`raw_payload`.
 Either way the raw payload is handed to the model, which extracts from messy input — the point of
 all-LLM extraction.
 """
@@ -35,6 +36,7 @@ from vja.db.postings import (
     save_extraction,
 )
 from vja.fetchers.oracle import OracleFetcher
+from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
 from vja.models import AtsType, Employer, Level, RemoteType
@@ -74,6 +76,7 @@ _DETAIL_RESOLVERS: dict[AtsType, DetailResolver] = {
     AtsType.WORKDAY: WorkdayFetcher().fetch_detail,
     AtsType.SMARTRECRUITERS: SmartRecruitersFetcher().fetch_detail,
     AtsType.ORACLE_HCM: OracleFetcher().fetch_detail,
+    AtsType.RADANCY: RadancyFetcher().fetch_detail,
 }
 
 

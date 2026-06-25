@@ -141,8 +141,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Coverage / fetchers
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
-  SmartRecruiters + Oracle done**) → Layer-2 LLM-read for the custom tail + HN/niche. (D-018, D-048,
-  D-049, D-050, D-051)
+  SmartRecruiters + Oracle done**) → Tier-C platform fetchers (**Radancy done; Phenom next**) →
+  Layer-2 LLM-read for the custom tail + HN/niche. **Probe the multi-tenant platforms for a clean API
+  before the generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has
+  near-zero reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018,
+  D-048, D-049, D-050, D-051, D-052)
 - **Workday `cxs` fetcher is list-only + paginate-or-fail;** `osv-` Workday hosts route to
   Layer 2; a tenant board exceeding Workday's ~4000 offset cap also routes to Layer 2
   (paginate-or-fail rejects the truncated page — RTX, D-046). (D-032, D-046)
@@ -166,8 +169,16 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (limit/offset are `finder` sub-params); `apply_url` **constructed** (`{careers_url}/job/{Id}`), description a lazy
   `fetch_detail` (host + siteNumber parsed off the list endpoint). `external_id = Id`; `location = PrimaryLocation`;
   `updated_at = PostedDate`. Per-tenant hosts not yet found (Honeywell/Con Edison) route to Layer 2. (D-051)
+- **Radancy/TalentBrew fetcher targets the server-rendered `GET {endpoint}/search-jobs/results` HTML, not the
+  JS landing page.** The repo's first **HTML-parse** fetcher (`beautifulsoup4`); one generic per-platform parser of
+  the uniform `<table id="searchresults">` markup. **List-only + paginate-or-fail** on the table `aria-label` total
+  ("Results 1 to 25 of N"), pages by `CurrentPage`; description is a lazy `fetch_detail` (`div.jobdescription`).
+  `external_id` = the `/job/{slug}/{id}` **path** (Workday `externalPath` parity — the detail URL needs the slug;
+  the id alone 404s); `apply_url` is that path absolute; `updated_at` from the `jobDate` cell. Endpoint is
+  **explicit per-tenant** (not slug-derived). (D-052)
 - **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`** (Workday +
-  SmartRecruiters + Oracle) — fetched only for in-scope survivors (cost discipline); every other ATS carries the
-  description in `raw_payload`. Adding a list-only ATS is a one-line map entry, no per-company branching. (D-050, D-051)
+  SmartRecruiters + Oracle + Radancy) — fetched only for in-scope survivors (cost discipline); every other ATS carries
+  the description in `raw_payload`. Adding a list-only ATS is a one-line map entry, no per-company branching. (D-050,
+  D-051, D-052)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
   Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)

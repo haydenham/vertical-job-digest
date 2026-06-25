@@ -140,8 +140,15 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   +1 (Vitol) → **41→42**. **Oracle HCM/ORC ✅** (D-051) — via the Candidate-Experience REST API
   (explicit per-tenant endpoint; list-only + lazy detail); +1 (Southern Company) → **42→43** (Honeywell +
   Con Edison hosts not found → Layer 2, onboard config-only when curated). The list-only ATSs' lazy detail
-  is now routed by a per-ATS `extract._DETAIL_RESOLVERS` map (Workday/SmartRecruiters/Oracle). Next: the
-  Layer-2 LLM-read tail.
+  is now routed by a per-ATS `extract._DETAIL_RESOLVERS` map (Workday/SmartRecruiters/Oracle/Radancy).
+  **Radancy/TalentBrew ✅** (D-052) — a Step-0 probe found the `custom`/`layer2` tail is mostly JS/bot-blocked,
+  so the literal "LLM-read-the-page" step has near-zero reach; **decision: probe the multi-tenant platforms
+  (Phenom, Radancy) for a clean API first** (the iCIMS lesson), deferring the generic LLM-read to the genuinely
+  structureless remainder. Radancy = one generic **HTML-parse** fetcher (`beautifulsoup4`, the repo's first)
+  over the server-rendered `{endpoint}/search-jobs/results` table (list-only + paginate-or-fail + lazy detail);
+  `external_id` = the `/job/{slug}/{id}` path (Workday parity); +1 (NextEra) → **43→44** (NRG/National Grid/
+  L3Harris parked `proposed` until their search base verifies). **Next: Phenom** (`/widgets/` JSON, the airline
+  portals), then the singletons, then the Layer-2 LLM-read tail for what truly has no platform.
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
   upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real
