@@ -20,7 +20,7 @@ re-litigate them under cutover pressure.
 
 | Concern | Status | Where |
 |---|---|---|
-| **DB portability** | SQLite→Postgres is a URL swap + `alembic upgrade`. SQLAlchemy **Core** + Alembic; enums are `VARCHAR+CHECK` (`native_enum=False`); `UTCDateTime` normalizes tz on both dialects; JSON via `sa.JSON`. | D-025, `src/vja/db/schema.py`, `src/vja/db/engine.py` |
+| **DB portability** | SQLite→Postgres is a URL swap + `alembic upgrade`, now **CI-verified on both dialects** (the suite re-runs on a `postgres:16` service via `VJA_TEST_DATABASE_URL`). SQLAlchemy **Core** + Alembic; enums are `VARCHAR+CHECK` (`native_enum=False`); `UTCDateTime` normalizes tz on both dialects; JSON via `sa.JSON`. | D-025, D-054, `src/vja/db/schema.py`, `src/vja/db/engine.py`, `tests/conftest.py`, `.github/workflows/ci.yml` |
 | **Runtime/scheduler** | Scheduler is a swappable trigger. App logs to **stdout/stderr**; schedule time + secrets are **env config**, not code; macOS surface confined to `deploy/launchd/`. Cutover adds a `deploy/<platform>/` trigger. Postgres unlocks GitHub Actions cron. | D-031, `src/vja/nightly.py` |
 | **Cost model scales with data, not users** | Server-side nightly batch; users only **read** precomputed results; each ATS endpoint hit once/day total regardless of user count. | D-005 |
 | **Matching is multi-user-shaped already** | Push-batch keyed on `(posting, profile)`; `matches`/`digests`/`profiles` are per-user rows; `employers`/`postings` are shared (shared coverage is the whole point). | D-006, `src/vja/db/schema.py` |
@@ -81,6 +81,9 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       recipients need a **verified sending domain** (SPF/DKIM). A digest in spam is no product.
 
 ### 3.5 Live migrations & operations
+- [x] **Migrations validated on Postgres** — the full migration chain (`alembic upgrade head`) and the suite
+      run on `postgres:16` in CI (D-054, Phase 9.1). *(The backward-compat discipline below is still pending —
+      this only proves the schema builds + round-trips on PG, not that future migrations are non-destructive.)*
 - [ ] Once Postgres holds user data, migrations must be **backward-compatible** (no destructive drops without a
       data path) — different discipline than the current disposable-DB era.
 - [ ] **Observability beyond the failure email:** `pipeline_runs` is a solid audit start (D-031); cloud wants

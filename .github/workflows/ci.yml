@@ -43,6 +43,41 @@ jobs:
       - name: Tests (unit + integration + system)
         run: uv run pytest
 
+  postgres:
+    # D-054: prove the dialect-portable cutover (D-025) by running the same offline suite
+    # against Postgres, so SQLite→Postgres stays a verified URL swap and every later block's
+    # schema is born-on-Postgres-verified. pytest-only — lint/format/types/imports are
+    # dialect-agnostic and already covered by `gates`.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vja_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install deps
+        run: uv sync --locked
+
+      - name: Tests on Postgres (unit + integration + system)
+        env:
+          VJA_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/vja_test
+        run: uv run pytest
+
   frontend:
     # The D-042 frontend gate: the React dashboard's eslint + tsc + vitest, mirrored in
     # pre-commit (docs/09 "same checks, two moments"). Parallel to the Python `gates` job.
