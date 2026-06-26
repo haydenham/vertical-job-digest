@@ -41,7 +41,8 @@ Concrete, low/zero-cost rules adopted now so the cutover is "add a layer," not "
   multi-user adds *resolve profile from authenticated session → filter*, not an API redesign. Per-user rows
   (`matches`/`digests`) stay row-scoped; shared rows (`employers`/`postings`) stay global. *(Status: ✅ adopted
   in Phase 6 B1 — `_resolve_profile` in `src/vja/api/app.py`: explicit `profile_id` or single-active default;
-  404 none, 409 ambiguous. D-041.)*
+  404 none, 409 ambiguous. D-041. **Auth plugged in 9.2** — `_resolve_profile(…, user)` now resolves the
+  authenticated user's own profile, 403 on another's `profile_id`; enforcement gated by `VJA_AUTH_REQUIRED`. D-055.)*
 - **No live external calls from user-facing surfaces** (D-005). The dashboard reads the DB only; it never
   triggers a fetch/LLM call. Keeps the read path safe to expose publicly without a cost/abuse surface.
 - **PII lives only in `profiles`/`matches`/`digests`.** Don't denormalize `user_email`/`resume_text` into
@@ -63,10 +64,15 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       — run `/security-review` on the cutover diff.
 
 ### 3.2 Auth & identity
-- [ ] No `users` table, no sessions, no signup/login. The whole authn layer is unbuilt.
-- [ ] **Authz:** the read API must filter to the authenticated user's profile(s) — the §2 parameterization is
-      the seam this plugs into.
+- [x] **`users` table + Google OAuth login + signed-cookie sessions** (D-055, Phase 9.2). Authlib OIDC →
+      `SessionMiddleware`; `users` (`google_sub`/`email`/`name`) anchored on the D-027 email seam (first
+      login adopts the email-only seed identity + backfills `profiles.user_id`). *(Prod OAuth redirect URIs +
+      cookie hardening `https_only`/`SameSite` still deferred to the 9.5 deploy.)*
+- [x] **Authz:** the read API resolves the profile from the authenticated user — the §2 seam, now plugged
+      (`_resolve_profile(…, user)`: own-profile resolution, 403 on another's `profile_id`). *Hard*
+      enforcement is gated by `VJA_AUTH_REQUIRED` (default off), flipped at 9.4/9.5. (D-055)
 - [ ] Multi-profile-per-user shape (one user, both verticals) vs. the current one-profile-per-(vertical) view.
+      *(1-vertical/user is the accepted default; the `profiles.user_id` FK already supports 1:many when wanted.)*
 
 ### 3.3 Cost & abuse control
 - [ ] **Signup-triggered backfill is the first place user action drives LLM spend** (the D-006 on-demand

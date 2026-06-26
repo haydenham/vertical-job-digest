@@ -7,15 +7,18 @@ explicit / 404 / 409), the response envelope, and health.
 
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 from sqlalchemy import Engine
 
 from vja.api.app import create_app
+from vja.api.auth import get_current_user
 from vja.db.engine import begin
 from vja.db.matches import save_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import employers, postings
+from vja.db.users import User
 
 _NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
 _VERTICAL = "grid_power_software"
@@ -205,3 +208,53 @@ def test_404_unknown_profile_id(migrated_engine: Engine) -> None:
         "/api/postings", params={"vertical": _VERTICAL, "profile_id": 99999}
     )
     assert resp.status_code == 404
+
+
+# --- authz (Phase 9.2, D-055) ----------------------------------------------------------------
+# The read path resolves the profile from the authenticated user (docs/11 §2 seam). We inject the
+# user via a dependency override rather than the full OAuth dance (that's pinned in test_auth.py).
+
+
+def _authed_client(engine: Engine, email: str) -> TestClient:
+    app = create_app(engine)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=1, google_sub="g-1", email=email, name=None
+    )
+    return TestClient(app)
+
+
+def test_authed_user_resolves_own_profile(migrated_engine: Engine) -> None:
+    """With two profiles present, an authed user resolves to *their own* without a profile_id —
+    no 409. (Contrast test_409_when_multiple_active_profiles on the unauthenticated path.)"""
+    mine = _profile(migrated_engine, email="me@example.com")
+    _profile(migrated_engine, email="other@example.com")
+    emp = _employer(migrated_engine)
+    matched = _posting(migrated_engine, emp, "mine")
+    _match(migrated_engine, matched, mine)
+
+    resp = _authed_client(migrated_engine, "me@example.com").get(
+        "/api/postings", params={"vertical": _VERTICAL}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["profile_id"] == mine.id
+    assert _titles(resp.json()) == ["mine"]
+
+
+def test_authed_user_forbidden_anothers_profile_id(migrated_engine: Engine) -> None:
+    mine = _profile(migrated_engine, email="me@example.com")
+    other = _profile(migrated_engine, email="other@example.com")
+    resp = _authed_client(migrated_engine, "me@example.com").get(
+        "/api/postings", params={"vertical": _VERTICAL, "profile_id": other.id}
+    )
+    assert resp.status_code == 403
+    assert mine  # (the user does have their own profile; the 403 is about ownership, not existence)
+
+
+def test_auth_required_blocks_anonymous(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The enforcement seam: with VJA_AUTH_REQUIRED on, an unauthenticated read is 401."""
+    monkeypatch.setenv("VJA_AUTH_REQUIRED", "1")
+    _profile(migrated_engine)
+    resp = _client(migrated_engine).get("/api/postings", params={"vertical": _VERTICAL})
+    assert resp.status_code == 401

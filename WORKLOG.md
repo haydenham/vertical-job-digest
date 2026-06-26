@@ -5,6 +5,66 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-26 — Phase 9 · Block 9.2: auth foundation — Google OAuth + `users` + read-API authz (D-055)
+
+**Built the layer 9.3 depends on** (its résumé-upload / signup→backfill write endpoints sit behind login).
+Three forks run through Hayden, all taking the recommended option:
+1. **Real Google OAuth, exercised locally** (not stubbed-till-deploy) — so 9.3's writes are genuinely
+   gateable now. 2. **`users` table + nullable `profiles.user_id` FK** (not email-as-sole-key) — clean
+   multi-user shape, migration trivial + born-on-both-dialects (D-054). 3. **Authz layer + deferred hard
+   enforcement** (not auth-required-now) — local dashboard stays usable before the 9.4 login UI; existing
+   API tests stay green.
+
+**Did:**
+- **Schema/migration** (`db/schema.py` + `7d5b69c46786`): `users` (`google_sub` uniq/nullable, `email`
+  uniq/not-null, `name`, `created_at`) + nullable `profiles.user_id` FK. `op.batch_alter_table` so the FK
+  lands on SQLite (table rebuild) and Postgres alike. Hand-fixed the autogen to render `UTCDateTime` as
+  `sa.DateTime(timezone=True)` (repo convention) and name the FK; `alembic check` → no drift.
+- **`db/users.py`:** `upsert_user_by_google` (idempotent on `sub` → adopt email-only row → insert) +
+  `_link_profiles` (backfills `profiles.user_id` by email = the D-027→FK bridge, so the seed profile
+  attaches on first login) + `get_user`. `profiles.user_email` kept → match/digest/nightly untouched.
+- **`api/auth.py`:** Authlib Google OIDC registry (inert/503 until `GOOGLE_CLIENT_*`; lazy discovery),
+  `get_current_user`/`require_user` deps, `auth_required()` reading `VJA_AUTH_REQUIRED`, `session_secret()`.
+- **`api/app.py`:** `SessionMiddleware`; `/auth/login` + `/auth/callback` (exchange → upsert+link → session
+  → redirect) + `/auth/logout` + `/api/me`; `_resolve_profile(…, user)` — authed resolves own profile (403
+  on another's `profile_id`), unauthenticated keeps the single-active default, `VJA_AUTH_REQUIRED` ⇒ 401.
+- **Deps/config:** `authlib` + `itsdangerous` (`uv lock`); mypy override for un-stubbed authlib; `.env.example`
+  gains `GOOGLE_CLIENT_ID/SECRET`, `VJA_SESSION_SECRET`, `VJA_AUTH_REQUIRED` + the localhost redirect note.
+- **Migration bug found in the live login (D-021):** the first real OAuth login 500'd on `no such table: users`
+  — the prod `vja.db` hadn't been upgraded. Upgrading then crashed: the `profiles.user_id` **batch rebuild**
+  (SQLite can't add a FK in place) drops+recreates `profiles`, and with `PRAGMA foreign_keys=ON` (the app's
+  runtime setting, which `migrations/env.py` was inheriting via `get_engine`) the DROP tripped `matches → profiles`
+  on the **populated** DB. The empty-table fixture never hit it. **Fix:** `env.py` now runs migrations on a
+  dedicated engine with **SQLite FKs OFF** (set at connect — the pragma is a no-op in a txn; the app keeps FKs
+  ON) — exactly SQLite's documented ALTER procedure. Regression test `test_add_user_id_on_populated_db` seeds a
+  `matches`→`profiles` row, upgrades, asserts success + data preserved. Real `vja.db` then migrated cleanly
+  (backed up first; 3 profiles / 394 matches / 11 327 postings intact) after clearing the partial-migration
+  orphans (`users` + `_alembic_tmp_profiles`) the aborted first attempt left behind (alembic uses
+  non-transactional DDL on SQLite, so the failed run isn't atomic).
+
+**Decisions:** **D-055**. INVARIANTS gains an **Auth & identity** section; docs/11 §3.2 (users+authz) ticked,
+§2 seam status updated.
+
+**Tests:** new `tests/integration/test_auth.py` (users-repo idempotency/email-adoption/profile-link;
+login 503-unconfigured + redirect-to-Google; callback creates+links+sessions with the token exchange
+mocked; `/api/me` 401/200; logout). Extended `test_api.py` with authz (own-profile resolution, 403 on
+another's id, `VJA_AUTH_REQUIRED` 401). The live Google handshake is a **manual** check, not in the suite.
+
+**Verified:** full Python gate green — ruff format/check, mypy (106 files), lint-imports (1 kept/0 broken),
+`uv lock --check` in sync, **329 pytest on SQLite and 329 on Postgres** (local PG 15 throwaway on :5433,
+Docker still unavailable; CI uses 16) — the `users`+FK migration proven on both dialects (D-054), incl. the
+new populated-DB regression. **Live login verified end-to-end:** `/auth/login` 302s to Google with the real
+client (live OIDC discovery), the callback authenticated + created the user after the migration fix.
+
+**Next:** **STOP for Hayden to commit + PR** (9.2). Hayden provisions the Google OAuth client (consent
+screen + Web credentials, redirect `http://localhost:8000/auth/callback`) to run the manual login check.
+Then **9.3 — résumé upload + signup→backfill + cost/abuse guards** (behind `require_user`). Still-open
+(orthogonal, no code): the Phase-8 Part B cash-in run + the Phenom fetcher.
+
+**Branch:** `feat/auth-foundation` (off `main` @ `30ac867`, post-9.1-PR-#40 merge).
+
+---
+
 ## 2026-06-26 — Phase 9 plan + Block 9.1: Postgres path CI-verified on both dialects (D-054)
 
 **Planned Phase 9** (cloud + multi-user product, D-047) into 5 PR-sized blocks and built the first.

@@ -79,6 +79,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (`alembic upgrade`, URL swap). The Postgres path is **CI-verified on both dialects** — the default
   suite re-runs on a `postgres:16` service via `VJA_TEST_DATABASE_URL`, so the cutover is a proven URL
   swap and later tables are born-on-Postgres-verified. (D-025, D-054)
+- **Migrations run with SQLite foreign keys OFF** (`migrations/env.py`, set at connect; the app's runtime
+  engine keeps them ON). A batch table-rebuild (SQLite's only way to add a FK to an existing table) drops +
+  recreates the table, which trips any *referencing* table (`matches → profiles`) on a populated DB unless
+  FKs are off — exactly SQLite's documented ALTER procedure. Pinned by a populated-DB regression test. (D-055)
 
 ## Digest & delivery
 
@@ -119,6 +123,22 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Signup backfill caps at 5 days, `trigger=backfill`, idempotent.** *(Supersedes D-024's
   original 2-week cap.)* The nightly match is NOT capped; the dashboard's 14-day toggle is
   decoupled from the backfill window. (D-039, amending D-024)
+
+## Auth & identity
+
+- **A user is a `users` row** (`google_sub`, `email`, `name`), created at first **Google OAuth (OIDC)**
+  login. **Identity still anchors on email** (D-027): `upsert_user_by_google` adopts a pre-existing
+  email-only row and **backfills `profiles.user_id` by email**, so the seed profile attaches on first
+  login with no data migration. `profiles.user_email` is retained (match/digest recipient unchanged). (D-055)
+- **Login is Authlib OIDC → a signed-cookie session** (`SessionMiddleware`, secret `VJA_SESSION_SECRET`).
+  Login routes are **inert (503) until `GOOGLE_CLIENT_*` are set**; the real Google round-trip is a manual
+  check, the suite mocks the token exchange. Prod redirect URIs + cookie hardening land at deploy (9.5). (D-055)
+- **The read API resolves the profile from the authenticated user** (the docs/11 §2 seam): authed → *that
+  user's* profile for the vertical, another user's `profile_id` → 403; unauthenticated → the single-active
+  default. **Hard enforcement is gated by `VJA_AUTH_REQUIRED`** (default off) — on ⇒ no session is 401;
+  flipped at 9.4/9.5, not re-architected. (D-055, D-005)
+- **Secrets are env-only** (`GOOGLE_CLIENT_ID/SECRET`, `VJA_SESSION_SECRET`), never in the repo — a
+  platform secret store is a config swap. (core, D-055)
 
 ## Cost & safety
 

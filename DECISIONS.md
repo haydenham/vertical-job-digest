@@ -808,3 +808,42 @@ cutover, no deploy** — purely a portability proof + CI gate.
 uploaded résumés). Landing the Postgres CI matrix *first* (cheap, pure-backend, no decisions entangled)
 means those tables are born-on-Postgres-verified as they're written — instead of designed on SQLite and
 debugged on the live dialect under deploy-deadline pressure during the cutover (9.5). Refines D-025.
+
+### D-055 · Phase 9 · 9.2: auth foundation — Google OAuth + `users` + read-API authz · accepted · 2026-06-26
+Second Phase-9 block (D-047), the layer **9.3's behind-login write endpoints depend on**. Builds the
+identity/authn/authz layer `docs/11 §3.2` enumerates and `§2` reserved the `(vertical, profile_id)` seam
+for. Scope is local plumbing: **no deploy** (9.5) and **no login frontend** (9.4) yet. Three forks, run
+through Hayden:
+- **Real Google OAuth, exercised locally** (over "machinery now, bind Google at deploy"). Authlib's
+  Starlette OIDC client (`server_metadata_url` discovery, `scope=openid email profile`); `/auth/login` →
+  Google → `/auth/callback` exchanges the code, reads `sub`/`email`/`name`, and opens a **signed-cookie
+  session** (Starlette `SessionMiddleware` + `itsdangerous`, secret = `VJA_SESSION_SECRET`). Routes are
+  **inert (503) until `GOOGLE_CLIENT_*` are set**; OIDC discovery is lazy (no network until a login). The
+  real Google round-trip is a **manual** check (the `live`-marker philosophy); the default suite mocks the
+  token exchange. Hayden provisions the OAuth client (consent screen + Web credentials, localhost redirect
+  `http://localhost:8000/auth/callback`); **prod redirect URIs are deferred to 9.5**. New deps: `authlib`,
+  `itsdangerous`. (Authlib ships no stubs → a scoped `ignore_missing_imports` at the api boundary.)
+- **`users` table + nullable `profiles.user_id` FK** (over "email as the sole join key"). `users` =
+  (`id`, `google_sub` unique/nullable, `email` unique/not-null, `name`, `created_at`); PII tier alongside
+  profiles/matches/digests (`docs/11 §2`), never denormalized into shared tables. **Identity still anchors
+  on email (D-027):** `upsert_user_by_google` matches `google_sub` → adopts an email-only row → inserts,
+  and **backfills `profiles.user_id` by email** on first login — so the pre-existing seed profile attaches
+  with no data-migration step. `profiles.user_email` is kept, so match/digest/nightly recipient resolution
+  is untouched (purely additive). Migration uses `op.batch_alter_table` so the FK lands on **both
+  dialects** (SQLite rebuild + Postgres direct); verified on both per D-054.
+- **Build the authz layer, defer *hard* enforcement** (over "flip the API to auth-required now"). The read
+  API's `_resolve_profile` now takes the current user: **authenticated** → resolves to *that user's*
+  profile for the vertical (linked by email), a `profile_id` that isn't theirs → **403**; **unauthenticated**
+  → the original single-active default (404/409), keeping the local dashboard usable before there's a login
+  UI. `VJA_AUTH_REQUIRED` (default off) is the **enforcement seam**: when on, an unauthenticated read is
+  401 — flipped in 9.4/9.5 without re-architecting. A `require_user` dependency is ready for 9.3's writes.
+**Why:** 9.3 (résumé upload + signup→backfill) spends LLM tokens and must sit behind a real login, so auth
+must be genuinely usable now, not stubbed. Anchoring on the existing email seam (D-027) makes the `users`
+addition a backfill, not a rewrite, and deferred enforcement keeps every prior block working while the
+machinery lands. **Out of scope (later):** multi-profile-per-user, prod OAuth redirect URIs + session-cookie
+hardening (`https_only`/`SameSite`) at deploy (9.5), and abuse/cost guards on the write path (9.3).
+**Migration fix (found via the live login):** the `profiles.user_id` batch rebuild crashed on the populated
+`vja.db` (DROP `profiles` tripped `matches`'s FK under `PRAGMA foreign_keys=ON`). `migrations/env.py` now runs
+on a dedicated engine with **SQLite FKs OFF** (the app keeps them ON) — SQLite's documented ALTER procedure —
+pinned by a populated-DB regression test (`test_add_user_id_on_populated_db`). A latent gap the empty-table
+fixture couldn't catch; it would have bitten the 9.5 cutover regardless. Refines D-054.

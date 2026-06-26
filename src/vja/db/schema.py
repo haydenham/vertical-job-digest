@@ -201,10 +201,28 @@ postings = Table(
 )
 
 
+# The authenticated identity (Phase 9.2, D-055). One row per person; `google_sub` is the stable
+# Google account id, set at first OIDC login (nullable so a seed/email identity can pre-exist and be
+# adopted on login). PII tier alongside profiles/matches/digests (docs/11 §2) — never denormalized
+# into the shared employers/postings tables.
+users = Table(
+    "users",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("google_sub", String, unique=True),
+    Column("email", String, nullable=False, unique=True),
+    Column("name", String),
+    Column("created_at", UTCDateTime(), nullable=False),
+)
+
+
 profiles = Table(
     "profiles",
     metadata,
     Column("id", Integer, primary_key=True),
+    # Identity still anchors on email (D-027); `user_id` is the FK to the authenticated `users` row,
+    # backfilled by email on first login (D-055). Nullable: a profile can pre-exist login (seed).
+    Column("user_id", Integer, ForeignKey("users.id")),
     Column("user_email", String, nullable=False),
     Column("vertical", String, nullable=False),
     Column("resume_version", String, nullable=False),
