@@ -784,3 +784,27 @@ had no resurrection path. Decision:
 **Why:** D-009's "never delete" makes resurrection inevitable as the corpus ages, and a crash that silently
 drops an employer's entire diff for the night is exactly the kind of trust-eroding gap the no-mass-close
 guard exists to prevent — the fix closes the lifecycle (open → closed → open) the data model always implied.
+
+### D-054 · Phase 9 · 9.1: Postgres path is CI-verified on both dialects · accepted · 2026-06-26
+First Phase-9 block (the cloud + multi-user phase, D-047). Makes D-025's "SQLite→Postgres is just a URL
+swap + `alembic upgrade`" a *tested* claim rather than an article of faith. **Zero behavior change, no
+cutover, no deploy** — purely a portability proof + CI gate.
+- **Driver:** `psycopg[binary]>=3.2` added to `[project.dependencies]` (SQLAlchemy-2.0-native
+  `postgresql+psycopg://`). SQLite stays the default local + test DB; psycopg is only exercised when the
+  URL is Postgres.
+- **Test harness:** the single `migrated_engine` fixture (`tests/conftest.py`) honors an optional
+  `VJA_TEST_DATABASE_URL`. Unset → today's throwaway `tmp_path` SQLite (unchanged). Set → that Postgres,
+  with a per-test `DROP SCHEMA public CASCADE; CREATE SCHEMA public` before `alembic upgrade head` — robust
+  isolation against one shared service DB that doesn't depend on every migration having a working
+  `downgrade()`. It's the only fixture that builds a DB, so this is the whole harness change.
+- **CI:** a new `postgres` job (service `postgres:16`) re-runs the offline default suite with
+  `VJA_TEST_DATABASE_URL` set. pytest-only — ruff/mypy/import-linter/`uv lock --check`/frontend are
+  dialect-agnostic and already covered by `gates`, so they aren't duplicated.
+- **Dialect gaps found:** none. The 315-test suite (which builds its schema via `alembic upgrade head` per
+  test, so migrations are exercised too) passed on Postgres on the first run — the Core schema's
+  portability choices held: `native_enum=False` VARCHAR+CHECK enums, `UTCDateTime` over
+  `DateTime(timezone=True)` (→ `timestamptz`), `sa.JSON`, integer `server_default`s.
+**Why:** every later Phase-9 block adds the most security- and PII-sensitive tables (users, sessions,
+uploaded résumés). Landing the Postgres CI matrix *first* (cheap, pure-backend, no decisions entangled)
+means those tables are born-on-Postgres-verified as they're written — instead of designed on SQLite and
+debugged on the live dialect under deploy-deadline pressure during the cutover (9.5). Refines D-025.

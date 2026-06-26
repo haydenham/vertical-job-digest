@@ -76,7 +76,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `first_seen_at`, so the role **re-enters the `new` set** (surfaces as new again); it re-extracts
   only if the body's `content_hash` moved. (D-053, D-009)
 - **DB access = SQLAlchemy Core + Alembic.** SQLite now → Postgres at first hosted deploy
-  (`alembic upgrade`, URL swap). (D-025)
+  (`alembic upgrade`, URL swap). The Postgres path is **CI-verified on both dialects** — the default
+  suite re-runs on a `postgres:16` service via `VJA_TEST_DATABASE_URL`, so the cutover is a proven URL
+  swap and later tables are born-on-Postgres-verified. (D-025, D-054)
 
 ## Digest & delivery
 

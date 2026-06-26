@@ -5,6 +5,50 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-26 — Phase 9 plan + Block 9.1: Postgres path CI-verified on both dialects (D-054)
+
+**Planned Phase 9** (cloud + multi-user product, D-047) into 5 PR-sized blocks and built the first.
+Reasoning with Hayden reframed his "frontend-first" instinct: two of the three "frontend" items are
+full-stack and order-coupled — résumé **upload** is the first *write* endpoint (API is read-only by
+invariant, D-005/D-041) and spends LLM tokens via signup→backfill (§3.3), so it sits **behind login**;
+the vertical **toggle** is dropped as a user feature (1-vertical-per-user limiter → a real user only sees
+their own vertical). Accepted leans: **Google OAuth** (zero passwords), **GCP** (Cloud Run + Cloud Run Job
+via Cloud Scheduler — the D-031 trigger swap — + Cloud SQL + Secret Manager), **1-vertical/user** default.
+Block order of record: **9.1 Postgres-CI spine** ✅ · 9.2 auth (OAuth + `users` + authz) · 9.3 résumé
+upload + signup→backfill + cost/abuse guards (gated by auth) · 9.4 multi-user frontend · 9.5 cloud deploy +
+full Postgres cutover + verified email domain + security review.
+
+**Did (9.1):** turned D-025's "just a URL swap + `alembic upgrade`" from faith into a CI gate, so every later
+block's security/PII tables are born-on-Postgres-verified. **Zero behavior change.**
+- `psycopg[binary]>=3.2` → `[project.dependencies]` (SQLAlchemy-native `postgresql+psycopg://`); SQLite stays
+  the default. `uv lock` (3 new pkgs: psycopg, psycopg-binary, tzdata).
+- `tests/conftest.py`: the single `migrated_engine` fixture honors `VJA_TEST_DATABASE_URL` — unset → today's
+  `tmp_path` SQLite (unchanged); set → that Postgres with a per-test `DROP SCHEMA public CASCADE; CREATE
+  SCHEMA public` before `alembic upgrade head` (clean isolation on one shared service DB, no dependence on
+  migration `downgrade()`s).
+- `.github/workflows/ci.yml`: new `postgres` job (service `postgres:16`) re-runs the offline suite with the
+  env var set. pytest-only (lint/types/imports/lock/frontend are dialect-agnostic — covered by `gates`).
+
+**Decisions:** **D-054** (Postgres path CI-verified on both dialects; psycopg; per-test schema reset; no
+dialect gaps found). INVARIANTS DB line updated; docs/11 §1 DB row + §3.5 first item ticked.
+
+**Dialect gaps:** **none.** The 315-test suite (schema built via `alembic upgrade head` per test → migrations
+exercised) passed on Postgres first run. The Core portability choices held: `native_enum=False` VARCHAR+CHECK
+enums, `UTCDateTime` over `DateTime(timezone=True)` (→ `timestamptz`), `sa.JSON`, integer `server_default`s.
+
+**Verified:** **315 pytest on Postgres** (local PG 15, throwaway instance — Docker unavailable, so a Homebrew
+`postgresql@15` datadir on :5433; CI uses 16) **and 315 on SQLite**; full Python gate green — ruff
+format/check, mypy (103 files), lint-imports (1 kept/0 broken), `uv lock --check` in sync.
+
+**Next:** **STOP for Hayden to commit + PR** (9.1). Then **9.2 — auth foundation** (Google OAuth + `users`
+table + read-API authz, plugging the docs/11 §2 `(vertical, profile_id)` seam). Still-open from the prior
+session (orthogonal, no code): the Phase-8 **Part B cash-in run** (`vja-import-employers` → `vja-run` →
+extract → match) and the **Phenom** fetcher — neither blocks Phase 9.
+
+**Branch:** `feat/postgres-ci-portability` (off `main` @ `7516e91`, post-D-053-PR-#39 merge).
+
+---
+
 ## 2026-06-25 — Re-opened-posting fix (D-053) — unblocking the Phase-8 cash-in run
 
 **Did:** Session task was "reason on next steps." Reasoned that Phase 8 had shipped 5 fetchers (39→44
