@@ -5,6 +5,38 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-26 — Pre-9.3: summarize digest closures by company (D-056)
+
+**Did:** Render-only fix to the digest-quality bug the Phase-8 cash-in run exposed — the body listed every
+closed role as one bullet, so a 2-day backlog (~940 closures: Boeing 241, GE Vernova 147, Airbus 134…) would
+render as a wall burying the ~66 new roles (kill-criterion violation; the nightly would re-send it unattended).
+`src/vja/digest/render.py`: **≤10 closures enumerate as before; >10 roll up by company** —
+`N roles across C companies:` + top-10 (`• Company — n`, count desc via `Counter.most_common`) +
+`…and M more companies (P roles)` tail, with `_plural` for company/role singular-plural. Symmetric in text +
+HTML (new `_closed_html`, `_rollup_split` shared). **Subject keeps the true count; `contents_to_dict` keeps the
+full closed list** — only the human-facing body summarizes (audit/D-037 completeness intact). New/quarantine
+paths untouched; no DB/schema/dep change.
+
+**Decisions:** **D-056** (dual-mode, threshold 10, company rollup; body-only). INVARIANTS digest section gains
+the closure-rollup line.
+
+**Tests:** `tests/unit/test_digest_render.py` +5 — many-closures rollup (subject true count, per-company counts,
+no per-role enumeration), tail collapse + singular wording (11 single-role companies), the 10/11 boundary
+(incl. "1 company" singular), few-closures-stay-detailed, audit-keeps-all-15-when-summarized. Failing-first
+repro per D-021.
+
+**Verified:** eyeballed the real 922-closure backlog shape → 11 lines, new role on top, subject "922 closed".
+Full Python gate green — ruff format/check, ruff, mypy (106 files), lint-imports (1/0), `uv lock --check` (no
+new deps), **334 pytest** (+5). Render-only → Postgres path unaffected (no SQL touched).
+
+**Next:** **STOP for Hayden to commit + PR.** Then **9.3 — résumé upload + signup→backfill + cost/abuse guards**
+(behind `require_user`, D-055). **Optional follow-up (outward-facing, confirm first):** send the held digest —
+re-check current baseline/state, since nightly/data may have moved since the cash-in.
+
+**Branch:** `fix/digest-closure-summary` (off `main` @ `bf76767`, post-9.2-PR-#41 merge).
+
+---
+
 ## 2026-06-26 — Phase 9 · Block 9.2: auth foundation — Google OAuth + `users` + read-API authz (D-055)
 
 **Built the layer 9.3 depends on** (its résumé-upload / signup→backfill write endpoints sit behind login).

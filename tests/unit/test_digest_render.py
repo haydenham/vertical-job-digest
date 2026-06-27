@@ -73,6 +73,15 @@ def _contents(
     )
 
 
+def _closures(spec: dict[str, int]) -> list[DigestPosting]:
+    """Build closed postings from `{company: count}` with unique external_ids."""
+    out: list[DigestPosting] = []
+    for company, n in spec.items():
+        for _ in range(n):
+            out.append(_posting(f"c{len(out)}", company=company))
+    return out
+
+
 def test_subject_reports_new_and_closed_counts() -> None:
     rendered = render_digest(_contents(new=[_posting("a")], closed=[_posting("b"), _posting("c")]))
     assert rendered.subject == "Grid Power Software: 1 new, 2 closed"
@@ -145,3 +154,48 @@ def test_contents_to_dict_is_json_safe_and_complete() -> None:
     assert restored["new"][0]["gaps"] == ["No SCADA experience"]
     # A closure carries no match fields.
     assert "verdict" not in restored["closed"][0]
+
+
+def test_many_closures_roll_up_by_company() -> None:
+    # > 10 closures: the body summarizes by company instead of one bullet each (D-056).
+    rendered = render_digest(_contents(closed=_closures({"Boeing": 6, "Airbus": 4, "Vistra": 2})))
+    assert rendered.subject == "Grid Power Software: 0 new, 12 closed"  # true count, not summarized
+    for body in (rendered.text, rendered.html):
+        assert "12 roles across 3 companies" in body
+        assert "Boeing — 6" in body
+        assert "Airbus — 4" in body
+        assert "Vistra — 2" in body
+    # Crucially NOT enumerated per role — the per-role title never appears.
+    assert "Software Engineer" not in rendered.text
+    assert "Software Engineer" not in rendered.html
+
+
+def test_closure_rollup_collapses_tail_companies() -> None:
+    # 11 single-role companies → top 10 named, the 11th collapsed (singular wording).
+    rendered = render_digest(_contents(closed=_closures({f"Co{i}": 1 for i in range(11)})))
+    for body in (rendered.text, rendered.html):
+        assert "11 roles across 11 companies" in body
+        assert "…and 1 more company (1 role)" in body
+
+
+def test_closure_detail_boundary_at_limit() -> None:
+    # Exactly 10 → still enumerated per role; 11 → rollup (singular "1 company").
+    r10 = render_digest(_contents(closed=_closures({"Boeing": 10})))
+    assert "Software Engineer" in r10.text and "roles across" not in r10.text
+    r11 = render_digest(_contents(closed=_closures({"Boeing": 11})))
+    assert "11 roles across 1 company" in r11.text and "Boeing — 11" in r11.text
+
+
+def test_few_closures_stay_detailed() -> None:
+    closed = [_posting("a", company="Camus"), _posting("b", company="Boeing")]
+    rendered = render_digest(_contents(closed=closed))
+    assert "Camus — Software Engineer" in rendered.text
+    assert "roles across" not in rendered.text
+
+
+def test_audit_keeps_all_closures_when_body_summarized() -> None:
+    # Summarizing the body must not truncate the audit record (D-037 completeness).
+    contents = _contents(closed=_closures({"Boeing": 8, "Airbus": 7}))  # 15 > limit
+    rendered = render_digest(contents)
+    assert "roles across" in rendered.text  # body is summarized
+    assert len(contents_to_dict(contents)["closed"]) == 15  # audit keeps every closure

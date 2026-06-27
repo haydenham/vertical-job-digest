@@ -91,6 +91,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Digest recipient is the matched profile's `user_email`.** `VJA_DIGEST_RECIPIENT` is the
   **ops/alert** recipient (failure alerts), NOT the digest recipient. (D-027, D-037)
 - **Empty digest = skip send:** no email, no `digests` row. (D-028)
+- **Closures roll up by company above 10 in the digest body** — ≤10 enumerate per role, >10 render
+  `N roles across C companies` + top-10 + "…and M more". Subject keeps the true count and the audit
+  blob keeps the full closed list; only the human-facing body summarizes. (D-056)
 - **Email digest (push) is primary; the dashboard (pull) is read-only** over the same
   nightly-computed data — no live fetching. (D-010)
 - **The dashboard is a Vite/React/TS SPA in `frontend/`** consuming `GET /api/postings`. Dev =
