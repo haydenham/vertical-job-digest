@@ -1,7 +1,8 @@
 """Render `DigestContents` into a sendable email (HTML + plaintext) and an audit JSON blob.
 
 "The diff is the product": the body shows what *changed* — new roles (with verified apply links)
-and roles that closed — and nothing else. Each new role now carries its match rationale: a
+and roles that closed (rolled up by company once there are many — D-056) — and nothing else.
+Each new role now carries its match rationale: a
 `[verdict · score]` tag and the one-line `rationale` (P5.4 / D-037). The fuller `fits`/`gaps`
 lists are kept out of the body (scannability) but recorded in the audit `contents`. Quarantined
 postings (links that failed the D-008 gate) are likewise kept out of the body but recorded so an
@@ -13,11 +14,18 @@ subject line, so adding a vertical needs no code change.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from html import escape
 from typing import Any
 
 from vja.digest.assembly import DigestContents, DigestPosting
+
+# Above this many closures the body rolls them up by company instead of one bullet each — a
+# backlog day would otherwise bury the new roles under hundreds of dead-link lines (D-056).
+_CLOSED_DETAIL_LIMIT = 10
+# How many companies to name in the rollup before collapsing the rest into an "…and more" line.
+_ROLLUP_TOP_COMPANIES = 10
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,21 @@ def _verdict_tag(posting: DigestPosting) -> str:
     return f"[{posting.verdict}{score}]"
 
 
+def _plural(n: int, word: str) -> str:
+    """Naive pluralizer for the two words we need: `company`/`companies`, `role`/`roles`."""
+    if n == 1:
+        return word
+    return f"{word[:-1]}ies" if word.endswith("y") else f"{word}s"
+
+
+def _rollup_split(
+    closed: list[DigestPosting],
+) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
+    """Closures ranked by company (count desc) → (named top companies, collapsed tail)."""
+    ranked = Counter(p.company for p in closed).most_common()
+    return ranked[:_ROLLUP_TOP_COMPANIES], ranked[_ROLLUP_TOP_COMPANIES:]
+
+
 def render_digest(contents: DigestContents) -> RenderedEmail:
     """Build subject + HTML + plaintext from a digest's contents."""
     name = _humanize(contents.vertical)
@@ -76,10 +99,23 @@ def _render_text(name: str, contents: DigestContents) -> str:
         lines.append("  (none)")
     lines.append("")
     lines.append(f"Closed roles ({len(contents.closed)})")
-    if contents.closed:
+    if not contents.closed:
+        lines.append("  (none)")
+    elif len(contents.closed) <= _CLOSED_DETAIL_LIMIT:
         lines.extend(f"  • {_label(posting)}" for posting in contents.closed)
     else:
-        lines.append("  (none)")
+        top, tail = _rollup_split(contents.closed)
+        companies = len(top) + len(tail)
+        lines.append(
+            f"  {len(contents.closed)} roles across {companies} {_plural(companies, 'company')}:"
+        )
+        lines.extend(f"    • {company} — {n}" for company, n in top)
+        if tail:
+            tail_roles = sum(n for _, n in tail)
+            lines.append(
+                f"    …and {len(tail)} more {_plural(len(tail), 'company')} "
+                f"({tail_roles} {_plural(tail_roles, 'role')})"
+            )
     lines.append("")
     return "\n".join(lines)
 
@@ -89,9 +125,26 @@ def _render_html(name: str, contents: DigestContents) -> str:
     blocks.append(f"<h2>New roles ({len(contents.new)})</h2>")
     blocks.append(_html_list(contents.new, linked=True))
     blocks.append(f"<h2>Closed roles ({len(contents.closed)})</h2>")
-    blocks.append(_html_list(contents.closed, linked=False))
+    blocks.append(_closed_html(contents.closed))
     body = "\n".join(blocks)
     return f"<!doctype html><html><body>\n{body}\n</body></html>"
+
+
+def _closed_html(closed: list[DigestPosting]) -> str:
+    """Closed-roles HTML: a per-role list when few, a per-company rollup when many (D-056)."""
+    if len(closed) <= _CLOSED_DETAIL_LIMIT:
+        return _html_list(closed, linked=False)
+    top, tail = _rollup_split(closed)
+    companies = len(top) + len(tail)
+    items = [f"<li>{escape(company)} — {n}</li>" for company, n in top]
+    if tail:
+        tail_roles = sum(n for _, n in tail)
+        items.append(
+            f"<li>…and {len(tail)} more {_plural(len(tail), 'company')} "
+            f"({tail_roles} {_plural(tail_roles, 'role')})</li>"
+        )
+    summary = f"<p>{len(closed)} roles across {companies} {_plural(companies, 'company')}:</p>"
+    return summary + "<ul>\n" + "\n".join(items) + "\n</ul>"
 
 
 def _html_list(postings: list[DigestPosting], *, linked: bool) -> str:

@@ -847,3 +847,18 @@ hardening (`https_only`/`SameSite`) at deploy (9.5), and abuse/cost guards on th
 on a dedicated engine with **SQLite FKs OFF** (the app keeps them ON) — SQLite's documented ALTER procedure —
 pinned by a populated-DB regression test (`test_add_user_id_on_populated_db`). A latent gap the empty-table
 fixture couldn't catch; it would have bitten the 9.5 cutover regardless. Refines D-054.
+
+### D-056 · Pre-9.3: digest summarizes closures by company above a threshold · accepted · 2026-06-26
+The digest **body** listed each closed role as one bullet. The Phase-8 cash-in run produced a 2-day backlog of
+~940 closures (Boeing 241, GE Vernova 147, Airbus 134…), which rendered as a ~940-bullet wall burying the ~66
+new roles. Fix is **render-only** (`src/vja/digest/render.py`): **≤ 10 closures enumerate as before; > 10 roll
+up by company** — `N roles across C companies:` then the top 10 companies (`• Company — n`, count desc) and
+`…and M more companies (P roles)` for the tail. The subject keeps the **true** count (`… N closed`) and the
+audit blob (`contents_to_dict`) keeps the **full** closed list — only the human-facing body is summarized.
+New/quarantine paths untouched.
+**Why:** the kill-criterion requires every digest to carry signal; a wall of dead links trains the reader to
+ignore the email, and the nightly would re-send it unattended. Company-level rollup is the right altitude for
+closures (you can't apply to a closed role — "which companies shed roles" is the signal), while small days keep
+the specific titles. Threshold 10 keeps a normal daily delta detailed and rolls up only backlog days. Body-only
+keeps the change tiny and leaves audit / D-037 completeness intact. A pre-req cleanup before 9.3 so the held
+digest ships clean.
