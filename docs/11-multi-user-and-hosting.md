@@ -76,8 +76,9 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       dashboard is anonymous-readable; only `/upload` needs login), flips on at the 9.5 deploy. (D-055, D-058)
 - [x] **Frontend login + upload UI (9.4, D-058):** the Rolefeed SPA (`react-router-dom`, `/`·`/login`·`/upload`)
       sends credentialed fetches so the session resolves the user's own profile; résumé-upload form over
-      `POST /api/profiles` with optimistic backfill UX. *(Prod redirect URIs + cookie hardening + the auth-gate
-      flip + an SPA deep-link catch-all → `index.html` still 9.5.)*
+      `POST /api/profiles` with optimistic backfill UX. *(9.5a/D-059 built the cookie hardening, the HTTPS
+      OAuth callback URI, and the SPA deep-link catch-all — all env-gated; the auth-gate flip + prod
+      redirect-URI registration land at the 9.5c/d deploy.)*
 - [ ] Multi-profile-per-user shape (one user, both verticals) vs. the current one-profile-per-(vertical) view.
       *(1-vertical/user is the accepted default; the `profiles.user_id` FK already supports 1:many when wanted.)*
 

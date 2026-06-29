@@ -7,7 +7,8 @@ its decisions go to `DECISIONS.md`, the live rules to `docs/INVARIANTS.md`, and 
 `docs/11` get ticked. Authority order unchanged (build specs > CLAUDE.md > memos); this doc is a memo-tier
 working plan.*
 
-**Status:** planning complete; 9.5a not started. Branch: `feat/cloud-deploy` (off `main` @ `250aa38`).
+**Status:** **9.5a ✅** (D-059, code-complete, full gate green, awaiting commit+PR); 9.5b next. Branch:
+`feat/cloud-deploy` (off `main` @ `250aa38`).
 
 ---
 
@@ -32,7 +33,7 @@ working plan.*
 
 | Block | Theme | Code? | Gate | Status |
 |---|---|---|---|---|
-| **9.5a** | App hardening (cookies, proxy/HTTPS redirect, SPA catch-all, bind, CORS) | yes (Python) | pytest + full gate | ☐ |
+| **9.5a** | App hardening (cookies, proxy/HTTPS redirect, SPA catch-all, bind, CORS) | yes (Python) | pytest + full gate | ✅ D-059 |
 | **9.5b** | Containerization (multi-stage Dockerfile, `.dockerignore`, local prod-parity smoke) | yes (infra) | `docker build` + run | ☐ |
 | **9.5c** | Provision (GCP project, Neon, domain→Cloudflare DNS, Secret Manager, Artifact Registry) | no (docs + manual) | docs in `deploy/gcp/` | ☐ |
 | **9.5d** | Cutover & go-live (deploy, `alembic upgrade`, baseline run, email verify, flips, security review) | no app code | `/security-review` + smoke | ☐ |
