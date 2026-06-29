@@ -9,6 +9,7 @@ matching's uncapped behavior is covered by `test_matching_run.py`.
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import pytest
 from anthropic import Anthropic
 from sqlalchemy import Engine, func, select
 
@@ -16,7 +17,13 @@ from vja.db.engine import begin
 from vja.db.matches import postings_needing_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import employers, matches, postings
-from vja.match import MatchResult, run_backfill
+from vja.match import (
+    BackfillBudgetExceeded,
+    MatchResult,
+    check_backfill_budget,
+    estimate_daily_spend,
+    run_backfill,
+)
 from vja.models import Verdict
 from vja.scope import ScopeConfig
 from vja.verticals import VerticalConfig
@@ -176,6 +183,64 @@ def test_backfill_is_idempotent(migrated_engine: Engine) -> None:
     summary = _run(migrated_engine, profile)
     assert (summary.total, summary.matched) == (0, 0)  # nothing left in the window to match
     assert _match_count(migrated_engine) == 2
+
+
+# --- cost/abuse guards (P9.3 / D-057) --------------------------------------------------------
+
+
+def test_backfill_caps_candidates_at_max_postings(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-signup cap (`VJA_BACKFILL_MAX_POSTINGS`) bounds the matched set, so one signup can't
+    run away on cost. Five in-window, in-scope candidates exist; the cap of 2 stops at 2."""
+    monkeypatch.setenv("VJA_BACKFILL_MAX_POSTINGS", "2")
+    grid = _employer(migrated_engine)
+    for i in range(5):
+        _posting(
+            migrated_engine,
+            grid,
+            f"role-{i}",
+            f"Software Engineer {i}",
+            first_seen=_NOW,
+            source_updated=None,
+        )
+    upsert_profile(
+        migrated_engine,
+        user_email=_CONFIG.user_email,
+        vertical=_VERTICAL,
+        resume_text=_CONFIG.resume_text,
+        domain_vocabulary=_CONFIG.domain_vocabulary,
+    )
+    profile = active_profiles(migrated_engine, _VERTICAL)[0]
+
+    summary = _run(migrated_engine, profile)
+    assert (summary.total, summary.matched) == (2, 2)
+    assert _match_count(migrated_engine) == 2
+
+
+def test_estimate_daily_spend_counts_todays_matches(migrated_engine: Engine) -> None:
+    profile = _seed(migrated_engine)
+    assert estimate_daily_spend(migrated_engine, _NOW) == 0.0
+    _run(migrated_engine, profile)  # writes 2 matches dated _NOW
+    # 2 matches × the nominal $0.01/match proxy.
+    assert estimate_daily_spend(migrated_engine, _NOW) == pytest.approx(0.02)
+
+
+def test_check_backfill_budget_raises_when_over_ceiling(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "0")
+    with pytest.raises(BackfillBudgetExceeded):
+        check_backfill_budget(migrated_engine, _NOW)
+
+
+def test_check_backfill_budget_passes_under_ceiling(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "5")
+    profile = _seed(migrated_engine)
+    _run(migrated_engine, profile)  # ~$0.02 estimated, well under $5
+    check_backfill_budget(migrated_engine, _NOW)  # does not raise
 
 
 def test_postings_needing_match_since_filters_to_window(migrated_engine: Engine) -> None:

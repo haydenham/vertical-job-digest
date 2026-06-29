@@ -5,6 +5,55 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-27 — Phase 9 · Block 9.3: résumé upload + signup→backfill + cost guards (D-057)
+
+**The product's first write path.** A logged-in user uploads a résumé → a profile is created → the D-039
+signup backfill matches it against the last 5 days of open postings. Backend-only (upload UI is 9.4; prod
+hardening is 9.5). Four forks, all run through Hayden taking the recommended option:
+1. **Formats = text/markdown + text PDF** (`pypdf`), scanned/OCR deferred. 2. **Background backfill** (202 +
+`profile_id`, `run_backfill` as a threadpool `BackgroundTask`) over inline-sync / defer-to-nightly.
+3. **Cost guards = per-backfill cap + global daily ceiling**, skip cooldown, defer captcha/edge to 9.5.
+4. **`POST /api/profiles` (multipart), no status endpoint** (no schema change).
+
+**Did:**
+- **`src/vja/resume.py`** (new leaf, D-033 adapter): `extract_resume_text(filename, data)` — UTF-8
+  text/markdown + text-PDF (`pypdf`, routed by `%PDF-` magic or `.pdf`); scanned/empty/non-text/oversize/
+  too-long all raise `ResumeError`. **Never logs the text/bytes** (PII, docs/11 §3.1). New deps `pypdf` +
+  `python-multipart` (FastAPI form parsing).
+- **Cost guards** (`match.py` + `db/matches.py`): `_match_profile` gains `max_postings`; `run_backfill`
+  passes `VJA_BACKFILL_MAX_POSTINGS` (default 100) — **nightly stays uncapped** (`None`). `count_matches_since`
+  + `estimate_daily_spend` (count since midnight × `_NOMINAL_MATCH_USD` ~$0.01, no per-match ledger) +
+  `check_backfill_budget` raising `BackfillBudgetExceeded` over `VJA_DAILY_LLM_BUDGET_USD` (default $5).
+- **profiles repo:** `upsert_profile` gains `user_id` (stamped on insert + reactivate; CLI path unchanged →
+  NULL→linked-by-email per D-055); new `get_profile(engine, id)`.
+- **`POST /api/profiles`** (`api/app.py`, behind `require_user`): budget→file-read(413)→adapter(422)→
+  vertical config(404)→`upsert_profile(user_id=…)`→`get_profile`→`BackgroundTasks(run_backfill)`→**202**
+  `{profile_id, vertical, resume_version}`. `run_backfill` referenced as a module global (monkeypatchable).
+  `.env.example` gains the two guard knobs.
+
+**Decisions:** **D-057**. INVARIANTS: Cost & safety gains the guard line; Auth & identity gains the
+first-write-endpoint line; the backfill line now notes the posting cap. docs/11 §3.3 backfill-guard box
+ticked + rate-limit/captcha deferral noted; §3.1 PII-logging note. CLAUDE.md Phase 9 block list (9.1–9.3 ✅).
+
+**Tests:** `tests/unit/test_resume.py` (+11 — text/md/PDF extraction via a hand-built correct-xref PDF;
+scanned/unreadable/non-UTF8/empty/whitespace/oversize/too-long rejections). `test_backfill.py` (+4 — cap
+slices to N; `estimate_daily_spend` arithmetic; budget raises over / passes under). `test_api.py` (+6 —
+upload 401-unauth / 202 creates+links `user_id`+triggers backfill / 422 bad file / 404 unknown vertical /
+429 over budget / 413 oversize; `run_backfill` stubbed so the BackgroundTask never hits Anthropic).
+
+**Verified:** full Python gate green — ruff format/check, mypy (108 files), lint-imports (1 kept/0 broken),
+`uv lock --check` in sync, **355 pytest** (+21) on SQLite (Postgres via `VJA_TEST_DATABASE_URL` when set —
+no new schema, so the dialect path is unaffected). No migration this block (no schema change).
+
+**Next:** **STOP for Hayden to commit + PR** (9.3). Then **9.4 — multi-user frontend** (login UI + résumé
+upload form over this endpoint + signup→backfill UX). Still-open (orthogonal, no code): the Phase-8 Part B
+cash-in run + the Phenom fetcher. Optional outward-facing follow-up: send the held digest (re-check baseline
+first).
+
+**Branch:** `feat/resume-upload-backfill` (off `main` @ `8d03159`, post-9.2-PR-#41 / D-056-PR-#42 merge).
+
+---
+
 ## 2026-06-26 — Pre-9.3: summarize digest closures by company (D-056)
 
 **Did:** Render-only fix to the digest-quality bug the Phase-8 cash-in run exposed — the body listed every

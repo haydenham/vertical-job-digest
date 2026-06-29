@@ -19,6 +19,15 @@ from sqlalchemy import Engine, select
 from vja.db.engine import begin
 from vja.db.schema import profiles
 
+_PROFILE_COLS = (
+    profiles.c.id,
+    profiles.c.user_email,
+    profiles.c.vertical,
+    profiles.c.resume_version,
+    profiles.c.resume_text,
+    profiles.c.domain_vocabulary,
+)
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -28,6 +37,17 @@ class Profile:
     resume_version: str
     resume_text: str
     domain_vocabulary: tuple[str, ...]
+
+
+def _row_to_profile(row: dict[str, object]) -> Profile:
+    return Profile(
+        id=cast("int", row["id"]),
+        user_email=cast("str", row["user_email"]),
+        vertical=cast("str", row["vertical"]),
+        resume_version=cast("str", row["resume_version"]),
+        resume_text=cast("str", row["resume_text"]),
+        domain_vocabulary=tuple(cast("list[str]", row["domain_vocabulary"] or [])),
+    )
 
 
 def resume_version(resume_text: str) -> str:
@@ -42,12 +62,17 @@ def upsert_profile(
     vertical: str,
     resume_text: str,
     domain_vocabulary: Sequence[str],
+    user_id: int | None = None,
     now: datetime | None = None,
 ) -> int:
     """Idempotently load a resume as the active profile for (user, vertical); return its id.
 
     Same resume text → same `resume_version` → no-op (re-activated if needed). A changed resume →
     a new active version row, with prior versions for this (user, vertical) deactivated.
+
+    `user_id` links the profile to the authenticated `users` row (D-055) — the upload path passes
+    the logged-in user's id (stamped on the new/reactivated row). The CLI loader omits it, leaving
+    `user_id` NULL to be backfilled by email on first login, exactly as before (D-055).
     """
     version = resume_version(resume_text)
     stamp = now or datetime.now(UTC)
@@ -68,8 +93,13 @@ def upsert_profile(
             .values(active=0)
         )
 
+        # Only set user_id when supplied (don't clobber an existing link via the CLI path).
+        link = {"user_id": user_id} if user_id is not None else {}
+
         if existing is not None:
-            conn.execute(profiles.update().where(profiles.c.id == existing).values(active=1))
+            conn.execute(
+                profiles.update().where(profiles.c.id == existing).values(active=1, **link)
+            )
             return int(existing)
 
         result = conn.execute(
@@ -81,11 +111,21 @@ def upsert_profile(
                 domain_vocabulary=list(domain_vocabulary),
                 active=1,
                 created_at=stamp,
+                **link,
             )
         )
         pk = result.inserted_primary_key
         assert pk is not None
         return int(pk[0])
+
+
+def get_profile(engine: Engine, profile_id: int) -> Profile | None:
+    """The profile by id, or None — the upload endpoint loads the just-upserted row to hand the
+    backfill a `Profile` object (D-057)."""
+    stmt = select(*_PROFILE_COLS).where(profiles.c.id == profile_id)
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().one_or_none()
+    return _row_to_profile(dict(row)) if row is not None else None
 
 
 def active_verticals(engine: Engine) -> list[str]:
@@ -103,24 +143,7 @@ def active_verticals(engine: Engine) -> list[str]:
 
 def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     """The active matching profiles for `vertical` (drives nightly matching in 5.3)."""
-    stmt = select(
-        profiles.c.id,
-        profiles.c.user_email,
-        profiles.c.vertical,
-        profiles.c.resume_version,
-        profiles.c.resume_text,
-        profiles.c.domain_vocabulary,
-    ).where(profiles.c.vertical == vertical, profiles.c.active == 1)
+    stmt = select(*_PROFILE_COLS).where(profiles.c.vertical == vertical, profiles.c.active == 1)
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
-    return [
-        Profile(
-            id=row["id"],
-            user_email=row["user_email"],
-            vertical=row["vertical"],
-            resume_version=row["resume_version"],
-            resume_text=row["resume_text"],
-            domain_vocabulary=tuple(cast("list[str]", row["domain_vocabulary"] or [])),
-        )
-        for row in rows
-    ]
+    return [_row_to_profile(dict(row)) for row in rows]

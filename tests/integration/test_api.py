@@ -10,15 +10,15 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
 from vja.api.app import create_app
-from vja.api.auth import get_current_user
+from vja.api.auth import get_current_user, require_user
 from vja.db.engine import begin
 from vja.db.matches import save_match
-from vja.db.profiles import Profile, active_profiles, upsert_profile
-from vja.db.schema import employers, postings
-from vja.db.users import User
+from vja.db.profiles import Profile, active_profiles, get_profile, upsert_profile
+from vja.db.schema import employers, postings, profiles
+from vja.db.users import User, upsert_user_by_google
 
 _NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
 _VERTICAL = "grid_power_software"
@@ -258,3 +258,106 @@ def test_auth_required_blocks_anonymous(
     _profile(migrated_engine)
     resp = _client(migrated_engine).get("/api/postings", params={"vertical": _VERTICAL})
     assert resp.status_code == 401
+
+
+# --- résumé upload + signup backfill (Phase 9.3, D-057) --------------------------------------
+# The first write endpoint. require_user is overridden (the OAuth dance is pinned in test_auth.py)
+# and run_backfill is patched out so the BackgroundTask doesn't reach the real Anthropic client
+# (TestClient runs background tasks synchronously after the response).
+
+_TEXT_FILE = {"file": ("resume.txt", b"Jane Engineer. Python, grid software.", "text/plain")}
+
+
+def _user(engine: Engine, email: str = "me@example.com") -> User:
+    return upsert_user_by_google(engine, google_sub=f"g-{email}", email=email, name="Me")
+
+
+def _upload_client(
+    engine: Engine, user: User, monkeypatch: pytest.MonkeyPatch
+) -> tuple[TestClient, list[tuple[tuple, dict]]]:  # type: ignore[type-arg]
+    """An authed client with run_backfill stubbed; returns the client + a log of backfill calls."""
+    calls: list[tuple[tuple, dict]] = []  # type: ignore[type-arg]
+    monkeypatch.setattr("vja.api.app.run_backfill", lambda *a, **k: calls.append((a, k)))
+    app = create_app(engine)
+    app.dependency_overrides[require_user] = lambda: user
+    return TestClient(app), calls
+
+
+def test_upload_requires_auth(migrated_engine: Engine) -> None:
+    resp = _client(migrated_engine).post(
+        "/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE
+    )
+    assert resp.status_code == 401
+
+
+def test_upload_creates_profile_links_user_and_triggers_backfill(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["vertical"] == _VERTICAL
+
+    pid = body["profile_id"]
+    prof = get_profile(migrated_engine, pid)
+    assert prof is not None
+    assert prof.user_email == user.email
+    assert body["resume_version"] == prof.resume_version
+
+    # user_id stamped at creation (the D-055 link, here at upload not just login).
+    with migrated_engine.connect() as conn:
+        uid = conn.execute(select(profiles.c.user_id).where(profiles.c.id == pid)).scalar_one()
+    assert uid == user.id
+
+    # backfill kicked off for exactly this profile/vertical.
+    assert len(calls) == 1
+    args, _kwargs = calls[0]
+    assert args[1] == _VERTICAL
+    assert args[2].id == pid
+
+
+def test_upload_rejects_unreadable_file(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post(
+        "/api/profiles",
+        data={"vertical": _VERTICAL},
+        files={"file": ("resume.txt", b"\xff\xfe\x00garbage", "text/plain")},
+    )
+    assert resp.status_code == 422
+    assert calls == []  # never reached the backfill
+
+
+def test_upload_unknown_vertical_404(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": "no_such_vertical"}, files=_TEXT_FILE)
+    assert resp.status_code == 404
+    assert calls == []
+
+
+def test_upload_refused_over_daily_budget_429(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "0")
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert resp.status_code == 429
+    assert calls == []
+
+
+def test_upload_oversize_413(migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vja.api.app._MAX_UPLOAD_BYTES", 8)
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post(
+        "/api/profiles",
+        data={"vertical": _VERTICAL},
+        files={"file": ("resume.txt", b"way more than eight bytes", "text/plain")},
+    )
+    assert resp.status_code == 413
+    assert calls == []

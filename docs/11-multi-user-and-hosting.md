@@ -57,6 +57,8 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
 ### 3.1 Security & PII *(highest stakes — flagged early on purpose)*
 - [ ] `resume_text` and `user_email` are **PII**. Define at-rest handling, access control, and retention once
       hosted. DB is never publicly exposed (CLAUDE.md) — keep that true behind a network boundary in cloud.
+      *(9.3: the upload adapter (`vja.resume`) never logs the text or raw bytes; at-rest encryption + access
+      control + retention still 9.5. D-057.)*
 - [ ] **Deletion / data-subject requests:** a user must be able to have their `profile` + derived
       `matches`/`digests` removed. Cascade story (postings/employers are shared and stay).
 - [ ] **Backups & DR** for Postgres once it holds real user data (today `vja.db` is disposable).
@@ -75,12 +77,15 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       *(1-vertical/user is the accepted default; the `profiles.user_id` FK already supports 1:many when wanted.)*
 
 ### 3.3 Cost & abuse control
-- [ ] **Signup-triggered backfill is the first place user action drives LLM spend** (the D-006 on-demand
-      exceptions: signup backfill, resume-update re-match, deep-dive). Needs throttling + a per-user cost
-      ceiling before any public signup. Backfill cap (5d, D-039 amending D-024) already bounds the set; this
-      adds a rate/cost guard on top. (The read-only dashboard never drives matching — D-005/D-041 — so it adds
-      no cost surface here.)
-- [ ] Rate limiting on the API + any future write endpoints.
+- [x] **Signup-triggered backfill is the first place user action drives LLM spend** (the D-006 on-demand
+      exceptions: signup backfill, resume-update re-match, deep-dive). **Guarded in 9.3 (D-057):** a
+      per-backfill candidate cap (`VJA_BACKFILL_MAX_POSTINGS`) on top of the 5-day window (D-039), plus a
+      global daily spend ceiling (`VJA_DAILY_LLM_BUDGET_USD`, checked pre-kickoff → 429; estimated from the
+      day's match count, no per-match ledger). (The read-only dashboard never drives matching — D-005/D-041 —
+      so it adds no cost surface here.)
+- [ ] Rate limiting on the API + write endpoints. *(9.3 ships the cost ceilings above; per-IP/per-user
+      request rate-limiting + captcha + email-verify are deferred to the 9.5 edge — Cloudflare/managed —
+      since OAuth already bounds signup to real Google accounts. D-057.)*
 
 ### 3.4 Email deliverability
 - [ ] D-029's sandbox sender (`onboarding@resend.dev`) only delivers to the Resend account owner. Real
