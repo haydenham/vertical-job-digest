@@ -1,80 +1,46 @@
-import { useEffect, useState } from "react";
+import { Link, Route, Routes } from "react-router-dom";
 
-import { fetchPostings, fetchVerticals, type PostingsResponse } from "./api";
-import { Controls, type ControlState } from "./components/Controls";
-import { PostingsTable } from "./components/PostingsTable";
+import { loginUrl } from "./api";
+import { useAuth } from "./auth/useAuth";
+import { Dashboard } from "./pages/Dashboard";
+import { Login } from "./pages/Login";
+import { Upload } from "./pages/Upload";
 
-const INITIAL: ControlState = {
-  window: "all",
-  view: "matched",
-};
-
+// App shell: brand + auth-aware nav chrome, then the routed pages. `VJA_AUTH_REQUIRED` stays off
+// in 9.4, so the dashboard is reachable anonymously; login only gates the upload write path.
 export default function App() {
-  const [vertical, setVertical] = useState<string | null>(null);
-  const [controls, setControls] = useState<ControlState>(INITIAL);
-  const [data, setData] = useState<PostingsResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Resolve the vertical once (no slug hardcoded — D-042); the picker defaults to the first.
-  useEffect(() => {
-    fetchVerticals()
-      .then((vs) => {
-        if (vs.length === 0) {
-          setError("no active vertical");
-          setLoading(false);
-        } else {
-          setVertical(vs[0]);
-        }
-      })
-      .catch((e: unknown) => {
-        setError(String(e));
-        setLoading(false);
-      });
-  }, []);
-
-  // Refetch whenever the vertical or any toggle changes.
-  useEffect(() => {
-    if (vertical === null) return;
-    setLoading(true);
-    setError(null);
-    fetchPostings({
-      vertical,
-      window: controls.window,
-      view: controls.view,
-    })
-      .then((resp) => setData(resp))
-      .catch((e: unknown) => setError(String(e)))
-      .finally(() => setLoading(false));
-  }, [vertical, controls]);
+  const { user, loading, logout } = useAuth();
 
   return (
     <div className="app">
       <header className="header">
-        <span className="wordmark">
-          <span className="prompt">$</span> vja<span className="cursor">▮</span>
-        </span>
-        <span className="meta">
-          {vertical && <span className="accent">~/{vertical}</span>}
-          {data && ` · ${data.count} open`}
-        </span>
+        <Link to="/" className="wordmark">
+          <span className="prompt">$</span> rolefeed<span className="cursor">▮</span>
+        </Link>
+        <nav className="nav">
+          {loading ? null : user ? (
+            <>
+              <Link to="/upload" className="nav-link">
+                upload résumé
+              </Link>
+              <span className="nav-user">{user.email}</span>
+              <button type="button" className="nav-link as-button" onClick={() => void logout()}>
+                sign out
+              </button>
+            </>
+          ) : (
+            <a href={loginUrl()} className="nav-link">
+              sign in
+            </a>
+          )}
+        </nav>
       </header>
 
-      <Controls state={controls} onChange={setControls} />
-
-      {error ? (
-        <div className="notice error">// {error}</div>
-      ) : loading ? (
-        <div className="notice">loading…</div>
-      ) : data && data.postings.length > 0 ? (
-        <PostingsTable postings={data.postings} />
-      ) : (
-        <div className="notice">// no postings match these filters</div>
-      )}
-
-      <footer className="footer">
-        <span className="kbd">↵ open</span> to expand a row · read-only · updates nightly
-      </footer>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/upload" element={<Upload />} />
+      </Routes>
     </div>
   );
 }

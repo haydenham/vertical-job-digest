@@ -1,80 +1,65 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { fetchPostings, fetchVerticals, type PostingsResponse } from "./api";
+import type { User } from "./api";
+import { useAuth, type AuthState } from "./auth/useAuth";
 
-vi.mock("./api", () => ({
-  fetchVerticals: vi.fn(),
-  fetchPostings: vi.fn(),
-}));
+// Stub the routed pages — App's job is the shell/nav/routing, not the pages' data flow.
+vi.mock("./pages/Dashboard", () => ({ Dashboard: () => <div>dashboard-page</div> }));
+vi.mock("./pages/Login", () => ({ Login: () => <div>login-page</div> }));
+vi.mock("./pages/Upload", () => ({ Upload: () => <div>upload-page</div> }));
+vi.mock("./auth/useAuth", () => ({ useAuth: vi.fn() }));
 
-const mockVerticals = vi.mocked(fetchVerticals);
-const mockPostings = vi.mocked(fetchPostings);
+const mockUseAuth = vi.mocked(useAuth);
+const logout = vi.fn();
 
-function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
-  return {
-    vertical: "grid_power_software",
-    profile_id: 1,
-    window: "all",
-    view: "matched",
-    count: 1,
-    postings: [
-      {
-        posting_id: 1,
-        company: "GridCo",
-        title: "Grid Engineer",
-        location: "Remote",
-        apply_url: "https://example.com/apply",
-        first_seen_at: "2026-06-20T00:00:00Z",
-        source_updated_at: null,
-        verdict: "yes",
-        score: 72,
-        fits: [],
-        gaps: [],
-        rationale: null,
-      },
-    ],
-    ...over,
-  };
+function auth(over: Partial<AuthState> = {}): AuthState {
+  return { user: null, loading: false, refresh: vi.fn(), logout, ...over };
 }
 
-describe("App", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockVerticals.mockResolvedValue(["grid_power_software"]);
-    mockPostings.mockResolvedValue(response());
+const alice: User = { id: 1, email: "alice@example.com", name: "Alice" };
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
+describe("App shell", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("shows a sign-in link to the API when logged out", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/");
+    const link = screen.getByRole("link", { name: /sign in/i });
+    expect(link).toHaveAttribute("href", "/auth/login");
+    expect(screen.queryByText(/sign out/i)).not.toBeInTheDocument();
+    expect(screen.getByText("dashboard-page")).toBeInTheDocument();
   });
 
-  it("resolves the vertical then renders the table", async () => {
-    render(<App />);
-    expect(await screen.findByText("Grid Engineer")).toBeInTheDocument();
-    expect(mockPostings).toHaveBeenCalledWith(
-      expect.objectContaining({ vertical: "grid_power_software", window: "all" }),
-    );
+  it("shows the email, upload link, and sign-out when logged in", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice }));
+    renderAt("/");
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /upload résumé/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
 
-  it("refetches with the new window when a recency toggle is clicked", async () => {
-    render(<App />);
-    await screen.findByText("Grid Engineer");
-    await userEvent.click(screen.getByRole("button", { name: "2 wk" }));
-    await waitFor(() =>
-      expect(mockPostings).toHaveBeenLastCalledWith(
-        expect.objectContaining({ window: "two_weeks" }),
-      ),
-    );
+  it("calls logout when sign-out is clicked", async () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice }));
+    renderAt("/");
+    await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    expect(logout).toHaveBeenCalledOnce();
   });
 
-  it("shows the empty-state copy when no postings match", async () => {
-    mockPostings.mockResolvedValue(response({ count: 0, postings: [] }));
-    render(<App />);
-    expect(await screen.findByText(/no postings match/i)).toBeInTheDocument();
-  });
-
-  it("surfaces an error when no active vertical exists", async () => {
-    mockVerticals.mockResolvedValue([]);
-    render(<App />);
-    expect(await screen.findByText(/no active vertical/i)).toBeInTheDocument();
+  it("routes /upload to the upload page", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice }));
+    renderAt("/upload");
+    expect(screen.getByText("upload-page")).toBeInTheDocument();
   });
 });

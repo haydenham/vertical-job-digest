@@ -45,12 +45,36 @@ export interface PostingsQuery {
   profileId?: number;
 }
 
-class ApiError extends Error {}
+// The authenticated user (mirrors the `/api/me` payload in `app.py`). `null` = not logged in.
+export interface User {
+  id: number;
+  email: string;
+  name: string | null;
+}
 
+// `POST /api/profiles` success body (mirrors `ProfileCreated` in `app.py`). The backfill it
+// triggers runs in the background — there's no status to poll (D-057), hence the optimistic UX.
+export interface ProfileCreated {
+  profile_id: number;
+  vertical: string;
+  resume_version: number;
+}
+
+// Carries the HTTP status so callers (the upload form) can branch on 401/413/422/429.
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// Every call is credentialed so the signed-cookie session (D-055) rides along: logged-in users
+// resolve to their own profile server-side; anonymous keeps the single-active default.
 async function getJson<T>(path: string): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`);
+  const resp = await fetch(`${API_BASE}${path}`, { credentials: "include" });
   if (!resp.ok) {
-    throw new ApiError(`${resp.status} ${resp.statusText} for ${path}`);
+    throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for ${path}`);
   }
   return (await resp.json()) as T;
 }
@@ -75,4 +99,65 @@ export function fetchPostings(q: PostingsQuery): Promise<PostingsResponse> {
 
 export function fetchVerticals(): Promise<string[]> {
   return getJson<string[]>("/api/verticals");
+}
+
+// ---- auth ----
+
+// The Google OAuth entry point. Must target the API origin (not the Vite dev origin), so it goes
+// through `API_BASE`. A plain anchor/`location` assignment — the browser follows the 302 to Google.
+export function loginUrl(): string {
+  return `${API_BASE}/auth/login`;
+}
+
+// Session probe. `/api/me` returns 401 when unauthenticated — that's "logged out", not an error,
+// so it resolves to `null` rather than throwing.
+export async function fetchMe(): Promise<User | null> {
+  const resp = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
+  if (resp.status === 401) return null;
+  if (!resp.ok) {
+    throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for /api/me`);
+  }
+  return (await resp.json()) as User;
+}
+
+export async function logout(): Promise<void> {
+  const resp = await fetch(`${API_BASE}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for /auth/logout`);
+  }
+}
+
+// ---- résumé upload (the first write path, D-057) ----
+
+// `POST /api/profiles` (multipart): upload a résumé → create/update this user's profile → the
+// server kicks off the signup backfill in the background and returns 202. Maps the server's
+// guard responses to a typed `ApiError` (401 no session · 413 too large · 422 unreadable résumé ·
+// 429 daily LLM budget · 404 unknown vertical) carrying the server message for the form to show.
+export async function uploadResume(vertical: string, file: File): Promise<ProfileCreated> {
+  const form = new FormData();
+  form.set("vertical", vertical);
+  form.set("file", file);
+  const resp = await fetch(`${API_BASE}/api/profiles`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, await errorDetail(resp));
+  }
+  return (await resp.json()) as ProfileCreated;
+}
+
+// FastAPI renders errors as `{"detail": "..."}`; surface that string, falling back to the status.
+async function errorDetail(resp: Response): Promise<string> {
+  try {
+    const body = (await resp.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+  } catch {
+    // non-JSON body — fall through
+  }
+  return `${resp.status} ${resp.statusText}`;
 }

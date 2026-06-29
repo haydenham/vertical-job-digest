@@ -1,9 +1,9 @@
 {
-  "name": "vja-dashboard",
+  "name": "rolefeed-dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Read-only dashboard for the Vertical Job Intelligence Agent (Phase 6 · B2).",
+  "description": "Rolefeed — multi-user frontend for the Vertical Job Intelligence Agent (Phase 9 · 9.4).",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

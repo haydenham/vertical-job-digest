@@ -1,6 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { postingsPath, type PostingsQuery } from "./api";
+import {
+  ApiError,
+  fetchMe,
+  loginUrl,
+  postingsPath,
+  uploadResume,
+  type PostingsQuery,
+} from "./api";
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 // The toggle → query-param mapping is the contract the dashboard rests on (the API pins the
 // server side; this pins the client side). One home, unit-tested.
@@ -30,5 +44,75 @@ describe("postingsPath", () => {
   it("includes profile_id only when given", () => {
     const params = new URLSearchParams(postingsPath({ ...base, profileId: 7 }).split("?")[1]);
     expect(params.get("profile_id")).toBe("7");
+  });
+});
+
+describe("loginUrl", () => {
+  it("targets the API's /auth/login (API_BASE-prefixed)", () => {
+    // API_BASE defaults to "" in tests (same-origin), so it's a bare path.
+    expect(loginUrl()).toBe("/auth/login");
+  });
+});
+
+describe("fetchMe", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns the user on 200", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: 1, email: "a@b.co", name: "A" }));
+    await expect(fetchMe()).resolves.toEqual({ id: 1, email: "a@b.co", name: "A" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/me",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("treats 401 as logged-out (null), not an error", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "not authenticated" }));
+    await expect(fetchMe()).resolves.toBeNull();
+  });
+});
+
+describe("uploadResume", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const file = new File(["résumé text"], "resume.txt", { type: "text/plain" });
+
+  it("POSTs multipart credentialed and returns the created profile on 202", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(202, { profile_id: 5, vertical: "grid_power_software", resume_version: 3 }),
+    );
+    await expect(uploadResume("grid_power_software", file)).resolves.toEqual({
+      profile_id: 5,
+      vertical: "grid_power_software",
+      resume_version: 3,
+    });
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/profiles");
+    expect(init).toMatchObject({ method: "POST", credentials: "include" });
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("vertical")).toBe("grid_power_software");
+  });
+
+  it.each([
+    [413, "file too large"],
+    [422, "could not read résumé"],
+    [429, "daily budget exceeded"],
+    [401, "not authenticated"],
+  ])("maps %i to an ApiError carrying the server detail", async (status, detail) => {
+    fetchMock.mockResolvedValue(jsonResponse(status, { detail }));
+    const err = await uploadResume("grid_power_software", file).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(status);
+    expect((err as ApiError).message).toBe(detail);
   });
 });

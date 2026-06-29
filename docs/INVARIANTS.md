@@ -96,10 +96,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   blob keeps the full closed list; only the human-facing body summarizes. (D-056)
 - **Email digest (push) is primary; the dashboard (pull) is read-only** over the same
   nightly-computed data — no live fetching. (D-010)
-- **The dashboard is a Vite/React/TS SPA in `frontend/`** consuming `GET /api/postings`. Dev =
-  Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI serves the built
-  `frontend/dist` same-origin via StaticFiles. The frontend never hardcodes a vertical —
-  `GET /api/verticals` drives the picker. (D-042)
+- **The dashboard is a Vite/React/TS SPA in `frontend/`** (user-facing brand **Rolefeed**; the codebase
+  stays `vja`) consuming `GET /api/postings`. **`react-router-dom` routes** `/` (dashboard), `/login`,
+  `/upload`; `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch is
+  credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
+  server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
+  serves the built `frontend/dist` same-origin via StaticFiles (deep-link/hard-refresh of a sub-route needs a
+  9.5 catch-all → `index.html`). The frontend never hardcodes a vertical — `GET /api/verticals` drives the
+  picker. (D-042, D-058)
+- **Résumé upload is the SPA's only write surface** (`/upload`, soft-gated by login → `/login`; the POST is
+  hard-gated by `require_user`). On 202 the UI is optimistic — "matching runs in the background", no status
+  polling (honours D-057's no-status-endpoint); guard responses (401/413/422/429/404) surface a typed
+  `ApiError`. (D-058, D-057)
 
 ## Dashboard & freshness
 
@@ -140,7 +148,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **The read API resolves the profile from the authenticated user** (the docs/11 §2 seam): authed → *that
   user's* profile for the vertical, another user's `profile_id` → 403; unauthenticated → the single-active
   default. **Hard enforcement is gated by `VJA_AUTH_REQUIRED`** (default off) — on ⇒ no session is 401;
-  flipped at 9.4/9.5, not re-architected. (D-055, D-005)
+  **stays off through 9.4** (the Rolefeed dashboard is anonymous-readable; only `/upload` needs login),
+  flips on at the 9.5 deploy, not re-architected. (D-055, D-005, D-058)
 - **Secrets are env-only** (`GOOGLE_CLIENT_ID/SECRET`, `VJA_SESSION_SECRET`), never in the repo — a
   platform secret store is a config swap. (core, D-055)
 - **Résumé upload is the first write endpoint:** `POST /api/profiles` (multipart), behind

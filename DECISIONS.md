@@ -900,3 +900,33 @@ the two guards bound both per-signup and total daily cost without new infrastruc
 (later):** the upload/login UI (9.4); encryption-at-rest, deletion/DSR, captcha, edge rate-limiting,
 verified sending domain, prod OAuth redirect URIs (9.5); per-user cooldown, a real per-match cost ledger,
 and a backfill-status endpoint.
+
+### D-058 · Phase 9 · 9.4: multi-user frontend (Rolefeed) + product naming · accepted · 2026-06-29
+Fourth Phase-9 block (D-047): the UI that makes the 9.2 auth and 9.3 write path reachable. **No backend
+code changes** — every endpoint (`/auth/login|callback|logout`, `/api/me`, `POST /api/profiles`) already
+exists and CORS already allows credentials (D-055/D-057); 9.4 is purely the `frontend/` SPA wiring the user
+flow: sign in → upload a résumé → see *your* matches. **Product name: Rolefeed** — the wordmark, page title,
+and package name switch from the internal `vja` to Rolefeed (the codebase/CLI stay `vja`; this is a
+user-facing brand only). Decisions, run through Hayden:
+- **Routed pages via `react-router-dom`** (over conditional rendering in one component): `/` dashboard,
+  `/login`, `/upload`. `App.tsx` becomes the shell (brand + auth-aware nav) + `<Routes>`; the old App body
+  is extracted verbatim to `pages/Dashboard.tsx` (behaviour unchanged). Adds the SPA's first dependency.
+- **`VJA_AUTH_REQUIRED` stays off in 9.4** (over flipping it on now): the dashboard remains reachable
+  anonymously (single-active default profile), login only gates the `/upload` write path (a soft client
+  redirect; the POST is hard-guarded by `require_user` server-side). Existing API tests stay green; the hard
+  gate + prod cookie/redirect hardening flip together at the 9.5 deploy.
+- **Credentialed fetches** (`credentials: "include"` on every call): the signed-cookie session rides along,
+  so a logged-in user resolves to their own profile server-side (`_resolve_profile`, D-055) — the seam 9.2
+  built. `/api/me` 401 ⇒ "logged out" (null), not an error.
+- **Optimistic upload feedback** (honours D-057's no-status-endpoint): on 202 the form shows "résumé
+  received (v{n}) — matching runs in the background" + a link back to the dashboard, which re-queries
+  `/api/postings` on navigation. No polling, no new endpoint, no schema change. The 413/422/429/404 guard
+  responses surface inline via a typed `ApiError` carrying the server `detail`.
+- **Auth module split for clean Fast-Refresh**: `auth/useAuth.ts` (context + hook, no component) +
+  `auth/AuthProvider.tsx` (the provider) — so no file mixes a component with a hook export.
+**Why:** get a real user in front of the product (D-047's reason for pulling Phase 9 ahead of the discovery
+agent) with the smallest reviewable surface, reusing the finished backend untouched. Routing leaves room for
+the next product views without a rewrite; deferring the auth gate keeps local dev frictionless and the
+review small. **Out of scope (later, 9.5):** flipping `VJA_AUTH_REQUIRED` on; prod OAuth redirect URIs +
+cookie hardening; deploy; and a deep-link/hard-refresh fallback (prod `StaticFiles(html=True)` 404s a hard
+reload of `/upload`|`/login` — client-side nav is fine; needs a catch-all → `index.html` at the deploy).
