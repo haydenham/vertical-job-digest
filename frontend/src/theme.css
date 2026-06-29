@@ -103,6 +103,40 @@ a:hover {
   color: var(--accent-tint-text);
 }
 
+/* ---- nav chrome (9.4) ---- */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.nav-link {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.nav-link:hover {
+  color: var(--accent-hover);
+}
+.nav-user {
+  color: var(--text-dim);
+}
+.as-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+
+/* the dashboard's controls + open-count row, under the global header */
+.subbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 /* ---- mono labels ---- */
 .label {
   font-family: var(--font-mono);
@@ -334,4 +368,68 @@ a:hover {
 }
 .footer .kbd {
   color: var(--text-muted);
+}
+
+/* ---- panels: login + upload (9.4) ---- */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+  max-width: 560px;
+}
+.auth-blurb {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+.success-line {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--success);
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  justify-self: start;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-tint-bg);
+  border-color: var(--accent-hover);
+}
+
+.upload-form .field {
+  display: grid;
+  gap: 6px;
+}
+.field select,
+.field input[type="file"] {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
 }

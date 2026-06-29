@@ -72,7 +72,12 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       cookie hardening `https_only`/`SameSite` still deferred to the 9.5 deploy.)*
 - [x] **Authz:** the read API resolves the profile from the authenticated user — the §2 seam, now plugged
       (`_resolve_profile(…, user)`: own-profile resolution, 403 on another's `profile_id`). *Hard*
-      enforcement is gated by `VJA_AUTH_REQUIRED` (default off), flipped at 9.4/9.5. (D-055)
+      enforcement is gated by `VJA_AUTH_REQUIRED` (default off), **stays off through 9.4** (the Rolefeed SPA
+      dashboard is anonymous-readable; only `/upload` needs login), flips on at the 9.5 deploy. (D-055, D-058)
+- [x] **Frontend login + upload UI (9.4, D-058):** the Rolefeed SPA (`react-router-dom`, `/`·`/login`·`/upload`)
+      sends credentialed fetches so the session resolves the user's own profile; résumé-upload form over
+      `POST /api/profiles` with optimistic backfill UX. *(Prod redirect URIs + cookie hardening + the auth-gate
+      flip + an SPA deep-link catch-all → `index.html` still 9.5.)*
 - [ ] Multi-profile-per-user shape (one user, both verticals) vs. the current one-profile-per-(vertical) view.
       *(1-vertical/user is the accepted default; the `profiles.user_id` FK already supports 1:many when wanted.)*
 

@@ -156,8 +156,12 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   guards, deliverability, observability). *(Was "cross-cutting, triggered by demo users.")* Block order: **9.1
   Postgres-CI spine ✅** (D-054) · **9.2 auth — Google OAuth + `users` + read-API authz ✅** (D-055) · **9.3 résumé
   upload + signup→backfill + cost guards ✅** (D-057 — `POST /api/profiles` behind `require_user`, `pypdf` adapter,
-  background backfill, per-backfill cap + daily ceiling) · 9.4 multi-user frontend · 9.5 cloud deploy + full
-  Postgres cutover + verified email domain + security review.
+  background backfill, per-backfill cap + daily ceiling) · **9.4 multi-user frontend ✅** (D-058 — the
+  **Rolefeed**-branded SPA: `react-router-dom` routes `/`·`/login`·`/upload`, Google-OAuth login chrome,
+  credentialed fetches → own-profile resolution, résumé-upload form over `POST /api/profiles` with optimistic
+  backfill UX; `VJA_AUTH_REQUIRED` stays off till 9.5) · 9.5 cloud deploy + full Postgres cutover + verified
+  email domain + security review (+ flip `VJA_AUTH_REQUIRED` on, prod redirect URIs/cookie hardening, SPA
+  deep-link catch-all).
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch.

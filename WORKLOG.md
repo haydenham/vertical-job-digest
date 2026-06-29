@@ -5,6 +5,52 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-29 — Phase 9 · Block 9.4: multi-user frontend (Rolefeed) (D-058)
+
+**The UI that makes 9.2 auth + 9.3 upload reachable.** Frontend-only — **no backend code touched**; every
+endpoint already existed (`/auth/*`, `/api/me`, `POST /api/profiles`) and CORS already allowed credentials.
+A user can now sign in with Google, upload a résumé, and see *their* matches. Product renamed **Rolefeed**
+(user-facing brand; codebase/CLI stay `vja`). Four forks, all the recommended option:
+1. **Routed pages** (`react-router-dom`) over conditional rendering. 2. **`VJA_AUTH_REQUIRED` stays off in
+9.4** (dashboard anonymous-readable; login only gates `/upload`) — flips at 9.5. 3. **Optimistic upload
+feedback** (no status endpoint, honours D-057). 4. **Credentialed fetches** so the session resolves the
+user's own profile (the 9.2 seam).
+
+**Did (all in `frontend/`):**
+- **Branding → Rolefeed:** wordmark (`$ rolefeed▮`), `index.html` `<title>`, `package.json` name/description.
+- **Routing:** added `react-router-dom`; `main.tsx` wraps `<BrowserRouter><AuthProvider>`; `App.tsx` is now
+  the shell (brand + auth-aware nav) + `<Routes>`. Old App body extracted verbatim → `pages/Dashboard.tsx`
+  (behaviour unchanged; its data-flow tests moved to `Dashboard.test.tsx`).
+- **Auth client:** `api.ts` gains `credentials: "include"` on every call + `loginUrl`/`fetchMe`/`logout`/
+  `uploadResume` (+ typed `ApiError` carrying status + server `detail`, `User`/`ProfileCreated` types).
+  `auth/useAuth.ts` (context+hook, no component → clean Fast-Refresh) + `auth/AuthProvider.tsx` (probes
+  `/api/me` once; 401 ⇒ anonymous, a valid state).
+- **Pages:** `Login.tsx` (Google sign-in anchor → `loginUrl()`), `Upload.tsx` (soft-gated → `/login`;
+  vertical select + file input → `uploadResume` → optimistic "résumé received (v{n})" + dashboard link;
+  413/422/429 surface inline). New CSS in `theme.css` (nav, panel, btn, form, subbar).
+
+**Decisions:** **D-058**. INVARIANTS: D-042 SPA line rewritten (Rolefeed, routes, credentialed fetches,
+deep-link caveat) + new résumé-upload-surface line; auth-gate line now "stays off through 9.4". CLAUDE.md
+Phase 9 list 9.4 ✅. docs/11 §3.2 gains the frontend-UI checkbox + auth-gate note.
+
+**Tests:** frontend gate green — eslint (0 warnings), `tsc -b --noEmit`, **vitest 34 passed** (8 files; +
+`api` upload/login/me, `AuthProvider`, `Login`, `Upload`, `App` shell/nav; `Dashboard` carries the old App
+tests). `npm run build` bundles clean (tsc + vite). No Python touched → backend suite unaffected.
+
+**Known follow-up (9.5, noted in D-058/docs):** prod `StaticFiles(html=True)` 404s a hard-refresh of
+`/upload`|`/login` (client-side nav is fine) — needs a catch-all → `index.html` at deploy, alongside the
+`VJA_AUTH_REQUIRED` flip + prod OAuth redirect URIs + cookie hardening.
+
+**Next:** **STOP for Hayden to commit + PR** (9.4). Then **9.5 — cloud deploy + Postgres cutover + verified
+email domain + security review** (+ the deferred flips above). Still-open orthogonal (no code): Phase-8
+Part B cash-in run + the Phenom fetcher. Optional dev check: a real Google round-trip locally (set
+`GOOGLE_CLIENT_*` + `VJA_SESSION_SECRET`, run FastAPI :8000 + `VITE_API_BASE=…:8000 npm run dev`).
+
+**Branch:** `feat/multi-user-frontend` (off `main` @ `d5864db`, post-9.3-PR-#43 merge). *(Prior WORKLOG entry
+was stale — its "STOP to commit+PR 9.3" already happened as PR #43.)*
+
+---
+
 ## 2026-06-27 — Phase 9 · Block 9.3: résumé upload + signup→backfill + cost guards (D-057)
 
 **The product's first write path.** A logged-in user uploads a résumé → a profile is created → the D-039
