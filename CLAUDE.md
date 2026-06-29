@@ -153,7 +153,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
   upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real
   users in front of it. The deferred-work ledger in `docs/11` is this phase's checklist (auth, PII, abuse/cost
-  guards, deliverability, observability). *(Was "cross-cutting, triggered by demo users.")*
+  guards, deliverability, observability). *(Was "cross-cutting, triggered by demo users.")* Block order: **9.1
+  Postgres-CI spine ✅** (D-054) · **9.2 auth — Google OAuth + `users` + read-API authz ✅** (D-055) · **9.3 résumé
+  upload + signup→backfill + cost guards ✅** (D-057 — `POST /api/profiles` behind `require_user`, `pypdf` adapter,
+  background backfill, per-backfill cap + daily ceiling) · 9.4 multi-user frontend · 9.5 cloud deploy + full
+  Postgres cutover + verified email domain + security review.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch.

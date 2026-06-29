@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -30,7 +31,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 
 from vja.db.engine import begin
-from vja.db.matches import MatchCandidate, postings_needing_match, save_match
+from vja.db.matches import (
+    MatchCandidate,
+    count_matches_since,
+    postings_needing_match,
+    save_match,
+)
 from vja.db.profiles import Profile, active_profiles
 from vja.models import MatchTrigger, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
@@ -42,6 +48,12 @@ logger = logging.getLogger("vja.match")
 _MODEL = "claude-sonnet-4-6"  # strong tier for the user-visible rationale (D-005); eval-gated
 _BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
 _MAX_TOKENS = 4096  # room for adaptive thinking + the structured rationale
+
+# Cost/abuse guards (D-057) — the signup backfill is the first user action that spends LLM tokens.
+# Both are env-tunable (read at call time so tests can set them) with conservative defaults.
+_DEFAULT_BACKFILL_MAX_POSTINGS = 100  # hard cap on candidates matched per signup
+_DEFAULT_DAILY_LLM_BUDGET_USD = 5.0  # global daily spend ceiling before a backfill may start
+_NOMINAL_MATCH_USD = 0.01  # spend proxy per match (no per-match ledger; see count_matches_since)
 _SONNET_IN_PER_TOKEN = 3.0 / 1_000_000  # $3 / MTok input
 _SONNET_OUT_PER_TOKEN = 15.0 / 1_000_000  # $15 / MTok output
 _CACHE_WRITE_MULT = 1.25  # 5-min ephemeral cache write premium
@@ -83,6 +95,44 @@ class MatchingSummary:
     matched: int
     failed: int
     est_cost_usd: float
+
+
+class BackfillBudgetExceeded(RuntimeError):
+    """The estimated LLM spend for today is already over the daily ceiling, so a new signup
+    backfill is refused (D-057). The API maps this to a 429."""
+
+
+def _backfill_max_postings() -> int:
+    """The per-signup candidate cap (`VJA_BACKFILL_MAX_POSTINGS`), read at call time."""
+    raw = os.environ.get("VJA_BACKFILL_MAX_POSTINGS")
+    return int(raw) if raw else _DEFAULT_BACKFILL_MAX_POSTINGS
+
+
+def _daily_budget_usd() -> float:
+    """The global daily LLM-spend ceiling (`VJA_DAILY_LLM_BUDGET_USD`), read at call time."""
+    raw = os.environ.get("VJA_DAILY_LLM_BUDGET_USD")
+    return float(raw) if raw else _DEFAULT_DAILY_LLM_BUDGET_USD
+
+
+def estimate_daily_spend(engine: Engine, now: datetime) -> float:
+    """Estimated LLM spend so far today (UTC) = matches created since midnight × nominal per-match
+    cost. A proxy, not an invoice — enough to backstop the total bill without a per-match ledger."""
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return count_matches_since(engine, midnight) * _NOMINAL_MATCH_USD
+
+
+def check_backfill_budget(engine: Engine, now: datetime | None = None) -> None:
+    """Raise `BackfillBudgetExceeded` if today's estimated spend is already over the ceiling.
+
+    Called *before* a signup backfill is scheduled, so the work never starts once the day's budget
+    is spent — the global cost guard on top of the per-backfill cap (D-057)."""
+    stamp = now or datetime.now(UTC)
+    spend = estimate_daily_spend(engine, stamp)
+    budget = _daily_budget_usd()
+    if spend >= budget:
+        raise BackfillBudgetExceeded(
+            f"daily LLM budget reached (est ${spend:.2f} ≥ ${budget:.2f}); try again tomorrow"
+        )
 
 
 def fields_to_columns(result: MatchResult) -> dict[str, Any]:
@@ -175,14 +225,16 @@ def _match_profile(
     since: datetime | None,
     trigger: MatchTrigger,
     now: datetime,
+    max_postings: int | None = None,
 ) -> tuple[int, int, float]:
     """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, cost).
 
     The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
     (`since=now−5d`, `trigger=BACKFILL`). `since` bounds the candidate set to the recency window;
     Stage A (`in_scope`) + Stage B (`passes_prefilter`) drop the obvious non-matches for free.
-    Per-posting isolation: one posting's failure (API error, bad parse) is logged and skipped,
-    never aborting the batch.
+    `max_postings` caps the surviving set (the backfill cost guard, D-057) — `None` for the
+    uncapped nightly path. Per-posting isolation: one posting's failure (API error, bad parse) is
+    logged and skipped, never aborting the batch.
     """
     prefilter = PrefilterConfig(
         locations=config.prefilter_locations, levels=config.prefilter_levels
@@ -194,6 +246,8 @@ def _match_profile(
         )
         if in_scope(c.title, config.scope) and passes_prefilter(c.level, c.location, prefilter)
     ]
+    if max_postings is not None:
+        candidates = candidates[:max_postings]
     matched = 0
     cost = 0.0
     for candidate in candidates:
@@ -276,9 +330,10 @@ def run_backfill(
 
     Matches `profile` against open, extracted, unmatched postings whose ATS activity date is
     within the last `_BACKFILL_WINDOW_DAYS` (5) — so a new user's first view is timely, not a
-    months-deep dump. Idempotent (a re-run only matches the unmatched remainder) and per-posting
-    isolated, mirroring `run_matching`. `trigger=backfill`; `client` injected for offline tests.
-    Intended caller: the future signup flow (one profile); nightly matching stays uncapped.
+    months-deep dump. The surviving set is capped at `VJA_BACKFILL_MAX_POSTINGS` (D-057) so one
+    signup can't run away on cost. Idempotent (a re-run only matches the unmatched remainder) and
+    per-posting isolated, mirroring `run_matching`. `trigger=backfill`; `client` injected for
+    offline tests. Intended caller: the signup upload flow (one profile); nightly stays uncapped.
     """
     stamp = now or datetime.now(UTC)
     cli = client or Anthropic()
@@ -292,6 +347,7 @@ def run_backfill(
         since=since,
         trigger=MatchTrigger.BACKFILL,
         now=stamp,
+        max_postings=_backfill_max_postings(),
     )
     return MatchingSummary(
         vertical=vertical,

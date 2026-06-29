@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, delete, exists, select
+from sqlalchemy import Engine, delete, exists, func, select
 from sqlalchemy.engine import Connection
 
 from vja.db.engine import begin
@@ -103,6 +103,18 @@ def postings_needing_match(
         )
         for row in rows
     ]
+
+
+def count_matches_since(engine: Engine, since: datetime) -> int:
+    """Number of `matches` rows created at/after `since` — the spend proxy for the daily ceiling.
+
+    No per-match cost is stored (only `pipeline_runs.llm_cost_usd`, which the backfill doesn't
+    write), so the cost guard (D-057) estimates the day's LLM spend from the match count × a nominal
+    per-match cost. Counts every trigger (nightly + backfill) — the ceiling protects the daily bill.
+    """
+    stmt = select(func.count()).select_from(matches).where(matches.c.created_at >= since)
+    with engine.connect() as conn:
+        return int(conn.execute(stmt).scalar_one())
 
 
 def delete_matches_failing_scope(engine: Engine, vertical: str) -> int:

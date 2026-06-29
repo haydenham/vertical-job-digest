@@ -123,9 +123,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   open*. (D-030, D-024, D-038, D-039)
 - **"New today" uses `first_seen_at` (midnight UTC)** so it equals the digest, not the ATS
   date. (D-030, D-039)
-- **Signup backfill caps at 5 days, `trigger=backfill`, idempotent.** *(Supersedes D-024's
-  original 2-week cap.)* The nightly match is NOT capped; the dashboard's 14-day toggle is
-  decoupled from the backfill window. (D-039, amending D-024)
+- **Signup backfill caps at 5 days, `trigger=backfill`, idempotent** — and at
+  `VJA_BACKFILL_MAX_POSTINGS` candidates (D-057, the cost guard). *(Supersedes D-024's original
+  2-week cap.)* The nightly match is NOT capped (neither by date nor count); the dashboard's 14-day
+  toggle is decoupled from the backfill window. (D-039, D-057, amending D-024)
 
 ## Auth & identity
 
@@ -142,11 +143,22 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   flipped at 9.4/9.5, not re-architected. (D-055, D-005)
 - **Secrets are env-only** (`GOOGLE_CLIENT_ID/SECRET`, `VJA_SESSION_SECRET`), never in the repo — a
   platform secret store is a config swap. (core, D-055)
+- **Résumé upload is the first write endpoint:** `POST /api/profiles` (multipart), behind
+  `require_user` (401 without a session). It runs the D-033 adapter (`vja.resume`, text/markdown +
+  text PDF; scanned/empty/non-text → 422; PII text never logged) → `upsert_profile` (which now stamps
+  `user_id` at creation, the D-055 link at upload not just login) → a **background** `run_backfill`,
+  returning 202. The read API stays read-only (D-005); this write path is the sole exception. (D-057)
 
 ## Cost & safety
 
 - **Cost discipline from day one:** LLM only where structure runs out; cache by content
   hash; meter LLM spend. (D-035, D-036)
+- **Signup backfill is guarded by a per-backfill cap + a global daily ceiling.** The cap
+  (`VJA_BACKFILL_MAX_POSTINGS`, default 100) bounds one signup's candidate set inside `run_backfill`
+  (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) refuses a backfill
+  (429) once today's *estimated* spend (`count_matches_since(midnight) × ~$0.01`, a proxy — there's
+  no per-match ledger) is reached. Captcha / email-verify / edge rate-limiting are deferred to the
+  9.5 deploy (OAuth already bounds abuse to real accounts). (D-057)
 - **No auto-apply.** The tool surfaces and reasons; it never submits applications. (core)
 - **Politeness is policy:** rate limits, sane user agent, respect robots.txt on the long
   tail. Getting IP-banned is a self-inflicted coverage hole. (core)

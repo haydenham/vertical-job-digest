@@ -23,7 +23,17 @@ from pathlib import Path
 from typing import Annotated, cast
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,12 +45,16 @@ from vja.api.auth import (
     auth_required,
     build_oauth,
     get_current_user,
+    require_user,
     session_secret,
 )
 from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality
-from vja.db.profiles import Profile, active_profiles, active_verticals
+from vja.db.profiles import Profile, active_profiles, active_verticals, get_profile, upsert_profile
 from vja.db.users import User, upsert_user_by_google
+from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
+from vja.resume import ResumeError, extract_resume_text
+from vja.verticals import ConfigError, load_vertical_config
 
 # The built React SPA (B2). Mounted at `/` only when present, so dev (Vite server + CORS) and
 # tests/CI (no build) are unaffected; prod serves the SPA same-origin from this dir. (D-042)
@@ -49,6 +63,10 @@ _FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 # Dev-server origins allowed by CORS. Prod is same-origin (static mount), so this is the Vite
 # dev server by default; override with `VJA_CORS_ORIGINS` (comma-separated). (D-042)
 _DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+
+# Upload ceiling for the résumé write endpoint (D-057) — a real résumé is small; this caps the
+# in-memory read before the adapter runs. The adapter re-checks as defense in depth.
+_MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
 
 class Window(StrEnum):
@@ -88,6 +106,14 @@ class PostingRow(BaseModel):
     fits: list[str] | None
     gaps: list[str] | None
     rationale: str | None
+
+
+class ProfileCreated(BaseModel):
+    """The 202 response to a résumé upload — the new/updated profile, before the backfill runs."""
+
+    profile_id: int
+    vertical: str
+    resume_version: str
 
 
 class PostingsResponse(BaseModel):
@@ -265,6 +291,56 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             view=view,
             count=len(rows),
             postings=[PostingRow.model_validate(r) for r in rows],
+        )
+
+    @app.post("/api/profiles", status_code=202)
+    async def create_profile(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User, Depends(require_user)],
+        background: BackgroundTasks,
+        vertical: Annotated[str, Form()],
+        file: Annotated[UploadFile, File()],
+    ) -> ProfileCreated:
+        """Upload a résumé → create/update this user's profile → kick off the signup backfill.
+
+        The first write path (9.3, D-057). Behind `require_user` (401 without a session). The
+        résumé adapter (D-033) turns the file into `resume_text`; `upsert_profile` stamps the
+        authenticated `user_id`; `run_backfill` (the D-039 5-day catch-up) runs in the background
+        so the response returns immediately (202). Two cost guards bound the LLM spend this
+        triggers: the global daily ceiling (checked here → 429) and the per-backfill cap (inside
+        `run_backfill`). PII discipline: the résumé text is never logged.
+        """
+        try:
+            check_backfill_budget(engine)
+        except BackfillBudgetExceeded as exc:
+            raise HTTPException(429, str(exc)) from exc
+
+        data = await file.read()
+        if len(data) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"file too large (max {_MAX_UPLOAD_BYTES} bytes)")
+        try:
+            resume_text = extract_resume_text(file.filename, data)
+        except ResumeError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+        try:
+            cfg = load_vertical_config(vertical)
+        except ConfigError as exc:
+            raise HTTPException(404, f"unknown vertical {vertical!r}") from exc
+
+        profile_id = upsert_profile(
+            engine,
+            user_email=user.email,
+            user_id=user.id,
+            vertical=vertical,
+            resume_text=resume_text,
+            domain_vocabulary=cfg.domain_vocabulary,
+        )
+        profile = get_profile(engine, profile_id)
+        assert profile is not None  # just upserted
+        background.add_task(run_backfill, engine, vertical, profile, config=cfg)
+        return ProfileCreated(
+            profile_id=profile_id, vertical=vertical, resume_version=profile.resume_version
         )
 
     # Serve the built SPA same-origin in prod, if it exists. Mounted last so `/api/*` wins;

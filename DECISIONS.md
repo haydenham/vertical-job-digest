@@ -862,3 +862,41 @@ closures (you can't apply to a closed role — "which companies shed roles" is t
 the specific titles. Threshold 10 keeps a normal daily delta detailed and rolls up only backlog days. Body-only
 keeps the change tiny and leaves audit / D-037 completeness intact. A pre-req cleanup before 9.3 so the held
 digest ships clean.
+
+### D-057 · Phase 9 · 9.3: résumé upload + signup→backfill + cost/abuse guards · accepted · 2026-06-27
+Third Phase-9 block (D-047), the layer 9.2 (D-055) built `require_user` for. Adds the product's **first
+write path** — a logged-in user uploads a résumé, a profile is created, and the D-039 signup backfill
+matches it against the last 5 days of open postings. Because this is the first place a *user action spends
+LLM tokens* (docs/11 §3.3), it ships with cost guards. Scope is backend-only: the upload **UI** is 9.4,
+prod hardening (encryption-at-rest, captcha, edge rate-limit, verified sending domain) is 9.5. Four forks,
+run through Hayden:
+- **Résumé formats = text/markdown + text-based PDF (`pypdf`)** (over text-only, or full OCR now). New leaf
+  module `src/vja/resume.py` (`extract_resume_text`, the D-033 adapter, imports no `vja` module). A
+  scanned/image PDF has no text layer → rejected (422); OCR / Claude native-PDF input is a later add. All
+  failure modes raise `ResumeError`. **PII: the text is never logged** (docs/11 §3.1). New deps `pypdf` +
+  `python-multipart` (FastAPI form parsing).
+- **Backfill runs in the background** (over inline-synchronous, or defer-to-nightly). `POST /api/profiles`
+  returns **202 + `profile_id`** immediately; `run_backfill` runs as a FastAPI `BackgroundTask` (a sync
+  callable → Starlette threadpool, so it doesn't block the event loop). Matches land on the existing
+  dashboard as they complete. The work is already a plain callable, so the 9.5 cloud cutover swaps it for a
+  Cloud Run Job (D-031) with no rework.
+- **Cost guards = per-backfill cap + global daily ceiling** (skip per-user cooldown; defer captcha/email-
+  verify/edge rate-limit to 9.5, since OAuth already bounds abuse to real Google accounts). The cap
+  (`VJA_BACKFILL_MAX_POSTINGS`, default 100) slices the surviving candidate set inside `run_backfill` so one
+  signup can't run away; **nightly stays uncapped** (`_match_profile(max_postings=None)`, pinned by the
+  unchanged `test_matching_run.py`). The ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) is checked
+  *before* a backfill is scheduled → **429**. With no per-match cost ledger (only `pipeline_runs.llm_cost_usd`,
+  which the backfill doesn't write), spend is **estimated** as `count_matches_since(midnight) ×
+  _NOMINAL_MATCH_USD` (~$0.01) — a proxy good enough to backstop the bill without a schema change.
+- **Endpoint = `POST /api/profiles` (multipart), no status endpoint** (over adding pollable backfill state).
+  Behind `require_user` (401 without a session). Resolves the user from the session, pulls
+  `domain_vocabulary` from the vertical config (404 on an unknown vertical), and `upsert_profile` now stamps
+  `user_id` at creation (the D-055 link applied at upload, not only at login; CLI path unchanged, still
+  NULL→linked-by-email). A status endpoint would need persisted backfill state (schema churn) for little
+  gain now — the 9.4 frontend can watch matches appear via `/api/postings`; add it later only if needed.
+**Why:** the upload→backfill flow is the first user-driven LLM spend, so it must sit behind a real login
+(9.2) *and* behind a cost ceiling before any public signup. Background execution keeps the upload responsive;
+the two guards bound both per-signup and total daily cost without new infrastructure. **Out of scope
+(later):** the upload/login UI (9.4); encryption-at-rest, deletion/DSR, captcha, edge rate-limiting,
+verified sending domain, prod OAuth redirect URIs (9.5); per-user cooldown, a real per-match cost ledger,
+and a backfill-status endpoint.
