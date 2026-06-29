@@ -5,6 +5,44 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-29 — Doc close-out: Phase-8 Part B cash-in confirmed run (record correction)
+
+**Not new code — fixing doc drift.** Hayden flagged that the Phase-8 Part B cash-in run *did* execute, yet
+every recent entry's "Next" still listed it as "still-open (orthogonal, no code)." Confirmed against
+`data/vja.db` — the run happened:
+- **pipeline_runs:** #12 (2026-06-25) **2705 new** / 324 closed and #16 (2026-06-26) **2312 new** / 579
+  closed — vs normal nightly deltas of ~11–78 new.
+- **Extraction (Haiku):** 444 (06-25) + 655 (06-26) [+ an earlier 875 on 06-23]; nightly is ~4–24/day.
+- **Matching (Sonnet):** 35 (06-25) + 184 (06-26) [+ 152 on 06-23]; nightly ~1–9/day. 425 matches total.
+- **Digests:** `sent` daily through 2026-06-29 (nightly live via launchd).
+
+The run already left a code fingerprint — **D-056** (digest closure rollup) fixed the ~922-closure wall it
+exposed (pipeline_run #16's 579 closed + the 2-day backlog). What was missing was a close-out; the stale
+"still-open: Part B cash-in" boilerplate got copy-pasted forward through the 9.1→9.4 "Next" sections (which,
+being append-only history, are left as-written — this entry supersedes them).
+
+**Corrected record:** Phase-8 Part B cash-in = **DONE**. Of that orthogonal pair, **only the Phenom fetcher
+remains open.** No INVARIANTS/DECISIONS change (D-056 already captured the only decision the run produced).
+
+**Worth an eye (not action):** `postings.in_scope` = 384 / 11 457; **zero `backfill`-trigger matches** (all
+425 are `nightly`) — both expected (the dashboard floors on `in_scope`; no signup→backfill has run yet).
+
+**Next:** 9.5 — cloud deploy + Postgres cutover + verified email domain + security review (+ the deferred
+flips: `VJA_AUTH_REQUIRED` on, prod OAuth redirect URIs, cookie hardening, SPA deep-link catch-all). Then
+Phenom (the last open Phase-8 item). This doc fix rides on the 9.5 branch.
+
+**9.5 planned (this session) → `docs/12-cloud-deploy-plan.md`** (plan of record; survives chat resets). Four
+sub-blocks: **9.5a app hardening** (cookies/proxy-HTTPS-redirect/SPA-catch-all/bind — code, testable now) ·
+**9.5b containerization** (multi-stage Dockerfile — code) · **9.5c provision** (GCP project + **Neon** PG +
+a `.com` via Cloudflare + Secret Manager) · **9.5d cutover/go-live** (deploy, `alembic upgrade`, suppressed
+baseline run, Resend domain verify, flip auth/cookie guards, `/security-review`). Locked: **Neon not Cloud
+SQL** (URL-swap ethos, ~$0), Cloud Run, buy a `.com`, **fresh DB + baseline run** (no sqlite→PG migration).
+9.5a/b are code-now (no GCP needed); 9.5c/d are ops-later. **Resume by reading docs/12 → next ☐ block.**
+
+**Branch:** `feat/cloud-deploy` (off `main` @ `250aa38`, post-9.4-PR-#44 merge).
+
+---
+
 ## 2026-06-29 — Phase 9 · Block 9.4: multi-user frontend (Rolefeed) (D-058)
 
 **The UI that makes 9.2 auth + 9.3 upload reachable.** Frontend-only — **no backend code touched**; every

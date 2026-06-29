@@ -161,7 +161,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   credentialed fetches → own-profile resolution, résumé-upload form over `POST /api/profiles` with optimistic
   backfill UX; `VJA_AUTH_REQUIRED` stays off till 9.5) · 9.5 cloud deploy + full Postgres cutover + verified
   email domain + security review (+ flip `VJA_AUTH_REQUIRED` on, prod redirect URIs/cookie hardening, SPA
-  deep-link catch-all).
+  deep-link catch-all). **Plan of record: `docs/12-cloud-deploy-plan.md`** — four sub-blocks **9.5a app
+  hardening** (code) · **9.5b containerization** (code) · **9.5c provision** (GCP+Neon+domain) · **9.5d
+  cutover/go-live**; locked: Neon (not Cloud SQL), Cloud Run, a `.com` via Cloudflare, fresh DB + suppressed
+  baseline run.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch.
@@ -214,6 +217,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/08-testing-strategy.md` — the four test levels (unit→integration→system→e2e) in this project's terms + when each applies.
 - `docs/09-dev-workflow.md` — Definition of Done, branch/PR/review gate, CI + pre-commit gates, conventions. The "Claude writes it, gates + review make it trustworthy" playbook.
 - `docs/11-multi-user-and-hosting.md` — living migration ledger: what's already portable, the single-user seams each phase must preserve, and the deferred auth/security/PII/cost work to build at the D-025 cutover.
+- `docs/12-cloud-deploy-plan.md` — Phase 9.5 plan of record (sub-blocks 9.5a–d + locked decisions). Read it + `docs/11` + the WORKLOG top entry to continue 9.5 after a chat reset.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 
