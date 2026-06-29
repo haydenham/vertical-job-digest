@@ -5,6 +5,86 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-29 — Phase 9 · Block 9.5a: deploy-readiness app hardening (D-059)
+
+**First 9.5 block — code-only, no infra.** Closes the app-level seams a TLS-terminating proxy (Cloud Run) +
+an enforced auth gate expose, so 9.5b–d are pure packaging + ops. Surfaced by this session's loose-ends
+audit; every prod behavior is **env-gated** so local dev defaults are unchanged. Plan of record:
+`docs/12-cloud-deploy-plan.md`.
+
+**Did (all `src/vja/api/`):**
+- **Cookie hardening** (`auth.py`: `cookie_https_only`/`session_max_age`, `_env_truthy` factored out of
+  `auth_required`): `SessionMiddleware` now gets `https_only` (`VJA_COOKIE_SECURE`, off in dev),
+  `same_site="lax"` (Strict breaks Google's OAuth redirect), `max_age` (`VJA_SESSION_MAX_AGE`, 14d default).
+- **HTTPS OAuth redirect_uri** (`auth.oauth_redirect_uri`): prefers `VJA_PUBLIC_BASE_URL` → `https://…/auth/
+  callback` (else `url_for`), fixing the Cloud-Run `redirect_uri_mismatch`; `api_main`'s `uvicorn.run` gains
+  `proxy_headers=True, forwarded_allow_ips="*"` as the fallback-path backstop.
+- **SPA deep-link catch-all** (`app.py: _mount_spa`): replaced `StaticFiles(html=True)` with explicit
+  `/assets` + a trailing `/{full_path:path}` → `index.html` for client routes (hard-refresh of `/upload`
+  no longer 404s), real files served verbatim, unknown `/api`·`/auth` still 404. Mount gated on a real
+  `index.html` (found a stale empty `frontend/dist` locally that the old `is_dir()` guard would have mounted).
+- **Container bind** (`app.py: _parse_args`): `--host`/`--port` default from `VJA_API_HOST`/`PORT` (Cloud Run
+  injects `$PORT`; container binds `0.0.0.0`); dev stays 127.0.0.1:8000; flags override. `load_dotenv` moved
+  before parse so `.env` feeds defaults. **CORS** doc-noted only (already env-driven, same-origin in prod).
+- **`.env.example`** gains the four knobs (`VJA_COOKIE_SECURE`, `VJA_SESSION_MAX_AGE`, `VJA_PUBLIC_BASE_URL`,
+  `VJA_API_HOST`), all dev-safe defaults.
+
+**Decisions:** **D-059**. INVARIANTS: SPA line (catch-all built) + login line (cookie/redirect built,
+env-gated) rewritten. docs/11 §3.2 parenthetical updated. docs/12 9.5a → ✅.
+
+**Tests:** `tests/unit/test_api_helpers.py` (+8 — cookie flag default/on, max_age default/override, redirect-uri
+prefers base / falls back, parse-args env + flag override) · `tests/integration/test_serving.py` (+3 funcs —
+index/assets/deeplink served; `/api`·`/auth` not masked; no mount without a real build).
+
+**Verified:** full Python gate green — ruff format/check, mypy (110 files), import-linter (1/0), `uv lock --check`,
+**367 pytest** (+12) on SQLite (no schema change → Postgres path unaffected; CI re-runs it). Frontend untouched.
+
+**Next:** **STOP for Hayden to commit + PR** (9.5a). Then **9.5b — containerization** (multi-stage Dockerfile
+building the SPA + serving under FastAPI; one image, `vja-api` + `vja-nightly` entrypoints) — also code-now, no
+GCP needed. 9.5c/d (provision + cutover) wait on the GCP project + the `.com`. See `docs/12` for each block's spec.
+
+**Branch:** `feat/cloud-deploy` (off `main` @ `250aa38`).
+
+---
+
+## 2026-06-29 — Doc close-out: Phase-8 Part B cash-in confirmed run (record correction)
+
+**Not new code — fixing doc drift.** Hayden flagged that the Phase-8 Part B cash-in run *did* execute, yet
+every recent entry's "Next" still listed it as "still-open (orthogonal, no code)." Confirmed against
+`data/vja.db` — the run happened:
+- **pipeline_runs:** #12 (2026-06-25) **2705 new** / 324 closed and #16 (2026-06-26) **2312 new** / 579
+  closed — vs normal nightly deltas of ~11–78 new.
+- **Extraction (Haiku):** 444 (06-25) + 655 (06-26) [+ an earlier 875 on 06-23]; nightly is ~4–24/day.
+- **Matching (Sonnet):** 35 (06-25) + 184 (06-26) [+ 152 on 06-23]; nightly ~1–9/day. 425 matches total.
+- **Digests:** `sent` daily through 2026-06-29 (nightly live via launchd).
+
+The run already left a code fingerprint — **D-056** (digest closure rollup) fixed the ~922-closure wall it
+exposed (pipeline_run #16's 579 closed + the 2-day backlog). What was missing was a close-out; the stale
+"still-open: Part B cash-in" boilerplate got copy-pasted forward through the 9.1→9.4 "Next" sections (which,
+being append-only history, are left as-written — this entry supersedes them).
+
+**Corrected record:** Phase-8 Part B cash-in = **DONE**. Of that orthogonal pair, **only the Phenom fetcher
+remains open.** No INVARIANTS/DECISIONS change (D-056 already captured the only decision the run produced).
+
+**Worth an eye (not action):** `postings.in_scope` = 384 / 11 457; **zero `backfill`-trigger matches** (all
+425 are `nightly`) — both expected (the dashboard floors on `in_scope`; no signup→backfill has run yet).
+
+**Next:** 9.5 — cloud deploy + Postgres cutover + verified email domain + security review (+ the deferred
+flips: `VJA_AUTH_REQUIRED` on, prod OAuth redirect URIs, cookie hardening, SPA deep-link catch-all). Then
+Phenom (the last open Phase-8 item). This doc fix rides on the 9.5 branch.
+
+**9.5 planned (this session) → `docs/12-cloud-deploy-plan.md`** (plan of record; survives chat resets). Four
+sub-blocks: **9.5a app hardening** (cookies/proxy-HTTPS-redirect/SPA-catch-all/bind — code, testable now) ·
+**9.5b containerization** (multi-stage Dockerfile — code) · **9.5c provision** (GCP project + **Neon** PG +
+a `.com` via Cloudflare + Secret Manager) · **9.5d cutover/go-live** (deploy, `alembic upgrade`, suppressed
+baseline run, Resend domain verify, flip auth/cookie guards, `/security-review`). Locked: **Neon not Cloud
+SQL** (URL-swap ethos, ~$0), Cloud Run, buy a `.com`, **fresh DB + baseline run** (no sqlite→PG migration).
+9.5a/b are code-now (no GCP needed); 9.5c/d are ops-later. **Resume by reading docs/12 → next ☐ block.**
+
+**Branch:** `feat/cloud-deploy` (off `main` @ `250aa38`, post-9.4-PR-#44 merge).
+
+---
+
 ## 2026-06-29 — Phase 9 · Block 9.4: multi-user frontend (Rolefeed) (D-058)
 
 **The UI that makes 9.2 auth + 9.3 upload reachable.** Frontend-only — **no backend code touched**; every

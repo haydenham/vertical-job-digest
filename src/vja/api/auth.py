@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 _GOOGLE_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
 _DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me"  # noqa: S105
+_DEFAULT_SESSION_MAX_AGE = 14 * 24 * 3600  # 14 days (Starlette's own default)
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
 
 
 def session_secret() -> str:
@@ -35,9 +40,32 @@ def session_secret() -> str:
     return _DEV_SESSION_SECRET
 
 
+def cookie_https_only() -> bool:
+    """Whether the session cookie is `Secure` (HTTPS-only). Off by default so dev over http://localhost
+    works; set `VJA_COOKIE_SECURE=1` in prod (behind TLS). (9.5a, D-059)"""
+    return _env_truthy("VJA_COOKIE_SECURE")
+
+
+def session_max_age() -> int:
+    """Session-cookie lifetime in seconds (`VJA_SESSION_MAX_AGE`, default 14 days). (9.5a, D-059)"""
+    raw = os.environ.get("VJA_SESSION_MAX_AGE")
+    return int(raw) if raw else _DEFAULT_SESSION_MAX_AGE
+
+
+def oauth_redirect_uri(request: Request) -> str:
+    """The OAuth callback URI Google redirects back to. Prefers the explicit `VJA_PUBLIC_BASE_URL`
+    (the prod public origin) so it is correct behind Cloud Run's TLS terminator — where
+    `request.url_for` would otherwise yield an `http://` URI and trip a `redirect_uri_mismatch`.
+    Falls back to `url_for` for local dev. (9.5a, D-059)"""
+    base = os.environ.get("VJA_PUBLIC_BASE_URL")
+    if base:
+        return f"{base.rstrip('/')}/auth/callback"
+    return str(request.url_for("auth_callback"))
+
+
 def auth_required() -> bool:
     """The enforcement seam (D-055). When true, protected reads 401 without a session."""
-    return os.environ.get("VJA_AUTH_REQUIRED", "").strip().lower() in {"1", "true", "yes"}
+    return _env_truthy("VJA_AUTH_REQUIRED")
 
 
 def build_oauth() -> OAuth | None:

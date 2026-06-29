@@ -101,9 +101,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `/upload`; `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch is
   credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
-  serves the built `frontend/dist` same-origin via StaticFiles (deep-link/hard-refresh of a sub-route needs a
-  9.5 catch-all → `index.html`). The frontend never hardcodes a vertical — `GET /api/verticals` drives the
-  picker. (D-042, D-058)
+  serves the built `frontend/dist` same-origin (a catch-all → `index.html` keeps deep-links/hard-refreshes
+  off a 404; mount gated on a real `index.html`, D-059). The frontend never hardcodes a vertical —
+  `GET /api/verticals` drives the picker. (D-042, D-058, D-059)
 - **Résumé upload is the SPA's only write surface** (`/upload`, soft-gated by login → `/login`; the POST is
   hard-gated by `require_user`). On 202 the UI is optimistic — "matching runs in the background", no status
   polling (honours D-057's no-status-endpoint); guard responses (401/413/422/429/404) surface a typed
@@ -144,7 +144,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   login with no data migration. `profiles.user_email` is retained (match/digest recipient unchanged). (D-055)
 - **Login is Authlib OIDC → a signed-cookie session** (`SessionMiddleware`, secret `VJA_SESSION_SECRET`).
   Login routes are **inert (503) until `GOOGLE_CLIENT_*` are set**; the real Google round-trip is a manual
-  check, the suite mocks the token exchange. Prod redirect URIs + cookie hardening land at deploy (9.5). (D-055)
+  check, the suite mocks the token exchange. Cookie hardening (`Secure` via `VJA_COOKIE_SECURE`, `SameSite=Lax`,
+  `max_age`) + the HTTPS callback URI (`VJA_PUBLIC_BASE_URL`, else proxy-header-aware `url_for`) are **built and
+  env-gated** (D-059); the actual prod flips + redirect-URI registration land at the deploy (9.5c/d). (D-055, D-059)
 - **The read API resolves the profile from the authenticated user** (the docs/11 §2 seam): authed → *that
   user's* profile for the vertical, another user's `profile_id` → 403; unauthenticated → the single-active
   default. **Hard enforcement is gated by `VJA_AUTH_REQUIRED`** (default off) — on ⇒ no session is 401;

@@ -35,7 +35,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
@@ -44,8 +44,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from vja.api.auth import (
     auth_required,
     build_oauth,
+    cookie_https_only,
     get_current_user,
+    oauth_redirect_uri,
     require_user,
+    session_max_age,
     session_secret,
 )
 from vja.db.engine import get_engine
@@ -185,12 +188,35 @@ def _resolve_profile(
     return profiles[0]
 
 
+def _mount_spa(app: FastAPI, dist: Path) -> None:
+    """Serve the built SPA same-origin (D-042): real assets verbatim, plus a trailing catch-all that
+    returns `index.html` for the SPA's client routes so a hard-refresh / deep-link of `/upload` or
+    `/login` doesn't 404 (the 9.5a fix, D-059). Registered last so every `/api/*` and `/auth/*`
+    route wins; unknown API paths explicitly 404 rather than being masked with `index.html`."""
+    assets = dist / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    index = dist / "index.html"
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str) -> FileResponse:
+        if full_path.startswith(("api/", "auth/")):
+            raise HTTPException(404, "not found")
+        candidate = (dist / full_path).resolve()
+        if full_path and candidate.is_file() and dist.resolve() in candidate.parents:
+            return FileResponse(candidate)  # a real static file (favicon, etc.)
+        return FileResponse(index)  # an SPA client route
+
+
 def _get_engine(request: Request) -> Engine:
     return cast("Engine", request.app.state.engine)
 
 
 def _cors_origins() -> list[str]:
-    """Allowed CORS origins: `VJA_CORS_ORIGINS` (comma-separated) or the Vite dev defaults."""
+    """Allowed CORS origins: `VJA_CORS_ORIGINS` (comma-separated) or the Vite dev defaults. Prod is
+    same-origin (the SPA is served by FastAPI), so CORS is unused there; an off-origin frontend must
+    set explicit origins — `*` is disallowed with `allow_credentials=True`, which we rely on."""
     raw = os.environ.get("VJA_CORS_ORIGINS")
     if raw:
         return [o.strip() for o in raw.split(",") if o.strip()]
@@ -205,7 +231,15 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.state.oauth = build_oauth()
 
     # Signed-cookie session carrying `user_id` (D-055). Added before CORS so it wraps every request.
-    app.add_middleware(SessionMiddleware, secret_key=session_secret())
+    # Cookie hardening is env-gated (9.5a, D-059): `Secure` in prod (VJA_COOKIE_SECURE),
+    # `SameSite=Lax` always (Strict breaks Google's OAuth redirect), max_age from the env knob.
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret(),
+        https_only=cookie_https_only(),
+        same_site="lax",
+        max_age=session_max_age(),
+    )
     # Dev serves the SPA from a separate Vite origin → CORS; prod is same-origin (mount below).
     app.add_middleware(
         CORSMiddleware,
@@ -225,7 +259,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         oauth = request.app.state.oauth
         if oauth is None:
             raise HTTPException(503, "OAuth not configured (set GOOGLE_CLIENT_ID/SECRET)")
-        redirect_uri = request.url_for("auth_callback")
+        redirect_uri = oauth_redirect_uri(request)
         resp = await oauth.google.authorize_redirect(request, redirect_uri)
         return cast("RedirectResponse", resp)
 
@@ -343,28 +377,52 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             profile_id=profile_id, vertical=vertical, resume_version=profile.resume_version
         )
 
-    # Serve the built SPA same-origin in prod, if it exists. Mounted last so `/api/*` wins;
-    # `html=True` makes it serve `index.html` for the SPA's client routes. (D-042)
-    if _FRONTEND_DIST.is_dir():
-        app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="spa")
+    # Serve the built SPA same-origin in prod, if a real build exists (D-042/D-059). Gated on
+    # index.html (not just the dir) so a stale/empty `dist/` doesn't mount a broken catch-all.
+    # Registered last so `/api/*` and `/auth/*` win; the catch-all keeps deep-links off a 404.
+    if (_FRONTEND_DIST / "index.html").is_file():
+        _mount_spa(app, _FRONTEND_DIST)
 
     return app
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse `vja-api` args. Host/port default from env so the container honours Cloud Run's
+    injected `$PORT` and binds `0.0.0.0` (via `VJA_API_HOST`), while local dev stays 127.0.0.1:8000.
+    Explicit flags still override. (9.5a, D-059)"""
+    parser = argparse.ArgumentParser(
+        prog="vja-api", description="Serve the read-only dashboard API."
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("VJA_API_HOST", "127.0.0.1"),
+        help="bind host (default: $VJA_API_HOST or 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", "8000")),
+        help="bind port (default: $PORT or 8000)",
+    )
+    return parser.parse_args(argv)
 
 
 def api_main(argv: list[str] | None = None) -> int:
     """CLI: `vja-api [--host H] [--port P]` — serve the read-only dashboard API via uvicorn."""
     import uvicorn
 
-    parser = argparse.ArgumentParser(
-        prog="vja-api", description="Serve the read-only dashboard API."
-    )
-    parser.add_argument("--host", default="127.0.0.1", help="bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000, help="bind port (default: 8000)")
-    args = parser.parse_args(argv)
-
+    load_dotenv()  # before _parse_args so .env-provided VJA_API_HOST/PORT feed the defaults
+    args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    load_dotenv()
-    uvicorn.run(create_app(), host=args.host, port=args.port)
+    # proxy_headers/forwarded_allow_ips: honour `X-Forwarded-Proto: https` behind Cloud Run's TLS
+    # terminator so url_for() yields https (a backstop to VJA_PUBLIC_BASE_URL). 9.5a, D-059.
+    uvicorn.run(
+        create_app(),
+        host=args.host,
+        port=args.port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
     return 0
 
 

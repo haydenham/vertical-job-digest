@@ -930,3 +930,31 @@ the next product views without a rewrite; deferring the auth gate keeps local de
 review small. **Out of scope (later, 9.5):** flipping `VJA_AUTH_REQUIRED` on; prod OAuth redirect URIs +
 cookie hardening; deploy; and a deep-link/hard-refresh fallback (prod `StaticFiles(html=True)` 404s a hard
 reload of `/upload`|`/login` — client-side nav is fine; needs a catch-all → `index.html` at the deploy).
+
+### D-059 · Phase 9 · 9.5a: deploy-readiness app hardening · accepted · 2026-06-29
+First block of the Phase-9.5 cutover (plan of record: `docs/12-cloud-deploy-plan.md`). **Code-only, no
+infra** — closes the app-level seams that a TLS-terminating proxy (Cloud Run) + an enforced auth gate
+expose, so 9.5b–d are pure packaging + ops. Every prod behavior is **env-gated**; local dev defaults are
+unchanged. The seams (all in `src/vja/api/`, surfaced by this session's loose-ends audit):
+- **Session cookie hardening** (`auth.cookie_https_only`/`session_max_age` → `SessionMiddleware`): `Secure`
+  in prod via `VJA_COOKIE_SECURE` (off by default so dev over http://localhost works), `SameSite=Lax`
+  **always** (Strict breaks Google's top-level OAuth redirect), `max_age` from `VJA_SESSION_MAX_AGE`
+  (default 14 days).
+- **HTTPS OAuth redirect_uri** (`auth.oauth_redirect_uri`): prefers an explicit `VJA_PUBLIC_BASE_URL` so the
+  callback is `https://…` behind the proxy — `request.url_for` would yield `http://` and trip Google's
+  `redirect_uri_mismatch`. Belt-and-suspenders: `uvicorn.run(..., proxy_headers=True,
+  forwarded_allow_ips="*")` honours `X-Forwarded-Proto` for the fallback path.
+- **SPA deep-link catch-all** (`_mount_spa`): replaces `StaticFiles(html=True)` with explicit `/assets` +
+  a trailing `/{full_path:path}` route returning `index.html` for client routes (so a hard-refresh of
+  `/upload`|`/login` doesn't 404), serving real files verbatim and **404ing unknown `/api`·`/auth`** rather
+  than masking them. Gated on a real `index.html` (a stale/empty `dist/` is skipped — found one locally).
+- **Container bind** (`_parse_args`): `--host`/`--port` default from `VJA_API_HOST`/`PORT` so the image
+  honours Cloud Run's injected `$PORT` and binds `0.0.0.0`; local stays 127.0.0.1:8000; flags still override.
+- **CORS**: already env-driven (`VJA_CORS_ORIGINS`); prod is same-origin so it's unused — documented only.
+**Why:** discover these now as testable code (the audit's point) rather than at deploy as a debugging
+session; keep dev frictionless by env-gating every prod change. **Tests:** `tests/unit/test_api_helpers.py`
+(+8: cookie flag default/on, max_age default/override, redirect-uri prefers base / falls back to url_for,
+parse-args env + flag-override) and `tests/integration/test_serving.py` (+4 → really 3 funcs: index/assets/
+deeplink served, /api·/auth not masked, no mount without a real build). Full gate green, 367 pytest (+12).
+**Out of scope (later 9.5 blocks):** the Dockerfile (9.5b); provisioning + the actual flips of
+`VJA_AUTH_REQUIRED`/`VJA_COOKIE_SECURE`/`VJA_PUBLIC_BASE_URL` + prod OAuth URIs (9.5c/d).
