@@ -59,9 +59,15 @@ from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfil
 from vja.resume import ResumeError, extract_resume_text
 from vja.verticals import ConfigError, load_vertical_config
 
-# The built React SPA (B2). Mounted at `/` only when present, so dev (Vite server + CORS) and
-# tests/CI (no build) are unaffected; prod serves the SPA same-origin from this dir. (D-042)
-_FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
+def frontend_dist_dir() -> Path:
+    """The built React SPA dir (B2), mounted at `/` only when present so dev (Vite + CORS) and
+    tests/CI (no build) are unaffected; prod serves it same-origin (D-042). `VJA_FRONTEND_DIST`
+    (set in the container, where the non-editable install moves the package out of the repo
+    layout) wins; else the repo-layout default. (9.5b)"""
+    override = os.environ.get("VJA_FRONTEND_DIST")
+    return Path(override) if override else Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
 
 # Dev-server origins allowed by CORS. Prod is same-origin (static mount), so this is the Vite
 # dev server by default; override with `VJA_CORS_ORIGINS` (comma-separated). (D-042)
@@ -380,8 +386,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     # Serve the built SPA same-origin in prod, if a real build exists (D-042/D-059). Gated on
     # index.html (not just the dir) so a stale/empty `dist/` doesn't mount a broken catch-all.
     # Registered last so `/api/*` and `/auth/*` win; the catch-all keeps deep-links off a 404.
-    if (_FRONTEND_DIST / "index.html").is_file():
-        _mount_spa(app, _FRONTEND_DIST)
+    dist = frontend_dist_dir()
+    if (dist / "index.html").is_file():
+        _mount_spa(app, dist)
 
     return app
 

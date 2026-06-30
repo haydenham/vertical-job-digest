@@ -101,9 +101,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `/upload`; `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch is
   credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
-  serves the built `frontend/dist` same-origin (a catch-all → `index.html` keeps deep-links/hard-refreshes
-  off a 404; mount gated on a real `index.html`, D-059). The frontend never hardcodes a vertical —
-  `GET /api/verticals` drives the picker. (D-042, D-058, D-059)
+  serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
+  `/app/frontend/dist` in the container, where the non-editable install moves the package off the repo
+  layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
+  mount gated on a real `index.html`, D-059/D-060). The frontend never hardcodes a vertical —
+  `GET /api/verticals` drives the picker. **Prod ships as one multi-stage image** (`Dockerfile`; SPA built in
+  a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**: `vja-api`
+  (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042, D-058,
+  D-059, D-060)
 - **Résumé upload is the SPA's only write surface** (`/upload`, soft-gated by login → `/login`; the POST is
   hard-gated by `require_user`). On 202 the UI is optimistic — "matching runs in the background", no status
   polling (honours D-057's no-status-endpoint); guard responses (401/413/422/429/404) surface a typed

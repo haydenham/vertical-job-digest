@@ -98,6 +98,11 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       recipients need a **verified sending domain** (SPF/DKIM). A digest in spam is no product.
 
 ### 3.5 Live migrations & operations
+- [x] **Containerized as one multi-stage image** (D-060, Phase 9.5b): `Dockerfile` builds the SPA (node stage)
+      + installs the package non-editable (`uv` runtime), serving the SPA same-origin via `VJA_FRONTEND_DIST`.
+      Two run targets from the one image — `vja-api` (service) + `vja-nightly` (job, entrypoint override). No
+      secrets baked in (runtime env). Local prod-parity smoke passes; push/deploy to Artifact Registry + Cloud
+      Run is 9.5c/d.
 - [x] **Migrations validated on Postgres** — the full migration chain (`alembic upgrade head`) and the suite
       run on `postgres:16` in CI (D-054, Phase 9.1). *(The backward-compat discipline below is still pending —
       this only proves the schema builds + round-trips on PG, not that future migrations are non-destructive.)*

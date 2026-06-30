@@ -7,8 +7,9 @@ its decisions go to `DECISIONS.md`, the live rules to `docs/INVARIANTS.md`, and 
 `docs/11` get ticked. Authority order unchanged (build specs > CLAUDE.md > memos); this doc is a memo-tier
 working plan.*
 
-**Status:** **9.5a ✅** (D-059, code-complete, full gate green, awaiting commit+PR); 9.5b next. Branch:
-`feat/cloud-deploy` (off `main` @ `250aa38`).
+**Status:** **9.5a ✅** (D-059, merged to `main` via PR #45 @ `fd347cd`). **9.5b ✅** (D-060, code-complete,
+full gate green + local smoke passing, awaiting commit+PR on branch `feat/containerization`). 9.5c next
+(needs the GCP project + `.com`).
 
 ---
 
@@ -34,7 +35,7 @@ working plan.*
 | Block | Theme | Code? | Gate | Status |
 |---|---|---|---|---|
 | **9.5a** | App hardening (cookies, proxy/HTTPS redirect, SPA catch-all, bind, CORS) | yes (Python) | pytest + full gate | ✅ D-059 |
-| **9.5b** | Containerization (multi-stage Dockerfile, `.dockerignore`, local prod-parity smoke) | yes (infra) | `docker build` + run | ☐ |
+| **9.5b** | Containerization (multi-stage Dockerfile, `.dockerignore`, local prod-parity smoke) | yes (infra) | `docker build` + run | ✅ D-060 |
 | **9.5c** | Provision (GCP project, Neon, domain→Cloudflare DNS, Secret Manager, Artifact Registry) | no (docs + manual) | docs in `deploy/gcp/` | ☐ |
 | **9.5d** | Cutover & go-live (deploy, `alembic upgrade`, baseline run, email verify, flips, security review) | no app code | `/security-review` + smoke | ☐ |
 
@@ -102,18 +103,31 @@ auth/dashboard lines noting cookie-hardening/redirect/catch-all are live; tick d
 
 ---
 
-## 9.5b — Containerization (sketch — refine when reached)
+## 9.5b — Containerization ✅ (D-060, as built)
 
-- **Multi-stage Dockerfile** at repo root: stage 1 (node) `cd frontend && npm ci && npm run build` →
-  `frontend/dist`; stage 2 (python, `uv`) install the package, copy `dist` in, `CMD vja-api --host 0.0.0.0`.
-  The SPA is served same-origin by FastAPI (the 9.5a catch-all). Honors `$PORT`.
-- **`.dockerignore`** (exclude `.venv`, `node_modules`, `data/*.db`, `.git`, caches, `frontend/dist`
-  rebuilt in-image).
-- **The nightly** ships in the *same image* (it has `vja-nightly`); the Cloud Run **Job** just overrides the
-  entrypoint to `vja-nightly`. One image, two run targets — no second build.
-- **Local prod-parity smoke:** `docker build` then run with a SQLite volume + a built SPA, hit `/api/health`,
-  `/`, `/upload` (catch-all), confirm the SPA loads. Document the command.
-- **Gate:** image builds; local smoke passes. DoD + STOP to commit + PR.
+- **Multi-stage `Dockerfile`** at repo root: stage `web` (`node:24-bookworm-slim` — **Debian/glibc, not
+  alpine**, to avoid the musl Rollup optional-binary break) `npm ci && npm run build` → `frontend/dist`;
+  runtime stage (`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`) does a **non-editable** `uv sync` (deps
+  layer then project layer), copies the built `dist` in, `CMD vja-api --host 0.0.0.0`. SPA served same-origin
+  via the 9.5a catch-all; honors `$PORT`.
+- **`VJA_FRONTEND_DIST`** (new `app.frontend_dist_dir()` helper) makes the dist dir explicit config — the
+  non-editable install moves the package off the repo layout the old `parents[3]/frontend/dist` assumed; set
+  to `/app/frontend/dist` in the image, defaults to repo layout for dev/CI.
+- **`.dockerignore`** excludes `.venv`, `node_modules`, the host `frontend/dist` (rebuilt in-image),
+  `data/*.db`, `.git`, caches, `tests`/`docs`/`deploy`, local `.env`.
+- **Runtime data baked in:** `config/`, `migrations/` + `alembic.ini`, `data/seed/` (alembic upgrade at 9.5d;
+  nightly/import). **No secrets / `VJA_DATABASE_URL` in the image** — all runtime env.
+- **One image, two run targets** (D-031): default `vja-api` (Cloud Run service); the Cloud Run **Job**
+  overrides the entrypoint to `vja-nightly` — no second build.
+- **Local prod-parity smoke** (run from repo root):
+  ```sh
+  docker build -t rolefeed:smoke .
+  docker run --rm -p 8000:8000 rolefeed:smoke
+  curl -s localhost:8000/api/health            # {"status":"ok"}
+  curl -s localhost:8000/ ; curl -s localhost:8000/upload   # the Rolefeed SPA (catch-all)
+  ```
+  Verified: health ok, `/` + `/upload` return the SPA, `/assets/*` 200, unknown `/api` 404, binds
+  `0.0.0.0:8000`, both entrypoints present (601 MB image).
 
 ## 9.5c — Provision (sketch — Hayden-led, documented in `deploy/gcp/`)
 

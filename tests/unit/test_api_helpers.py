@@ -2,14 +2,25 @@
 redirect-URI resolution (the Cloud-Run-behind-TLS fix), and the env-driven `vja-api` host/port
 defaults. Pure functions — no DB, no network."""
 
+from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import Request
 
-from vja.api.app import _parse_args
+from vja.api.app import _parse_args, frontend_dist_dir
 from vja.api.auth import cookie_https_only, oauth_redirect_uri, session_max_age
+
+
+def test_frontend_dist_dir_prefers_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VJA_FRONTEND_DIST", "/app/frontend/dist")
+    assert frontend_dist_dir() == Path("/app/frontend/dist")
+
+
+def test_frontend_dist_dir_defaults_to_repo_layout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("VJA_FRONTEND_DIST", raising=False)
+    assert frontend_dist_dir() == Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 def test_cookie_https_only_defaults_off(monkeypatch: pytest.MonkeyPatch) -> None:
