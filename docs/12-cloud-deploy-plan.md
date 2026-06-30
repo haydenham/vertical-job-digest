@@ -7,9 +7,11 @@ its decisions go to `DECISIONS.md`, the live rules to `docs/INVARIANTS.md`, and 
 `docs/11` get ticked. Authority order unchanged (build specs > CLAUDE.md > memos); this doc is a memo-tier
 working plan.*
 
-**Status:** **9.5a ✅** (D-059, merged to `main` via PR #45 @ `fd347cd`). **9.5b ✅** (D-060, code-complete,
-full gate green + local smoke passing, awaiting commit+PR on branch `feat/containerization`). 9.5c next
-(needs the GCP project + `.com`).
+**Status:** **9.5a ✅** (D-059, merged to `main` via PR #45 @ `fd347cd`). **9.5b ✅** (D-060, merged to
+`main` via PR #46 @ `0abbb5b`). **9.5c ✅** (D-061 — GCP project `role-feed-prod`, Neon, Secret Manager,
+Artifact Registry, OAuth, Resend all provisioned; runbook in `deploy/gcp/`; awaiting commit+PR on branch
+`feat/cloud-deploy-9.5c`). **9.5d next** (cutover/go-live — deploy + `alembic upgrade` + baseline run +
+flips + security review).
 
 ---
 
@@ -36,7 +38,7 @@ full gate green + local smoke passing, awaiting commit+PR on branch `feat/contai
 |---|---|---|---|---|
 | **9.5a** | App hardening (cookies, proxy/HTTPS redirect, SPA catch-all, bind, CORS) | yes (Python) | pytest + full gate | ✅ D-059 |
 | **9.5b** | Containerization (multi-stage Dockerfile, `.dockerignore`, local prod-parity smoke) | yes (infra) | `docker build` + run | ✅ D-060 |
-| **9.5c** | Provision (GCP project, Neon, domain→Cloudflare DNS, Secret Manager, Artifact Registry) | no (docs + manual) | docs in `deploy/gcp/` | ☐ |
+| **9.5c** | Provision (GCP project, Neon, domain→Cloudflare DNS, Secret Manager, Artifact Registry) | no (docs + manual) | docs in `deploy/gcp/` | ✅ D-061 |
 | **9.5d** | Cutover & go-live (deploy, `alembic upgrade`, baseline run, email verify, flips, security review) | no app code | `/security-review` + smoke | ☐ |
 
 9.5a and 9.5b can be built and merged **before any GCP/Neon/domain exists**.
@@ -129,21 +131,23 @@ auth/dashboard lines noting cookie-hardening/redirect/catch-all are live; tick d
   Verified: health ok, `/` + `/upload` return the SPA, `/assets/*` 200, unknown `/api` 404, binds
   `0.0.0.0:8000`, both entrypoints present (601 MB image).
 
-## 9.5c — Provision (sketch — Hayden-led, documented in `deploy/gcp/`)
+## 9.5c — Provision ✅ (D-061, as built — runbook: `deploy/gcp/README.md`)
 
-Manual + a written runbook (`deploy/gcp/README.md`), no app code. Order:
-1. **Domain:** buy `<rolefeed>.com` (Cloudflare Registrar). DNS stays on Cloudflare.
-2. **Neon:** create project/DB; grab the `postgresql+psycopg://…` URL (note: SQLAlchemy needs the
-   `+psycopg` driver prefix, already a dep from 9.1).
-3. **GCP project** (`rolefeed-prod`) + billing. Enable: Cloud Run, Artifact Registry, Cloud Scheduler,
-   Secret Manager. (No Cloud SQL — Neon.)
-4. **OAuth:** consent screen External / **Testing** mode (add Hayden + demo users as test users → skips
-   Google verification). Create Web credentials; redirect URI = `https://<domain>/auth/callback` (and the
-   `*.run.app` URL as a fallback). Defer until the public URL/domain is known.
-5. **Secret Manager:** load every secret from the table above.
-6. **Artifact Registry:** a Docker repo for the image.
-7. **Resend:** add `<domain>` as a sending domain; paste SPF/DKIM into Cloudflare DNS; set
-   `VJA_DIGEST_FROM=digest@<domain>` (or similar). (Verification is async — start early.)
+Manual + the written runbook (`deploy/gcp/README.md`), no app code. As executed (2026-06-30):
+1. **Domain:** `role-feed.com` (Cloudflare Registrar — **hyphenated**, vs the `<rolefeed>.com` this sketch
+   assumed). DNS stays on Cloudflare.
+2. **Neon:** project/DB in **AWS us-east-2 (Ohio)**; `VJA_DATABASE_URL` stored as the **pooled** endpoint
+   with the `postgresql+psycopg://` scheme (the dashboard hands out bare `postgresql://` — the `+psycopg`
+   rewrite is mandatory). Local connect blocked by laptop-network port-5432 filtering → authoritative
+   connect/migration deferred to 9.5d via Cloud Run Job exec.
+3. **GCP project** `role-feed-prod` (#850723734041) + billing. APIs enabled: Cloud Run, Artifact Registry,
+   Cloud Scheduler, Secret Manager. (No Cloud SQL — Neon.)
+4. **OAuth:** web client **in `role-feed-prod`** (consent screen External/Testing + test users); redirect
+   `https://role-feed.com/auth/callback`. The `*.run.app` fallback URI is added at 9.5d once the service URL
+   exists.
+5. **Secret Manager:** all 8 secrets loaded (the table above).
+6. **Artifact Registry:** Docker repo `rolefeed` in `us-central1`.
+7. **Resend:** `role-feed.com` verified (SPF/DKIM in Cloudflare); `VJA_DIGEST_FROM=digest@role-feed.com`.
 
 ## 9.5d — Cutover & go-live (sketch)
 

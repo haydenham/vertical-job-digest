@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-30 — Phase 9 · Block 9.5c: cloud provisioning standup (D-061)
+
+**Third 9.5 block — ops standup, no app code.** Stood up the cloud resources the 9.5d cutover deploys
+*into*, live with Hayden in his consoles + a written runbook. Plan of record: `docs/12`.
+
+**Did:**
+- **`deploy/gcp/README.md`** (new) — the provisioning runbook (the cloud analogue of `deploy/launchd/`):
+  variables block + locked-values table, `gcloud`-driven where reproducible, console steps marked
+  (Neon/OAuth/Resend/Cloudflare), **no secret values in the repo** (→ Secret Manager), a "hand-off to 9.5d"
+  green-checklist.
+- **Provisioned (verified via `gcloud` reads):** GCP project **`role-feed-prod`** (#850723734041) + billing;
+  4 APIs (run/artifactregistry/cloudscheduler/secretmanager, no Cloud SQL); Artifact Registry Docker repo
+  **`rolefeed`** (`us-central1`); **8 secrets** loaded w/ enabled versions; **OAuth** web client in
+  `role-feed-prod` (consent External/Testing, redirect `https://role-feed.com/auth/callback`); **Resend**
+  domain `role-feed.com` verified + `digest@role-feed.com`; **Neon** DB (AWS us-east-2), `VJA_DATABASE_URL`
+  stored **pooled + `postgresql+psycopg://`**.
+- **`.env.example`** — corrected the one wrong literal (`rolefeed.com` → `https://role-feed.com` in the
+  `VJA_PUBLIC_BASE_URL` example).
+
+**Gotchas (captured in D-061 + runbook):** domain is **`role-feed.com` (hyphenated)**, not the `<rolefeed>.com`
+the docs/12 table had assumed — literal differs everywhere. Neon hands out bare `postgresql://`; the
+**`+psycopg` rewrite is mandatory** (re-lost it once when swapping to the pooled host — fixed, now v4). OAuth
+client was first made under the wrong project, **re-created in `role-feed-prod`** (secrets @ v2). **Laptop
+can't connect to Neon (local network blocks port 5432)** — irrelevant to prod (Cloud Run reaches Neon over
+the cloud backbone); authoritative connect + `alembic upgrade head` runs at 9.5d via a Cloud Run Job exec.
+
+**Decisions:** **D-061** (provisioning values locked). INVARIANTS: no change (no live cross-cutting rule
+moved — the auth-required/cookie/redirect flips are still 9.5d). docs/11 §3.4 (verified sending domain) +
+§3.5 (secrets store) ticked. docs/12: status line **fixed** (9.5b was stale — merged via PR #46 @ `0abbb5b`,
+not "awaiting commit+PR"), 9.5c row → ✅, §9.5c rewritten as-built with the real literals.
+
+**Tests:** none — docs/ops only, no code touched (Python/frontend gates unaffected).
+
+**Next:** **STOP for Hayden to commit + PR** (9.5c, branch `feat/cloud-deploy-9.5c`). Then **9.5d — cutover/
+go-live:** build+push image → Cloud Run service (API+SPA) + Cloud Run Job (`vja-nightly`) + Cloud Scheduler;
+map custom domain; `alembic upgrade head` on Neon; suppressed baseline run; load Hayden's profile; flip
+`VJA_AUTH_REQUIRED=1` + `VJA_COOKIE_SECURE=1` + `VJA_PUBLIC_BASE_URL`; add the `*.run.app` OAuth fallback URI;
+real test send; `/security-review`. Full sketch in `docs/12` §9.5d.
+
+**Branch:** `feat/cloud-deploy-9.5c` (off `main` @ `0abbb5b`).
+
+---
+
 ## 2026-06-29 — Phase 9 · Block 9.5b: containerization (D-060)
 
 **Second 9.5 block — packages the app as one image so 9.5c/d are pure ops.** Code+infra, no GCP needed.
