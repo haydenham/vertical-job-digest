@@ -27,7 +27,7 @@ def test_spa_serves_index_assets_and_deeplinks(
     tmp_path: Path, migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dist = _build_dist(tmp_path)
-    monkeypatch.setattr("vja.api.app._FRONTEND_DIST", dist)
+    monkeypatch.setenv("VJA_FRONTEND_DIST", str(dist))
     client = TestClient(create_app(migrated_engine))
 
     root = client.get("/")
@@ -47,7 +47,7 @@ def test_spa_serves_index_assets_and_deeplinks(
 def test_spa_does_not_mask_api_or_auth(
     tmp_path: Path, migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("vja.api.app._FRONTEND_DIST", _build_dist(tmp_path))
+    monkeypatch.setenv("VJA_FRONTEND_DIST", str(_build_dist(tmp_path)))
     client = TestClient(create_app(migrated_engine))
 
     assert client.get("/api/health").json() == {"status": "ok"}
@@ -60,7 +60,7 @@ def test_no_spa_mount_without_a_real_build(
 ) -> None:
     empty = tmp_path / "dist"  # exists but has no index.html (stale build)
     empty.mkdir()
-    monkeypatch.setattr("vja.api.app._FRONTEND_DIST", empty)
+    monkeypatch.setenv("VJA_FRONTEND_DIST", str(empty))
     client = TestClient(create_app(migrated_engine))
 
     assert client.get("/api/health").status_code == 200  # API still up

@@ -5,6 +5,48 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-29 — Phase 9 · Block 9.5b: containerization (D-060)
+
+**Second 9.5 block — packages the app as one image so 9.5c/d are pure ops.** Code+infra, no GCP needed.
+One multi-stage image, **two run targets** (D-031): `vja-api` (Cloud Run service, default CMD) + `vja-nightly`
+(Cloud Run Job, entrypoint override) — no second build. Plan of record: `docs/12`.
+
+**Did:**
+- **`Dockerfile`** (repo root): stage `web` = `node:24-bookworm-slim` (**Debian/glibc, not alpine** — dodges
+  the musl `@rollup/rollup-linux-x64-musl` build break; matches local node v24.7) `npm ci && npm run build`;
+  runtime = `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, **non-editable** `uv sync` in two cache layers
+  (deps → project), copies `frontend/dist` in, `CMD vja-api --host 0.0.0.0` (honors `$PORT`). Bakes runtime
+  data the wheel doesn't carry: `config/`, `migrations/`+`alembic.ini`, `data/seed/`. **No secrets/DB URL in
+  the image** — all runtime env.
+- **`VJA_FRONTEND_DIST`** (`app.frontend_dist_dir()` helper, replaces the `_FRONTEND_DIST` module const): the
+  non-editable install moves the package off the repo layout `parents[3]/frontend/dist` assumed, so the dist
+  dir is now explicit config (image sets `/app/frontend/dist`; dev/CI default to repo layout). This is what
+  *unlocks* the clean (non-editable, immutable-artifact) install — editable-in-prod is the anti-pattern it
+  avoids. The 9.5a serving tests now drive via the env, not the removed const.
+- **`.dockerignore`**: `.venv`, `node_modules`, host `frontend/dist` (rebuilt in-image), `data/*.db`, `.git`,
+  caches, `tests`/`docs`/`deploy`, local `.env`.
+
+**Decisions:** **D-060**. INVARIANTS: SPA-serving line rewritten (`frontend_dist_dir`/`VJA_FRONTEND_DIST` +
+one-image/two-entrypoints). docs/12: 9.5b → ✅ + smoke command + **fixed the stale 9.5a "awaiting commit+PR
+on `feat/cloud-deploy`" header** (9.5a is merged to `main` via PR #45 @ `fd347cd`). docs/11 §3.5 gains the
+containerization checkbox.
+
+**Tests:** `tests/unit/test_api_helpers.py` (+2: `frontend_dist_dir` env-override / repo-layout default);
+`tests/integration/test_serving.py` (3 funcs repointed from the removed const to `VJA_FRONTEND_DIST`).
+
+**Verified:** full Python gate green — ruff format/check, mypy (110 files), import-linter (1/0), `uv lock
+--check`, **369 pytest** (+2) on SQLite (no schema change). `docker build` clean; **local prod-parity smoke**:
+`/api/health`→ok, `/` + `/upload` (catch-all) → Rolefeed SPA, `/assets/*`→200, unknown `/api`→404, binds
+`0.0.0.0:8000`, both entrypoints present (601 MB image).
+
+**Next:** **STOP for Hayden to commit + PR** (9.5b, branch `feat/containerization`). Then **9.5c — provision**
+(GCP project + **Neon** PG + a `.com` via Cloudflare + Secret Manager + Artifact Registry + OAuth creds) —
+ops/docs, needs the GCP project + domain. Then 9.5d cutover/go-live. See `docs/12`.
+
+**Branch:** `feat/containerization` (off `main` @ `1775f87`, post-9.5a-PR-#45 merge).
+
+---
+
 ## 2026-06-29 — Phase 9 · Block 9.5a: deploy-readiness app hardening (D-059)
 
 **First 9.5 block — code-only, no infra.** Closes the app-level seams a TLS-terminating proxy (Cloud Run) +

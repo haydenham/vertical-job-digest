@@ -958,3 +958,31 @@ parse-args env + flag-override) and `tests/integration/test_serving.py` (+4 → 
 deeplink served, /api·/auth not masked, no mount without a real build). Full gate green, 367 pytest (+12).
 **Out of scope (later 9.5 blocks):** the Dockerfile (9.5b); provisioning + the actual flips of
 `VJA_AUTH_REQUIRED`/`VJA_COOKIE_SECURE`/`VJA_PUBLIC_BASE_URL` + prod OAuth URIs (9.5c/d).
+
+### D-060 · Phase 9 · 9.5b: containerization (one image, two run targets) · accepted · 2026-06-29
+Second 9.5 block (plan: `docs/12`). Packages the app as a single multi-stage image so 9.5c/d are pure ops.
+- **Multi-stage `Dockerfile`** (repo root): stage `web` (`node:24-bookworm-slim` — **Debian/glibc, not
+  alpine**, to dodge the musl `@rollup/rollup-linux-x64-musl` optional-binary build break; matches local
+  node v24.7) builds the SPA; runtime stage (`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`) installs the
+  package and copies `frontend/dist` in.
+- **Non-editable install** (`uv sync --frozen --no-dev --no-editable`, two layers — deps then project — for
+  cache efficiency): the running code is an immutable installed wheel, not a `/app/src` `.pth` link
+  (editable-in-prod is an anti-pattern).
+- **`VJA_FRONTEND_DIST` env** (new helper `app.frontend_dist_dir()`): the non-editable install moves the
+  package out of the repo layout that `Path(__file__).parents[3]/frontend/dist` assumed, so the dist dir
+  becomes explicit config (set to `/app/frontend/dist` in the image), defaulting to the repo layout for
+  dev/CI. This — not editable-install — is what *unlocks* the clean install; without it the path silently
+  breaks. (~5 lines + 1 unit test; the 9.5a serving tests now drive via the env, not a removed module const.)
+- **One image, two run targets** (D-031): default `CMD` is `vja-api --host 0.0.0.0` (Cloud Run service,
+  API + SPA same-origin); the Cloud Run **Job** overrides the entrypoint to `vja-nightly` — no second build.
+- **Runtime data baked in** (`config/`, `migrations/` + `alembic.ini`, `data/seed/`): alembic needs them
+  adjacent for 9.5d's `alembic upgrade`; nightly/import needs config + employer seed. **No secrets / no
+  `VJA_DATABASE_URL`** in the image — all runtime env (→ Secret Manager at 9.5c).
+- **`.dockerignore`** keeps the local SQLite (`data/*.db`), `node_modules`, the host `frontend/dist`
+  (rebuilt in-image), `.git`, caches, `tests`/`docs` out of the context.
+**Why:** a reproducible, immutable artifact buildable/mergeable before any GCP/Neon/domain exists; the
+explicit dist path removes the layout-coupling footgun a proper prod install would otherwise expose.
+**Verified:** full Python gate green, **369 pytest** (+2); `docker build` clean; local prod-parity smoke —
+`/api/health` ok, `/` + `/upload` (catch-all) return the Rolefeed SPA, `/assets/*` 200, unknown `/api` 404,
+binds `0.0.0.0:8000`; both `vja-api` + `vja-nightly` entrypoints present (601 MB image). **Out of scope:**
+provisioning (9.5c) + deploy/cutover/flips (9.5d).

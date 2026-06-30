@@ -17,7 +17,7 @@ Read before doing anything (read them yourself, don't ask me to summarize):
 3. DECISIONS.md         — only the ADRs the task touches
 (CLAUDE.md auto-loads. Don't re-read whole files you won't change.)
 
-Task this session: <one-line goal>
+Task this session: 9.5b containerization
 
 Process: plan mode first, run every decision through me, branch-only (I commit/PR),
 DoD = green gates + updated docs.
