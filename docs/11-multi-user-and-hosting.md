@@ -94,8 +94,10 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       since OAuth already bounds signup to real Google accounts. D-057.)*
 
 ### 3.4 Email deliverability
-- [ ] D-029's sandbox sender (`onboarding@resend.dev`) only delivers to the Resend account owner. Real
-      recipients need a **verified sending domain** (SPF/DKIM). A digest in spam is no product.
+- [x] **Verified sending domain provisioned** (D-061, Phase 9.5c): `role-feed.com` verified in Resend
+      (SPF/DKIM in Cloudflare DNS), sender `digest@role-feed.com` → `VJA_DIGEST_FROM` in Secret Manager,
+      replacing D-029's sandbox `onboarding@resend.dev` (which only delivers to the account owner). The live
+      `VJA_DIGEST_FROM` flip + a real test send to an external address is the 9.5d cutover step.
 
 ### 3.5 Live migrations & operations
 - [x] **Containerized as one multi-stage image** (D-060, Phase 9.5b): `Dockerfile` builds the SPA (node stage)
@@ -110,7 +112,10 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       data path) — different discipline than the current disposable-DB era.
 - [ ] **Observability beyond the failure email:** `pipeline_runs` is a solid audit start (D-031); cloud wants
       monitoring/alerting on run health, send failures, and LLM spend trend.
-- [ ] **Secrets store** on the host platform (env vars / vault) replacing the local `.env`.
+- [x] **Secrets store provisioned** (D-061, Phase 9.5c): GCP **Secret Manager** holds all 8 prod secrets
+      (`ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `VJA_DATABASE_URL`, `VJA_SESSION_SECRET`, `GOOGLE_CLIENT_ID/
+      SECRET`, `VJA_DIGEST_FROM`, `VJA_DIGEST_RECIPIENT`), replacing the local `.env`. The Cloud Run runtime
+      SA's `secretAccessor` grant + mounting them into the service/job is the 9.5d deploy step.
 
 ## 4. The trigger
 

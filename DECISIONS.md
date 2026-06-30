@@ -986,3 +986,35 @@ explicit dist path removes the layout-coupling footgun a proper prod install wou
 `/api/health` ok, `/` + `/upload` (catch-all) return the Rolefeed SPA, `/assets/*` 200, unknown `/api` 404,
 binds `0.0.0.0:8000`; both `vja-api` + `vja-nightly` entrypoints present (601 MB image). **Out of scope:**
 provisioning (9.5c) + deploy/cutover/flips (9.5d).
+
+### D-061 · Phase 9 · 9.5c: cloud provisioning standup (locked values) · accepted · 2026-06-30
+Third 9.5 block (plan: `docs/12`). Provision the cloud resources the 9.5d cutover deploys *into* — no app
+code, no deploy, no go-live flips. Runbook: `deploy/gcp/README.md`. Concrete, re-litigable values now locked
+as fact:
+- **Domain:** `role-feed.com` (Cloudflare Registrar; DNS stays Cloudflare). **Hyphenated** — the `docs/12`
+  table had assumed `<rolefeed>.com`; the literal differs everywhere (OAuth redirect, `VJA_PUBLIC_BASE_URL`,
+  `VJA_DIGEST_FROM`, cookie domain).
+- **GCP project:** `role-feed-prod` (number 850723734041), billing linked, APIs enabled (run,
+  artifactregistry, cloudscheduler, secretmanager — no Cloud SQL, Postgres is Neon).
+- **Region:** GCP `us-central1`; **Neon** Postgres in **AWS us-east-2 (Ohio)**, nearest. Fresh DB, no
+  SQLite carryover (D-025); `VJA_DATABASE_URL` stored as the **pooled** endpoint with the SQLAlchemy
+  **`postgresql+psycopg://`** scheme (the Neon dashboard hands out bare `postgresql://` — the `+psycopg`
+  rewrite is mandatory or the app reaches for the absent psycopg2).
+- **Secret Manager:** all 8 prod secrets loaded (the D-025/docs/12 set). **Non-secret** prod env
+  (`VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`, `VJA_PUBLIC_BASE_URL=https://role-feed.com`,
+  `VJA_FRONTEND_DIST=/app/frontend/dist`) are plain Cloud Run vars, applied at 9.5d.
+- **OAuth:** web client created **in `role-feed-prod`** (consent screen External/Testing + test users),
+  redirect `https://role-feed.com/auth/callback`; the `*.run.app` fallback URI added at 9.5d once the
+  service URL exists. (An initial client mistakenly made under another project was discarded and re-created
+  here — credentials are project-portable but the consent screen/test-users/lifecycle belong in prod.)
+- **Resend:** `role-feed.com` verified (SPF/DKIM in Cloudflare); `digest@role-feed.com` sends without a
+  mailbox (send-only; replies bounce — acceptable for a no-reply digest).
+- **Artifact Registry:** Docker repo `rolefeed` in `us-central1` (the 9.5d push target).
+**Why:** record the standup as fact so 9.5d (and any reset session) treats the domain/region/project/URL-
+scheme as settled, not re-litigable; a standalone ADR keeps the 9.5d cutover ADR scoped to go-live.
+**Verified:** `gcloud` reads confirm project+billing, 4 APIs, AR repo, all 8 secrets with enabled versions,
+OAuth client (secret versions @ v2 = the re-created prod client), Neon URL stored pooled + `+psycopg`. The
+**DB connect from a laptop is blocked by local-network port-5432 filtering** — irrelevant to prod (Cloud Run
+reaches Neon over the cloud backbone); the authoritative connect/`alembic upgrade head` runs at 9.5d via a
+Cloud Run Job exec. **Out of scope:** image push, Cloud Run deploy, custom-domain mapping, schema migration,
+baseline run, the `VJA_AUTH_REQUIRED`/`VJA_COOKIE_SECURE` flips, `/security-review` — all 9.5d.
