@@ -9,9 +9,9 @@ working plan.*
 
 **Status:** **9.5a ✅** (D-059, merged to `main` via PR #45 @ `fd347cd`). **9.5b ✅** (D-060, merged to
 `main` via PR #46 @ `0abbb5b`). **9.5c ✅** (D-061 — GCP project `role-feed-prod`, Neon, Secret Manager,
-Artifact Registry, OAuth, Resend all provisioned; runbook in `deploy/gcp/`; awaiting commit+PR on branch
-`feat/cloud-deploy-9.5c`). **9.5d next** (cutover/go-live — deploy + `alembic upgrade` + baseline run +
-flips + security review).
+Artifact Registry, OAuth, Resend all provisioned; runbook `deploy/gcp/README.md`; merged to `main` via PR #47
+@ `74644e1`). **9.5d next** (cutover/go-live) — the executable runbook is **`deploy/gcp/CUTOVER.md`** (deploy +
+`alembic upgrade` + baseline run + staged smoke + flips + security review); §9.5d below is now just the index.
 
 ---
 
@@ -149,28 +149,29 @@ Manual + the written runbook (`deploy/gcp/README.md`), no app code. As executed 
 6. **Artifact Registry:** Docker repo `rolefeed` in `us-central1`.
 7. **Resend:** `role-feed.com` verified (SPF/DKIM in Cloudflare); `VJA_DIGEST_FROM=digest@role-feed.com`.
 
-## 9.5d — Cutover & go-live (sketch)
+## 9.5d — Cutover & go-live (index → `deploy/gcp/CUTOVER.md`)
 
-1. Build + push the 9.5b image to Artifact Registry.
-2. Deploy the **Cloud Run service** (API+SPA) with secrets mounted; map the **custom domain**.
-3. Set the OAuth redirect URI to the final `https://<domain>/auth/callback`; set `VJA_PUBLIC_BASE_URL`.
-4. **Neon schema:** `alembic upgrade head` against the Neon URL (one-off, from a local shell or a Cloud Run
-   Job exec).
-5. **Baseline run (digest suppressed):** `vja-import-employers` → one `vja-run` (fetch→diff→persist, **no
-   send**) to stamp `first_seen_at` across the universe. Then load Hayden's profile (via the upload UI or
-   `vja-load-profiles`).
-6. Deploy the **Cloud Run Job** (`vja-nightly`) + **Cloud Scheduler** trigger (the D-031 swap). First
-   scheduled run sends the first *real* (normal-delta) digest.
-7. **Email:** confirm Resend domain verified; send a test digest to a real external address.
-8. **Flip the prod guards:** `VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`. Confirm anonymous `/api/postings`
-   → 401, login round-trips end-to-end on the real domain.
-9. **`/security-review`** on the full cutover diff (the docs/11 §3.1 gate) before announcing.
-10. Update docs/11 (§3 checkboxes), DECISIONS (the cutover ADR), INVARIANTS (auth-required now ON; prod
-    surfaces live), CLAUDE.md Phase 9 (9.5 ✅).
+The executable, safety-ordered runbook lives in **`deploy/gcp/CUTOVER.md`** (the 9.5d analogue of the 9.5c
+`deploy/gcp/README.md`). Ordering principle: `artifact → schema → seed → deploy(auth OFF) → smoke → domain →
+auth ON`. The steps, in brief:
+
+1. Build (`--platform linux/amd64` — arm64 laptop gotcha) + push the image to Artifact Registry.
+2. Grant the Cloud Run runtime SA `secretmanager.secretAccessor`.
+3. `alembic upgrade head` against Neon — **run locally** (Hayden's laptop reaches Neon; the earlier "Cloud
+   Run Job exec" assumption is obsolete). Baseline seed (`vja-import-employers` → `vja-run` (no LLM/no send,
+   stamps `first_seen_at`) → `vja-load-profiles`) also runs locally.
+4. Deploy the **Cloud Run service** with secrets mounted, **auth OFF**; **staged smoke on the `*.run.app`
+   URL** (health, SPA deep-link, a real login round-trip) before touching domain/auth.
+5. Map the **custom domain**; deploy the **Cloud Run Job** (`vja-nightly`) + **Cloud Scheduler** trigger.
+6. **Flip the prod guards last:** `VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`, `VJA_PUBLIC_BASE_URL`; confirm
+   anon `/api/postings` → 401 + login on the real domain. Real test send. Rollback = `update-traffic`.
+7. **`/security-review`** on the cutover diff, then docs (docs/11 §3, DECISIONS cutover ADR, INVARIANTS
+   auth-required ON, CLAUDE.md 9.5 ✅).
 
 **Deferred past 9.5d (note, don't silently forget):** deletion/data-subject endpoint (docs/11 §3.1),
 per-IP/edge rate-limiting + captcha (§3.3 — OAuth bounds abuse meanwhile), spend-trend observability/alerting
-(§3.5). Backups: Neon provides PITR; confirm retention.
+(§3.5), Neon PITR retention confirm. **Post-launch deploy loop** (data-only vs config/code redeploy; the
+merge-triggered "9.6" auto-deploy) is documented in `docs/11` §5.
 
 ---
 

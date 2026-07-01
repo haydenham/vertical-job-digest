@@ -78,7 +78,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **DB access = SQLAlchemy Core + Alembic.** SQLite now → Postgres at first hosted deploy
   (`alembic upgrade`, URL swap). The Postgres path is **CI-verified on both dialects** — the default
   suite re-runs on a `postgres:16` service via `VJA_TEST_DATABASE_URL`, so the cutover is a proven URL
-  swap and later tables are born-on-Postgres-verified. (D-025, D-054)
+  swap and later tables are born-on-Postgres-verified. **Every engine sets `pool_pre_ping=True`; the hosted
+  PG path also sets `pool_recycle=1800`** so Neon's serverless autosuspend can't hand out a dead connection
+  (`src/vja/db/engine.py`). (D-025, D-054, D-062)
 - **Migrations run with SQLite foreign keys OFF** (`migrations/env.py`, set at connect; the app's runtime
   engine keeps them ON). A batch table-rebuild (SQLite's only way to add a FK to an existing table) drops +
   recreates the table, which trips any *referencing* table (`matches → profiles`) on a populated DB unless

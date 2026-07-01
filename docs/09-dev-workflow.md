@@ -26,6 +26,8 @@ bars, and a definition of "done" that can't be skipped.*
 - **PR description states:** what changed, why, which `D-0xx` it implements/touches, and how it was tested.
 - **`main` is always releasable** — i.e. the nightly pipeline can run off it. Broken `main` blocks the one thing
   that matters (the digest).
+- **Once hosted, how a merged change actually ships** (data-only vs config/code redeploy, and the planned
+  merge-triggered deploy) is spelled out in `docs/11` §5 "Post-launch change management".
 
 ## The review gate (the human's actual job here)
 

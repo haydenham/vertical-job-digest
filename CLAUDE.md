@@ -216,7 +216,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/07-ats-routing.md` — ATS platform distribution + fetcher build priority (no per-company scrapers).
 - `docs/08-testing-strategy.md` — the four test levels (unit→integration→system→e2e) in this project's terms + when each applies.
 - `docs/09-dev-workflow.md` — Definition of Done, branch/PR/review gate, CI + pre-commit gates, conventions. The "Claude writes it, gates + review make it trustworthy" playbook.
-- `docs/11-multi-user-and-hosting.md` — living migration ledger: what's already portable, the single-user seams each phase must preserve, and the deferred auth/security/PII/cost work to build at the D-025 cutover.
+- `docs/11-multi-user-and-hosting.md` — living migration ledger: what's already portable, the single-user seams each phase must preserve, and the deferred auth/security/PII/cost work to build at the D-025 cutover. §5 = post-launch change management (data-only vs config/code redeploy loops; drives the vertical-expansion + discovery-agent roadmap).
 - `docs/12-cloud-deploy-plan.md` — Phase 9.5 plan of record (sub-blocks 9.5a–d + locked decisions). Read it + `docs/11` + the WORKLOG top entry to continue 9.5 after a chat reset.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
