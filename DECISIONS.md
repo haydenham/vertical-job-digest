@@ -1018,3 +1018,30 @@ OAuth client (secret versions @ v2 = the re-created prod client), Neon URL store
 reaches Neon over the cloud backbone); the authoritative connect/`alembic upgrade head` runs at 9.5d via a
 Cloud Run Job exec. **Out of scope:** image push, Cloud Run deploy, custom-domain mapping, schema migration,
 baseline run, the `VJA_AUTH_REQUIRED`/`VJA_COOKIE_SECURE` flips, `/security-review` — all 9.5d.
+
+### D-062 · Phase 9 · 9.5d-prep: serverless-PG engine hardening + cutover runbook · accepted · 2026-06-30
+Repo-side prep for the 9.5d cutover (branch `feat/9.5d-prep`), ahead of the ops-only go-live. Three things:
+- **DB engine resilience for Neon (code).** `get_engine` (`src/vja/db/engine.py`) now builds every engine with
+  **`pool_pre_ping=True`** (all dialects — a cheap liveness check before a pooled connection is handed out) and,
+  for **non-SQLite** URLs only, **`pool_recycle=1800`s** (`POOL_RECYCLE_SECONDS`). **Why:** Neon's free tier
+  autosuspends on idle and can drop pooled connections server-side; without pre-ping the first query after a
+  suspend raises `OperationalError`, and recycle retires connections before Neon's timeout does. SQLite's
+  connection is local, so recycle stays at SQLAlchemy's `-1` default there. Pinned by unit tests asserting the
+  pool kwargs on both dialects (offline — `create_engine` is lazy). Pool *sizing* left at defaults (Neon's
+  pooled endpoint multiplexes via pgbouncer; don't over-tune ahead of need).
+- **9.5d cutover runbook** `deploy/gcp/CUTOVER.md` — the executable analogue of the 9.5c `README.md`.
+  **Corrects D-061's carried assumption:** Hayden's laptop **can** reach Neon (a `create_engine().connect()`
+  reach-test against the pooled URL returned `neon ok`), so `alembic upgrade head` + the baseline seed run
+  **locally from his shell**, not via a Cloud Run Job exec. Adds a **staged `*.run.app` smoke (incl. a login
+  round-trip) before domain-mapping and before the auth flip**, the `--platform linux/amd64` build gotcha
+  (arm64 laptop → amd64 Cloud Run), the runtime-SA `secretAccessor` grant, and a `update-traffic` rollback note.
+- **Post-launch change management** documented as `docs/11` §5: **Path A** (data — employers/profiles → DB via
+  `vja-import-employers`/upload, **no redeploy**) vs **Path B** (config/code — `config/verticals/*.yaml` +
+  fetchers are baked into the image, **rebuild+deploy**). Recommends a merge-triggered auto-deploy as a
+  post-launch "9.6" fast-follow; flags (not now) moving vertical config out of the image if churn ever hurts.
+**Why:** make 9.5d a scripted, safe-not-sorry execution and answer "how do we ship changes after launch" (2 new
+verticals + expansion + the discovery agent) before go-live, without doing any irreversible cloud ops in-session.
+**Verified:** full Python gate green (ruff/mypy/import-linter/`uv lock --check`/pytest on SQLite + CI Postgres);
+new engine tests pass. **Out of scope (still 9.5d):** every cloud op in `CUTOVER.md` — build/push/deploy/migrate/
+seed/flip/`/security-review` — run by Hayden with his own gcloud/console auth. **Status:** merged pending (Hayden
+commits + PRs the branch).

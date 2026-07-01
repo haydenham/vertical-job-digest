@@ -122,3 +122,46 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
 The cutover is driven by **hosting for demo users (~2 weeks out, D-025)**, not by load. When it fires, this
 ledger becomes the work breakdown: §3.1 (security/PII) and §3.2 (auth) gate any public exposure; §3.3–3.5 ride
 along. Until then: keep the §2 seams, append new deferrals to §3, and build nothing here speculatively.
+
+## 5. Post-launch change management (how changes ship once it's live)
+
+*Added at 9.5d-prep. Once Rolefeed runs on Cloud Run, "make a change" splits into two very different loops.
+Knowing which loop a change is in is the difference between a 30-second data edit and a full redeploy.* The
+split is a fact of the current build (confirmed in `db/employers.py`, `verticals.py`, `scope.py`,
+`prefilter.py`), not a proposal.
+
+### Path A — data changes: **no redeploy**
+`vja-import-employers` reads `data/seed/employers_seed.csv` and writes **`employers` rows to the DB**; fetchers
+read employers *from the DB* at runtime. Profiles/resumes likewise land in the DB (`vja-load-profiles`, or the
+`/upload` UI). So these ship by running a command against the prod DB — **no image rebuild, no deploy**:
+
+- **Add employers / expand a vertical's company list** → edit the seed CSV → `VJA_DATABASE_URL=<neon> uv run
+  vja-import-employers`. New postings appear on the next nightly.
+- **Add/refresh a profile** → `/upload` UI (preferred, self-serve) or `vja-load-profiles`.
+
+### Path B — config + code changes: **rebuild + redeploy**
+`scope.py` (Stage-A keywords) and `prefilter.py` (Stage-B knobs) read `config/verticals/*.yaml` from the
+**baked-in image** at runtime; `available_verticals()` (the `/api/verticals` picker) reads the same dir. So
+these need a new image (§1 of `CUTOVER.md`) + a `gcloud run deploy` / job update:
+
+- **Tune scope keywords or prefilter** for an existing vertical → edit YAML → rebuild + deploy.
+- **A brand-new vertical** → its `*.yaml` + resume + seed rows. Still **config-only *code-wise*** (the D-004
+  invariant holds — proven by the Phase-7 aviation add), but it does need one Path-B redeploy to ship the file.
+- **A new fetcher, or the Phase-10 company-finder agent** → real code → normal CI (`docs/09` gates) → rebuild
+  + deploy.
+
+**Roadmap mapping** (Hayden's stated next steps): *expand the two existing verticals* = Path A, frictionless;
+*two new verticals* = Path A employers + one Path-B redeploy each for the config; *new fetchers / discovery
+agent* = Path B via CI.
+
+### Recommended streamlining (post-launch fast-follow — "Phase 9.6", not built now)
+The one-time launch cutover is deliberately manual (`CUTOVER.md`). For the *ongoing* Path-B loop, add a
+**merge-to-`main` → build+push+deploy** trigger so a code/config change is "merge and it's live," with the
+existing CI gates (ruff/mypy/import-linter/pytest/frontend) as the merge gate. Two shapes, pick at 9.6:
+- a **Cloud Build trigger** on the GitHub repo (build `Dockerfile` → push → `gcloud run deploy` + job update), or
+- a thin **`deploy/gcp/deploy.sh`** wrapper (the `CUTOVER.md` §1/§5/§8 commands) invoked manually or from a
+  GitHub Action.
+
+**Flagged, not now:** if vertical-config churn ever makes Path-B redeploys painful, move `config/verticals/*.yaml`
+out of the image (a GCS mount, or into the DB) so config becomes Path-A too. Premature today — revisit when it
+actually hurts; do not scaffold ahead of need (per the discipline at the top of this file).

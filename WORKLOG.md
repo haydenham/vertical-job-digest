@@ -5,6 +5,52 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-06-30 — Phase 9 · 9.5d-prep: engine hardening + cutover runbook + change-mgmt (D-062)
+
+**Repo-side prep for the last block (9.5d go-live), no cloud ops run.** 9.5c is done+merged (PR #47 @
+`74644e1`) — this session reconciles that, ships the one real pre-ship code fix, writes the executable cutover
+runbook, and documents the post-launch change loop. Branch `feat/9.5d-prep`.
+
+**Correction to last session:** D-061/WORKLOG said the laptop can't reach Neon (port-5432 filtered) so
+migration had to go via a Cloud Run Job exec. Hayden reach-tested the pooled URL this session →
+`neon ok`. So `alembic upgrade head` + baseline seed run **locally from his shell** — simpler, fewer moving
+parts. Folded into the runbook + D-062.
+
+**Did:**
+- **Engine hardening (code)** `src/vja/db/engine.py`: `get_engine` now sets **`pool_pre_ping=True`** (all
+  dialects) + **`pool_recycle=1800`** (`POOL_RECYCLE_SECONDS`, non-SQLite only) so Neon's serverless
+  autosuspend can't hand out a dead pooled connection. SQLite FK-pragma listener untouched.
+- **`deploy/gcp/CUTOVER.md`** (new) — the 9.5d runbook, analogue of the 9.5c `README.md`. Safety order
+  `artifact→schema→seed→deploy(auth OFF)→smoke→domain→auth ON`; exact `gcloud`/`docker` commands (no secret
+  values); the **`--platform linux/amd64`** gotcha (arm64 laptop → amd64 Cloud Run), runtime-SA
+  `secretAccessor` grant, local `alembic`/seed, a **staged `*.run.app` smoke incl. login** before domain/auth,
+  Cloud Run Job + Scheduler (`0 6 * * *` America/Chicago, matching launchd), the auth flip **last**, and a
+  `update-traffic` rollback note. "Done when green" checklist.
+- **`docs/11` §5 Post-launch change management** (new) — **Path A** (data → DB, no redeploy: employers via
+  `vja-import-employers`, profiles via upload/`vja-load-profiles`) vs **Path B** (config/code baked in image →
+  rebuild+deploy: `config/verticals/*.yaml`, scope/prefilter, fetchers, discovery agent). Maps Hayden's
+  roadmap (2 new verticals + expansion + company-finder) onto the two loops; recommends a merge-triggered
+  auto-deploy as a post-launch "9.6", flags moving config out of the image if churn ever hurts. Cross-linked
+  from `docs/09` + the CLAUDE.md doc-map line.
+
+**Decisions:** **D-062**. INVARIANTS: DB-access line gains the pre-ping/recycle rule. docs/12: 9.5c status →
+merged via PR #47; §9.5d rewritten as an index → `deploy/gcp/CUTOVER.md`.
+
+**Tests:** `tests/integration/test_engine.py` (+2: sqlite pre-pings/no-recycle; postgres pre-pings+recycles —
+offline, `create_engine` is lazy). Rest of the suite unchanged.
+
+**Verified:** full Python gate green — ruff format/check, mypy (110 files), import-linter (1 kept/0 broken),
+`uv lock --check`, **371 pytest** (+2) on SQLite. (CI re-runs the suite on the `postgres:16` service on push;
+the new engine tests are offline — `create_engine` is lazy — so they cover both dialects locally.)
+
+**Next:** **STOP for Hayden to commit + PR** (`feat/9.5d-prep`). Then **9.5d — execute `deploy/gcp/CUTOVER.md`**
+(Hayden-driven, his gcloud/console auth): build+push → deploy service (auth off) → smoke → domain → Job +
+Scheduler → flip guards → test send → `/security-review` → docs. Post-launch: the §5 "9.6" auto-deploy loop.
+
+**Branch:** `feat/9.5d-prep` (off `main` @ `74644e1`).
+
+---
+
 ## 2026-06-30 — Phase 9 · Block 9.5c: cloud provisioning standup (D-061)
 
 **Third 9.5 block — ops standup, no app code.** Stood up the cloud resources the 9.5d cutover deploys
