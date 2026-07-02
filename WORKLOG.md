@@ -5,6 +5,41 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-02 — Phase 9 · 9.5d go-live (in progress): cloud cutover + container config-path bug fix (D-063)
+
+**Executed most of `deploy/gcp/CUTOVER.md` live with Hayden; hit + fixed a real cutover-blocking bug.** Branch
+`fix/vertical-config-path-in-container` (off `main` @ `8dcbc0a`).
+
+**Cutover progress (ops, Hayden-driven):** image built `--platform linux/amd64` + pushed (§1); runtime-SA
+secret grant (§2); `alembic upgrade head` on Neon (§3); baseline seed (§4) — 90 employers imported, `vja-run`
+seeded **9,773 postings** (`first_seen_at` stamped), 2 profiles loaded (aviation + grid, both active). Service
+deployed auth-OFF (§5) + `*.run.app` smoke green incl. **Google login round-trip** (§6). Custom domain
+**mapped + cert green** (§7, `role-feed.com`, 8 apex A/AAAA in Cloudflare DNS-only). Nightly **Job + Scheduler
+created** (§8, `0 6 * * *` America/Chicago). **Not yet done:** guard flip (§9), email E2E (§10), sec-review +
+docs (§12), and merge of this branch.
+
+**The bug (D-063):** first `vja-nightly` executions completed ok but did **zero Layer-2** — `extracted=0
+matched=0 digests=none $0`, reproducibly. Root cause proven by running the deployed image: the nightly's
+`for vertical in available_verticals()` got **`[]`** because `_CONFIG_DIR = Path(__file__).parents[2]/config/
+verticals` assumes the repo/src layout, but the image installs vja **`--no-editable`** (site-packages), so
+`parents[2]` missed and the config YAMLs (copied to `/app/config/verticals`) were never found. Local runs
+(src layout) always worked → never caught pre-cloud. **Fix:** honor a **`VJA_VERTICALS_DIR`** env override
+(mirrors the existing `VJA_FRONTEND_DIST` pattern, D-060 — same `--no-editable` path problem); Dockerfile sets
+it to `/app/config/verticals`. Proven in-container: default → `[]`; `/app/config/verticals` → both verticals.
+After rebuild+redeploy (image `b2a74fa`, + `--task-timeout=7200`/`--max-retries=1` on the Job), execution
+`vja-nightly-295wd` **confirmed calling `api.anthropic.com` in the extraction phase** — Layer-2 now runs.
+
+**Tests:** +1 regression (`test_config_dir_honors_env_override`, reloads the module under a patched env).
+**Verified:** ruff + mypy clean; **372 pytest** green (was 371). Also folded two `CUTOVER.md` doc fixes
+(explicit `import-employers` CSV path; the `--task-timeout` note).
+
+**Next:** let `295wd` finish (extract ~2k → match → digest); confirm matches + first digest land; **then**
+resume `CUTOVER.md` §9 guard flip → §10 email E2E → §12 sec-review/docs. **Merge `fix/vertical-config-path-
+in-container` → `main`** so the deployed `b2a74fa` matches the default branch. Hayden also doing domain
+follow-up.
+
+---
+
 ## 2026-06-30 — Phase 9 · 9.5d-prep: engine hardening + cutover runbook + change-mgmt (D-062)
 
 **Repo-side prep for the last block (9.5d go-live), no cloud ops run.** 9.5c is done+merged (PR #47 @

@@ -84,7 +84,7 @@ nightly digest is a normal delta, not a monster** (D-061 decision). `vja-run` is
 Layer 1, so **no Anthropic spend and no send**.
 
 ```sh
-uv run vja-import-employers            # seed CSV → employers rows in Neon
+uv run vja-import-employers data/seed/employers_seed.csv   # seed CSV → employers rows in Neon (path is required)
 uv run vja-run                         # fetch → diff → persist (stamps first_seen_at); no extract/match/send
 uv run vja-load-profiles               # your matching profile → profiles row (or use the /upload UI post-launch)
 ```
