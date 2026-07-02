@@ -49,6 +49,9 @@ COPY data/seed ./data/seed
 # The built SPA, served same-origin by FastAPI via the explicit dist path.
 COPY --from=web /web/frontend/dist ./frontend/dist
 ENV VJA_FRONTEND_DIST=/app/frontend/dist
+# The non-editable install moves vja into site-packages, so the code's repo-relative default for the
+# vertical configs (`parents[2]`) misses; point it at the copied config dir (nightly Layer-2 reads it).
+ENV VJA_VERTICALS_DIR=/app/config/verticals
 
 # Cloud Run injects $PORT (default 8080); bind 0.0.0.0. Local dev still defaults 127.0.0.1:8000.
 CMD ["/app/.venv/bin/vja-api", "--host", "0.0.0.0"]

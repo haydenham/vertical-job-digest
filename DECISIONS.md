@@ -1045,3 +1045,26 @@ verticals + expansion + the discovery agent) before go-live, without doing any i
 new engine tests pass. **Out of scope (still 9.5d):** every cloud op in `CUTOVER.md` — build/push/deploy/migrate/
 seed/flip/`/security-review` — run by Hayden with his own gcloud/console auth. **Status:** merged pending (Hayden
 commits + PRs the branch).
+
+### D-063 · Phase 9 · 9.5d: vertical config dir resolves via `VJA_VERTICALS_DIR` in the container · accepted · 2026-07-02
+Found live during the 9.5d cutover: `vja-nightly` executions completed "ok" but did **zero Layer-2 work**
+(`extracted=0 matched=0 digests=none $0`), reproducibly, while the same code ran fine locally night after night.
+**Root cause:** `vja.verticals._CONFIG_DIR` was `Path(__file__).resolve().parents[2] / "config" / "verticals"`,
+which only lands on the repo root under the **src/editable** layout. The image installs the package
+**`--no-editable`** (into `.venv/.../site-packages`, an immutable artifact — deliberate), so in the container
+`parents[2]` resolves to `…/python3.12/config/verticals` (nonexistent). `available_verticals()` returned `[]`,
+so the nightly's `for vertical in available_verticals()` loop never iterated — no extraction, no matching, no
+digest — and the failure was **silent** (an empty config dir is not an error). Proven by running the deployed
+image directly: default path → `[]`; the copied `/app/config/verticals` → both verticals load.
+**Decision:** honor a **`VJA_VERTICALS_DIR`** env override in `verticals.py` (env wins, else the repo-layout
+default), and set it in the Dockerfile to **`/app/config/verticals`** (where `COPY config` lands). This is the
+**same fix already used for the SPA** (`VJA_FRONTEND_DIST`, D-060) — the identical `--no-editable` path problem;
+the config path simply never got the same treatment. **Rejected:** switching the image to an editable install
+(defeats the immutable-artifact intent) and shipping configs as wheel package-data (config is external data, not
+code). **Verified:** +1 regression test (`test_config_dir_honors_env_override`); ruff/mypy clean; 372 pytest
+green. Rebuilt image `b2a74fa` redeployed (service + Job, Job also given `--task-timeout=7200`/`--max-retries=1`
+for the real backlog run's duration); execution `vja-nightly-295wd` confirmed hitting `api.anthropic.com` in the
+extraction phase. **Follow-up:** consider auditing for any other `Path(__file__).parents[…]` repo-relative
+resolutions that assume the src layout (the two known — frontend + verticals — are now both env-guarded).
+**Status:** on branch `fix/vertical-config-path-in-container`; merge to `main` pending so deployed `b2a74fa`
+matches the default branch.

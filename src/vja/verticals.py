@@ -9,6 +9,7 @@ Nothing vertical-specific lives in code; adding a vertical is a new YAML + resum
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,15 @@ from vja.db.engine import get_engine
 from vja.db.profiles import upsert_profile
 from vja.scope import ScopeConfig
 
-_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "verticals"
+# `VJA_VERTICALS_DIR` (set in the container, where the non-editable install moves the package out of
+# the repo layout so `parents[2]` no longer lands on the repo root) wins; else the repo-layout
+# default. Mirrors `VJA_FRONTEND_DIST` in `api/app.py` (D-060) — same container-path problem.
+_ENV_CONFIG_DIR = os.environ.get("VJA_VERTICALS_DIR")
+_CONFIG_DIR = (
+    Path(_ENV_CONFIG_DIR)
+    if _ENV_CONFIG_DIR
+    else Path(__file__).resolve().parents[2] / "config" / "verticals"
+)
 
 
 class ConfigError(Exception):
