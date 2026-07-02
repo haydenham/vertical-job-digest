@@ -3,10 +3,12 @@
 Loads the real `config/verticals/grid_power_software.yaml`; uses tmp configs for the error paths.
 """
 
+import importlib
 from pathlib import Path
 
 import pytest
 
+import vja.verticals as verticals_module
 from vja.verticals import ConfigError, load_vertical_config
 
 
@@ -70,3 +72,24 @@ def test_missing_resume_file_raises(tmp_path: Path) -> None:
     _write(tmp_path, "x", _GOOD.format(key="x", resume="missing.md"), resume=None)
     with pytest.raises(ConfigError, match="resume file not found"):
         load_vertical_config("x", config_dir=tmp_path)
+
+
+def test_config_dir_honors_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`VJA_VERTICALS_DIR` overrides the repo-relative default.
+
+    Regression for the container bug: the non-editable install moved `vja` into site-packages, so
+    the `parents[2]` default resolved to a path with no configs and `available_verticals()` returned
+    `[]` — silently skipping the nightly's Layer-2 pass. The env override is how the image points at
+    the copied `/app/config/verticals`. Reload the module so the module-level `_CONFIG_DIR` re-reads
+    the env (it is evaluated at import).
+    """
+    _write(tmp_path, "grid_power_software", _GOOD.format(key="grid_power_software", resume="r.md"))
+    monkeypatch.setenv("VJA_VERTICALS_DIR", str(tmp_path))
+    reloaded = importlib.reload(verticals_module)
+    try:
+        assert tmp_path == reloaded._CONFIG_DIR
+        assert reloaded.available_verticals() == ["grid_power_software"]
+    finally:
+        # Restore the real module (default path) so later tests see the repo configs.
+        monkeypatch.delenv("VJA_VERTICALS_DIR", raising=False)
+        importlib.reload(verticals_module)
