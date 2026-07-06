@@ -57,14 +57,13 @@ from vja.db.profiles import (
     Profile,
     active_profile_for_user,
     active_profiles,
-    active_verticals,
     get_profile,
     upsert_profile,
 )
 from vja.db.users import User, upsert_user_by_google
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
-from vja.verticals import ConfigError, load_vertical_config
+from vja.verticals import ConfigError, available_verticals, load_vertical_config
 
 
 def frontend_dist_dir() -> Path:
@@ -345,9 +344,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         )
 
     @app.get("/api/verticals")
-    def verticals(engine: Annotated[Engine, Depends(_get_engine)]) -> list[str]:
-        """Active verticals — the frontend's vertical picker, so no slug is hardcoded (D-042)."""
-        return active_verticals(engine)
+    def verticals() -> list[str]:
+        """Configured verticals available to join — the onboarding picker's source (D-064/D-065).
+
+        Config-driven, not active-profile-driven: a vertical must stay joinable even with zero
+        profiles in it, else B-4 (deactivating the aviation seed) would hide aviation from a new
+        aviation user. The dashboard routes on `/api/me`, not on this list (the D-064 fix)."""
+        return available_verticals()
 
     @app.get("/api/postings")
     def postings(

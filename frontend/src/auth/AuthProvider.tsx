@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { fetchMe, logout as apiLogout, type User } from "../api";
+import { fetchMe, logout as apiLogout, type Me } from "../api";
 import { AuthContext } from "./useAuth";
 
-// Probes `/api/me` once on mount and exposes the session state via the AuthContext. A failed probe
-// (network/5xx) or a 401 just leaves us logged-out — anonymous is a valid state in 9.4.
+// Probes `/api/me` once on mount and exposes the session (user + their one profile) via the
+// AuthContext. A 401 leaves us logged-out (`me === null`); `refresh()` is called after a résumé
+// upload so a freshly-onboarded user's new profile lands before the dashboard routes on it.
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setUser(await fetchMe());
+      setMe(await fetchMe());
     } finally {
       setLoading(false);
     }
@@ -20,17 +21,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiLogout();
-    setUser(null);
+    setMe(null);
   }, []);
 
   useEffect(() => {
     refresh().catch(() => {
-      setUser(null);
+      setMe(null);
       setLoading(false);
     });
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider
+      value={{ user: me?.user ?? null, profile: me?.profile ?? null, loading, refresh, logout }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
 }

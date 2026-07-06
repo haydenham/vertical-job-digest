@@ -1080,8 +1080,11 @@ vertical; there is **no cross-user vertical picker**. Enforcement: `/api/me` dri
 write path (`POST /api/profiles`) rejects a second vertical for a user who already has one. **Supersedes** the
 implied-multi-vertical reading of D-042's "`GET /api/verticals` drives the picker" — that endpoint stays for
 admin/internal use but no longer drives per-user routing. **Why:** it's the product's actual model; the global
-picker was a documentation/communication lapse, not a design change. **Status:** accepted; built in the
-onboarding overhaul (`docs/13` Phase B, D-065).
+picker was a documentation/communication lapse, not a design change. **Status:** **done** — enforced at
+`POST /api/profiles` (409 on a second vertical; same-vertical re-upload stays an idempotent résumé update) and
+routed per-user via `/api/me` → `active_profile_for_user`; the global `active_verticals()` was removed and
+`GET /api/verticals` repointed to config-driven `available_verticals()` (onboarding picker only). Data cleanup
+(B-4, deactivate Hayden's aviation seed profile) is a prod write pending at deploy. (D-065)
 
 ### D-065 · Phase 9 · Onboarding / auth-UX overhaul — target flow · accepted · 2026-07-06
 The deployed flow is broken for a fresh account: logged out, `/` renders a **401 as an error string** (no login
@@ -1095,7 +1098,11 @@ after tonight's run."* Backend adds **`GET /api/me`** (user + their single verti
 enforcement**; frontend adds **route guards** (unauth→landing/login, authed+no-profile→onboarding,
 authed+profile→their dashboard) and **`prompt="select_account"`** on `/auth/login` (Google was silently reusing
 one session). **Why:** the current UX "does not work" for beta users — this is a **launch blocker**, ahead of
-inviting them. **Status:** planned (`docs/13` Phase B); blocks the beta onboarding.
+inviting them. **Status:** **done** — backend: `/api/me` returns `{user, profile|null}`, one-vertical 409,
+`prompt="select_account"`. Frontend: `App.tsx` route guards off `useAuth()` (Landing / `/login` / `/onboarding`
+/ `/dashboard` / `/upload`-locked), `Dashboard` takes its vertical from the profile (the 404 fix) + the matched
+poll, onboarding refreshes `/api/me` then routes to the dashboard. Green: Python 379 + frontend eslint/tsc/
+vitest 45. Ships via `ship.sh` (D-066); then re-run the fresh-account walkthrough before beta invites. (D-064)
 
 ### D-066 · Phase 9 · Thin scripted deploy before the onboarding block; full CI/CD deferred · accepted · 2026-07-06
 To ship the onboarding fix (D-065) **reliably today** without a CI/CD detour: a **single idempotent deploy

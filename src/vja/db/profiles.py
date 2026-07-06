@@ -128,19 +128,6 @@ def get_profile(engine: Engine, profile_id: int) -> Profile | None:
     return _row_to_profile(dict(row)) if row is not None else None
 
 
-def active_verticals(engine: Engine) -> list[str]:
-    """Distinct verticals with at least one active profile (drives the dashboard's vertical
-    picker so the frontend never hardcodes a slug — D-042). Sorted for a stable default pick."""
-    stmt = (
-        select(profiles.c.vertical)
-        .where(profiles.c.active == 1)
-        .distinct()
-        .order_by(profiles.c.vertical)
-    )
-    with engine.connect() as conn:
-        return [row[0] for row in conn.execute(stmt).all()]
-
-
 def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     """The active matching profiles for `vertical` (drives nightly matching in 5.3)."""
     stmt = select(*_PROFILE_COLS).where(profiles.c.vertical == vertical, profiles.c.active == 1)

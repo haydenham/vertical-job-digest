@@ -99,25 +99,30 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Email digest (push) is primary; the dashboard (pull) is read-only** over the same
   nightly-computed data — no live fetching. (D-010)
 - **The dashboard is a Vite/React/TS SPA in `frontend/`** (user-facing brand **Rolefeed**; the codebase
-  stays `vja`) consuming `GET /api/postings`. **`react-router-dom` routes** `/` (dashboard), `/login`,
-  `/upload`; `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch is
-  credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
+  stays `vja`) consuming `GET /api/postings`. **`react-router-dom` routes**, all guarded off `useAuth()`
+  (D-065): `/` (smart root: logged-out → `Landing`, no-profile → `/onboarding`, has-profile → `/dashboard`),
+  `/login`, `/onboarding` (pick vertical + upload), `/dashboard` (their vertical), `/upload` (résumé update,
+  vertical locked); `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
+  is credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
   serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
   `/app/frontend/dist` in the container, where the non-editable install moves the package off the repo
   layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
   mount gated on a real `index.html`, D-059/D-060). **One vertical per user (D-064):** the SPA routes each user
-  to *their own* vertical (via `/api/me`), not a cross-user picker. *⚠ Known defect being fixed: the currently
-  **deployed** build still uses a global `GET /api/verticals` picker defaulting to the sorted-first vertical, so
-  other-vertical users 404 — the onboarding overhaul (D-065, `docs/13` Phase B) is the fix.* **Prod ships as one
-  multi-stage image** (`Dockerfile`; SPA built in
-  a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**: `vja-api`
-  (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042, D-058,
-  D-059, D-060)
-- **Résumé upload is the SPA's only write surface** (`/upload`, soft-gated by login → `/login`; the POST is
-  hard-gated by `require_user`). On 202 the UI is optimistic — "matching runs in the background", no status
-  polling (honours D-057's no-status-endpoint); guard responses (401/413/422/429/404) surface a typed
-  `ApiError`. (D-058, D-057)
+  to *their own* vertical via **`GET /api/me`** (`{user, profile|null}`), never a cross-user picker; the
+  dashboard never renders logged-out (killing the old 401-as-error leak). `GET /api/verticals` remains **only**
+  the onboarding picker's source and is now **config-driven** (`available_verticals()`, joinable even with zero
+  profiles — the B-4 fix), not active-profile-driven. **Prod ships as one multi-stage image** (`Dockerfile`; SPA
+  built in a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**:
+  `vja-api` (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042,
+  D-058, D-059, D-060, D-064, D-065)
+- **Résumé upload is the SPA's only write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
+  with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
+  `require_user`). On success the SPA **refreshes `/api/me`** (so the new profile lands before routing) then
+  navigates to `/dashboard`; the matched view shows a **bounded client-side poll** (`~10s × ~2.5min`) of the
+  backfill — no backend push/status endpoint (honours D-057) — then falls back to "full results after tonight's
+  run". Guard responses (401/413/422/429/404 + **409 second-vertical**) surface a typed `ApiError`. (D-058,
+  D-057, D-065)
 
 ## Dashboard & freshness
 
@@ -154,9 +159,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   login with no data migration. `profiles.user_email` is retained (match/digest recipient unchanged). (D-055)
 - **One vertical per user (policy — D-064).** A user has exactly **one** active profile, in **one** vertical,
   chosen **once at signup** and **immutable** (changing verticals = a manual/support action, out of scope for
-  v1). The dashboard shows *that* user's vertical — there is **no cross-user vertical picker**; the write path
-  rejects a second vertical. *This was always policy but undocumented → the deployed SPA violates it (global
-  picker → 404); fix = the D-065 onboarding overhaul (`docs/13` Phase B).* (D-064)
+  v1). The dashboard shows *that* user's vertical (resolved via `/api/me` → `active_profile_for_user`) — there is
+  **no cross-user vertical picker**. **Enforced** at the write path: `POST /api/profiles` **409s** a second
+  vertical for an already-onboarded user; re-upload of the *same* vertical stays an idempotent résumé update.
+  (Enforced in the endpoint, not `upsert_profile`, so the CLI/seed loader stays unconstrained.) (D-064, D-065)
 - **Login is Authlib OIDC → a signed-cookie session** (`SessionMiddleware`, secret `VJA_SESSION_SECRET`).
   Login routes are **inert (503) until `GOOGLE_CLIENT_*` are set**; the real Google round-trip is a manual
   check, the suite mocks the token exchange. Cookie hardening (`Secure` via `VJA_COOKIE_SECURE`, `SameSite=Lax`,
