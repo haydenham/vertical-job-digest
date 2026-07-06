@@ -62,13 +62,22 @@ describe("fetchMe", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("returns the user on 200", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { id: 1, email: "a@b.co", name: "A" }));
-    await expect(fetchMe()).resolves.toEqual({ id: 1, email: "a@b.co", name: "A" });
+  it("returns the user + their profile on 200", async () => {
+    const me = {
+      user: { email: "a@b.co", name: "A" },
+      profile: { vertical: "grid_power_software", resume_version: "abc123" },
+    };
+    fetchMock.mockResolvedValue(jsonResponse(200, me));
+    await expect(fetchMe()).resolves.toEqual(me);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/me",
       expect.objectContaining({ credentials: "include" }),
     );
+  });
+
+  it("returns profile null when signed in but not onboarded", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { user: { email: "a@b.co", name: "A" }, profile: null }));
+    await expect(fetchMe()).resolves.toEqual({ user: { email: "a@b.co", name: "A" }, profile: null });
   });
 
   it("treats 401 as logged-out (null), not an error", async () => {

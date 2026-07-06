@@ -128,22 +128,26 @@ def get_profile(engine: Engine, profile_id: int) -> Profile | None:
     return _row_to_profile(dict(row)) if row is not None else None
 
 
-def active_verticals(engine: Engine) -> list[str]:
-    """Distinct verticals with at least one active profile (drives the dashboard's vertical
-    picker so the frontend never hardcodes a slug — D-042). Sorted for a stable default pick."""
-    stmt = (
-        select(profiles.c.vertical)
-        .where(profiles.c.active == 1)
-        .distinct()
-        .order_by(profiles.c.vertical)
-    )
-    with engine.connect() as conn:
-        return [row[0] for row in conn.execute(stmt).all()]
-
-
 def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     """The active matching profiles for `vertical` (drives nightly matching in 5.3)."""
     stmt = select(*_PROFILE_COLS).where(profiles.c.vertical == vertical, profiles.c.active == 1)
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [_row_to_profile(dict(row)) for row in rows]
+
+
+def active_profile_for_user(engine: Engine, user_email: str) -> Profile | None:
+    """This user's single active profile across all verticals, or None (D-064: one per user).
+
+    The source of truth the SPA routes on (`/api/me`) — it answers "what's *my* vertical?" so the
+    dashboard never guesses from a global picker. One-vertical-per-user means at most one row; a
+    lingering pre-B-4 dual-profile anomaly returns a stable first (ordered) rather than raising, so
+    a stray legacy row can't 500 the session probe."""
+    stmt = (
+        select(*_PROFILE_COLS)
+        .where(profiles.c.user_email == user_email, profiles.c.active == 1)
+        .order_by(profiles.c.vertical)
+    )
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().first()
+    return _row_to_profile(dict(row)) if row is not None else None

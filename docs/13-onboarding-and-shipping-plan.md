@@ -13,7 +13,9 @@ users.** Two blocks close that gap, in order:
 
 - **Phase A — thin scripted deploy** (ship reliably, ~30 min). Ships Phase B today. (D-066) — **✅ built**
   (`deploy/gcp/ship.sh`; DoD's no-op-rebuild deploy is Hayden-run, needs cloud creds).
-- **Phase B — onboarding / auth-UX overhaul** (the real fix). (D-064, D-065)
+- **Phase B — onboarding / auth-UX overhaul** (the real fix). (D-064, D-065) — **✅ built** (`/api/me` +
+  one-vertical 409 + `prompt=select_account`; SPA route guards, per-user vertical, matched poll; config-driven
+  picker). Remaining: **B-4 prod data cleanup** (Hayden) + deploy via `ship.sh` + re-run the walkthrough.
 
 Everything below the two blocks (discovery agent + review queue, coverage expansion, hardening) is the
 **later roadmap** — captured here so it isn't lost, not scheduled yet.
@@ -124,10 +126,37 @@ Routes and guard logic (react-router), driven by `/api/me`:
 ### B-4 — Data cleanup (prod write — needs Hayden's OK at build time)
 
 The cutover seed loaded **two profiles under Hayden's main email** (aviation + grid) — the "two under one
-email" anomaly that violates D-064. Deactivate one (`active = 0`; reversible, no cascade) so the constraint and
-routing are clean. Keep whichever vertical Hayden wants his main account on; the other vertical goes on a
-separate Google-backed email (Gmail **or** any email that is a Google account — Workspace / "use current email"
-both work; a non-Google email cannot log in).
+email" anomaly that violates D-064. **Locked (2026-07-06): main account keeps `grid_power_software`**; aviation
+moves to a second Google-backed email (Gmail **or** any Google account — Workspace / "use current email" both
+work; a non-Google email cannot log in). Deactivate the aviation profile (`active = 0`; reversible, no cascade).
+**Hayden runs it against Neon** (prod DB access is his), before the Phase-B redeploy.
+
+Verify first, then flip (`VJA_DATABASE_URL` = the Neon URL in the shell):
+
+```sh
+# 1. Look first — expect TWO active rows (grid + aviation) for the main email:
+uv run python -c "
+import os, sqlalchemy as sa
+e=sa.create_engine(os.environ['VJA_DATABASE_URL'])
+print(e.connect().execute(sa.text(
+  \"select id, vertical, active from profiles where user_email=:m order by vertical\"
+), {'m':'haydenham10@gmail.com'}).all())"
+
+# 2. Deactivate ONLY the aviation active profile (grid stays active):
+uv run python -c "
+import os, sqlalchemy as sa
+e=sa.create_engine(os.environ['VJA_DATABASE_URL'])
+with e.begin() as c:
+    n=c.execute(sa.text(
+      \"update profiles set active=0 where user_email=:m and vertical='aviation_software' and active=1\"
+    ), {'m':'haydenham10@gmail.com'}).rowcount
+    print('deactivated', n)  # expect 1
+"
+```
+
+After: `/api/me` for the main account resolves the single **grid** profile; aviation onboards fresh on the
+second email via the new flow. Reversible (`set active=1`). A one-off manual write — no CLI subcommand; the
+change-of-vertical path is deliberately out of v1 scope (D-064).
 
 ### Phase B DoD
 

@@ -19,15 +19,26 @@ const mockUpload = vi.mocked(uploadResume);
 const mockUseAuth = vi.mocked(useAuth);
 
 function auth(over: Partial<AuthState> = {}): AuthState {
-  return { user: null, loading: false, refresh: vi.fn(), logout: vi.fn(), ...over };
+  return {
+    user: null,
+    profile: null,
+    loading: false,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    logout: vi.fn(),
+    ...over,
+  };
 }
 
-function renderUpload() {
+const signedIn = (over: Partial<AuthState> = {}) =>
+  auth({ user: { email: "a@b.co", name: "A" }, ...over });
+
+function renderUpload(props: { lockedVertical?: string } = {}) {
   return render(
     <MemoryRouter initialEntries={["/upload"]}>
       <Routes>
-        <Route path="/upload" element={<Upload />} />
+        <Route path="/upload" element={<Upload {...props} />} />
         <Route path="/login" element={<div>login-page</div>} />
+        <Route path="/dashboard" element={<div>dashboard-page</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -47,15 +58,26 @@ describe("Upload", () => {
     expect(screen.getByText("login-page")).toBeInTheDocument();
   });
 
-  it("renders the vertical options and file input when signed in", async () => {
-    mockUseAuth.mockReturnValue(auth({ user: { id: 1, email: "a@b.co", name: "A" } }));
+  it("renders the vertical picker + file input in onboarding mode", async () => {
+    mockUseAuth.mockReturnValue(signedIn());
     renderUpload();
     expect(await screen.findByRole("option", { name: "grid_power_software" })).toBeInTheDocument();
     expect(screen.getByLabelText(/résumé/i)).toBeInTheDocument();
   });
 
-  it("uploads the file and shows the optimistic confirmation", async () => {
-    mockUseAuth.mockReturnValue(auth({ user: { id: 1, email: "a@b.co", name: "A" } }));
+  it("in update mode locks the vertical (no picker, no verticals fetch)", () => {
+    mockUseAuth.mockReturnValue(
+      signedIn({ profile: { vertical: "aviation_software", resume_version: "v1" } }),
+    );
+    renderUpload({ lockedVertical: "aviation_software" });
+    expect(screen.getByText("aviation_software")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(mockVerticals).not.toHaveBeenCalled();
+  });
+
+  it("on success refreshes auth and routes to the dashboard", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    mockUseAuth.mockReturnValue(signedIn({ refresh }));
     mockUpload.mockResolvedValue({
       profile_id: 5,
       vertical: "grid_power_software",
@@ -65,12 +87,14 @@ describe("Upload", () => {
     await screen.findByRole("option", { name: "grid_power_software" });
     await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
-    expect(await screen.findByText(/résumé received \(v3\)/i)).toBeInTheDocument();
+
+    expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
     expect(mockUpload).toHaveBeenCalledWith("grid_power_software", resume);
+    expect(refresh).toHaveBeenCalledOnce(); // new profile lands before the dashboard routes on it
   });
 
   it("surfaces the server message when the upload is rejected", async () => {
-    mockUseAuth.mockReturnValue(auth({ user: { id: 1, email: "a@b.co", name: "A" } }));
+    mockUseAuth.mockReturnValue(signedIn());
     mockUpload.mockRejectedValue(new ApiError(429, "daily budget exceeded"));
     renderUpload();
     await screen.findByRole("option", { name: "grid_power_software" });

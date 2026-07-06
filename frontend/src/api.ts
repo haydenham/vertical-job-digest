@@ -45,11 +45,23 @@ export interface PostingsQuery {
   profileId?: number;
 }
 
-// The authenticated user (mirrors the `/api/me` payload in `app.py`). `null` = not logged in.
+// The authenticated identity (mirrors `MeUser` in `app.py`).
 export interface User {
-  id: number;
   email: string;
   name: string | null;
+}
+
+// The user's one active profile (mirrors `MeProfile`); `null` in `Me` ⇒ signed in but not onboarded.
+export interface Profile {
+  vertical: string;
+  resume_version: string;
+}
+
+// `GET /api/me` — the SPA's routing source of truth (D-064/D-065): who you are + your one vertical
+// (or `profile: null` ⇒ send to onboarding, not a 404ing dashboard). `null` = not logged in (401).
+export interface Me {
+  user: User;
+  profile: Profile | null;
 }
 
 // `POST /api/profiles` success body (mirrors `ProfileCreated` in `app.py`). The backfill it
@@ -110,14 +122,14 @@ export function loginUrl(): string {
 }
 
 // Session probe. `/api/me` returns 401 when unauthenticated — that's "logged out", not an error,
-// so it resolves to `null` rather than throwing.
-export async function fetchMe(): Promise<User | null> {
+// so it resolves to `null` rather than throwing. On 200 it carries the user + their one profile.
+export async function fetchMe(): Promise<Me | null> {
   const resp = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
   if (resp.status === 401) return null;
   if (!resp.ok) {
     throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for /api/me`);
   }
-  return (await resp.json()) as User;
+  return (await resp.json()) as Me;
 }
 
 export async function logout(): Promise<void> {

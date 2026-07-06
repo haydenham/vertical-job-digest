@@ -1,15 +1,58 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 
-import { loginUrl } from "./api";
 import { useAuth } from "./auth/useAuth";
 import { Dashboard } from "./pages/Dashboard";
+import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Upload } from "./pages/Upload";
 
-// App shell: brand + auth-aware nav chrome, then the routed pages. `VJA_AUTH_REQUIRED` stays off
-// in 9.4, so the dashboard is reachable anonymously; login only gates the upload write path.
+// App shell + auth-aware routing (Phase B, D-064/D-065). Vertical is a property of the logged-in
+// user (from `/api/me`), never a global picker — so every gated route resolves off `useAuth()`:
+//   logged out            → Landing / Login (the dashboard never renders logged-out)
+//   logged in, no profile → /onboarding (pick vertical + upload)
+//   logged in, has profile → /dashboard for *their* vertical
+function Spinner() {
+  return <div className="notice">loading…</div>;
+}
+
+// `/` — the smart root: route each visitor to where they belong (D-065).
+function Root() {
+  const { user, profile, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Landing />;
+  return <Navigate to={profile ? "/dashboard" : "/onboarding"} replace />;
+}
+
+// `/dashboard` — authed + onboarded only; otherwise bounce to login / onboarding.
+function DashboardRoute() {
+  const { user, profile, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!profile) return <Navigate to="/onboarding" replace />;
+  return <Dashboard vertical={profile.vertical} />;
+}
+
+// `/onboarding` — authed + NOT yet onboarded: pick a vertical + upload (the picker mode of Upload).
+function OnboardingRoute() {
+  const { user, profile, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (profile) return <Navigate to="/dashboard" replace />;
+  return <Upload />;
+}
+
+// `/upload` — résumé update for an already-onboarded user: vertical is fixed to theirs (immutable,
+// one-vertical-per-user D-064). No profile yet → send to onboarding instead.
+function UploadRoute() {
+  const { user, profile, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!profile) return <Navigate to="/onboarding" replace />;
+  return <Upload lockedVertical={profile.vertical} />;
+}
+
 export default function App() {
-  const { user, loading, logout } = useAuth();
+  const { user, profile, loading, logout } = useAuth();
 
   return (
     <div className="app">
@@ -20,26 +63,30 @@ export default function App() {
         <nav className="nav">
           {loading ? null : user ? (
             <>
-              <Link to="/upload" className="nav-link">
-                upload résumé
-              </Link>
+              {profile && (
+                <Link to="/upload" className="nav-link">
+                  update résumé
+                </Link>
+              )}
               <span className="nav-user">{user.email}</span>
               <button type="button" className="nav-link as-button" onClick={() => void logout()}>
                 sign out
               </button>
             </>
           ) : (
-            <a href={loginUrl()} className="nav-link">
+            <Link to="/login" className="nav-link">
               sign in
-            </a>
+            </Link>
           )}
         </nav>
       </header>
 
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Root />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/upload" element={<Upload />} />
+        <Route path="/onboarding" element={<OnboardingRoute />} />
+        <Route path="/dashboard" element={<DashboardRoute />} />
+        <Route path="/upload" element={<UploadRoute />} />
       </Routes>
     </div>
   );

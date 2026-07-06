@@ -12,9 +12,10 @@ const mockFetchMe = vi.mocked(fetchMe);
 const mockLogout = vi.mocked(logout);
 
 function Probe() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   if (loading) return <span>loading</span>;
-  return <span>{user ? user.email : "anon"}</span>;
+  if (!user) return <span>anon</span>;
+  return <span>{`${user.email} / ${profile?.vertical ?? "no-profile"}`}</span>;
 }
 
 function LogoutButton() {
@@ -29,14 +30,27 @@ function LogoutButton() {
 describe("AuthProvider", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("exposes the user once /api/me resolves", async () => {
-    mockFetchMe.mockResolvedValue({ id: 1, email: "a@b.co", name: "A" });
+  it("exposes the user + their profile once /api/me resolves", async () => {
+    mockFetchMe.mockResolvedValue({
+      user: { email: "a@b.co", name: "A" },
+      profile: { vertical: "grid_power_software", resume_version: "v1" },
+    });
     render(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
     );
-    expect(await screen.findByText("a@b.co")).toBeInTheDocument();
+    expect(await screen.findByText("a@b.co / grid_power_software")).toBeInTheDocument();
+  });
+
+  it("exposes profile as null when signed in but not onboarded", async () => {
+    mockFetchMe.mockResolvedValue({ user: { email: "a@b.co", name: "A" }, profile: null });
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("a@b.co / no-profile")).toBeInTheDocument();
   });
 
   it("resolves to anonymous when /api/me returns null (401)", async () => {
@@ -50,7 +64,10 @@ describe("AuthProvider", () => {
   });
 
   it("clears the user on logout", async () => {
-    mockFetchMe.mockResolvedValue({ id: 1, email: "a@b.co", name: "A" });
+    mockFetchMe.mockResolvedValue({
+      user: { email: "a@b.co", name: "A" },
+      profile: null,
+    });
     mockLogout.mockResolvedValue();
     render(
       <AuthProvider>
@@ -58,7 +75,7 @@ describe("AuthProvider", () => {
         <LogoutButton />
       </AuthProvider>,
     );
-    await screen.findByText("a@b.co");
+    await screen.findByText(/a@b\.co/);
     await userEvent.click(screen.getByRole("button", { name: "out" }));
     await waitFor(() => expect(screen.getByText("anon")).toBeInTheDocument());
     expect(mockLogout).toHaveBeenCalledOnce();

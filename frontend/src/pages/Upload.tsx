@@ -1,75 +1,79 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
-import { ApiError, fetchVerticals, uploadResume, type ProfileCreated } from "../api";
+import { ApiError, fetchVerticals, uploadResume } from "../api";
 import { useAuth } from "../auth/useAuth";
 
-// Résumé upload (the first write path, D-057). Soft-guarded: no session → bounce to /login (the
-// POST is hard-guarded by `require_user` server-side anyway). On 202 the backfill runs in the
-// background with no status to poll, so the UI is optimistic + offers a manual refresh (the
-// dashboard re-queries on navigation).
-export function Upload() {
-  const { user, loading } = useAuth();
+// Résumé upload — two modes (Phase B):
+//   • onboarding (no `lockedVertical`): pick a vertical + upload; this is the new user's one-time
+//     vertical choice (D-064).
+//   • update (`lockedVertical` set): the vertical is fixed to theirs (immutable, one-vertical), only
+//     the résumé changes.
+// On success it refreshes `/api/me` (so a freshly-created profile lands before routing) then sends
+// the user to their dashboard with `justOnboarded` so the matched view polls the backfill (D-065).
+export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
+  const { user, loading, refresh } = useAuth();
+  const navigate = useNavigate();
   const [verticals, setVerticals] = useState<string[]>([]);
-  const [vertical, setVertical] = useState("");
+  const [picked, setPicked] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<ProfileCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isOnboarding = lockedVertical === undefined;
+
+  // Only the onboarding picker needs the list of joinable verticals; update mode is locked.
   useEffect(() => {
+    if (!isOnboarding) return;
     fetchVerticals()
       .then((vs) => {
         setVerticals(vs);
-        if (vs.length > 0) setVertical(vs[0]);
+        if (vs.length > 0) setPicked(vs[0]);
       })
       .catch((e: unknown) => setError(String(e)));
-  }, []);
+  }, [isOnboarding]);
 
   if (loading) return <div className="notice">loading…</div>;
   if (user === null) return <Navigate to="/login" replace />;
+
+  const vertical = lockedVertical ?? picked;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (file === null || vertical === "") return;
     setSubmitting(true);
     setError(null);
-    setCreated(null);
     try {
-      setCreated(await uploadResume(vertical, file));
+      await uploadResume(vertical, file);
+      await refresh(); // pick up the new/updated profile before the dashboard routes on it
+      navigate("/dashboard", { state: { justOnboarded: true } });
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
       setSubmitting(false);
     }
   }
 
-  if (created !== null) {
-    return (
-      <div className="panel">
-        <p className="success-line">✓ résumé received (v{created.resume_version})</p>
-        <p className="auth-blurb">
-          Matching runs in the background — your matched roles appear over the next few minutes, and
-          the full set after tonight&apos;s run.
-        </p>
-        <Link className="btn btn-primary" to="/">
-          View dashboard
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <form className="panel upload-form" onSubmit={onSubmit}>
+      <p className="auth-blurb">
+        {isOnboarding
+          ? "Pick your vertical and upload a résumé — we’ll match new roles to it nightly."
+          : "Upload a new résumé; matching re-runs against it."}
+      </p>
+
       <label className="field">
         <span className="label">vertical</span>
-        <select value={vertical} onChange={(e) => setVertical(e.target.value)}>
-          {verticals.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        {isOnboarding ? (
+          <select value={picked} onChange={(e) => setPicked(e.target.value)}>
+            {verticals.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="accent">{lockedVertical}</span>
+        )}
       </label>
 
       <label className="field">

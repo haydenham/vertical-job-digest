@@ -53,11 +53,17 @@ from vja.api.auth import (
 )
 from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality
-from vja.db.profiles import Profile, active_profiles, active_verticals, get_profile, upsert_profile
+from vja.db.profiles import (
+    Profile,
+    active_profile_for_user,
+    active_profiles,
+    get_profile,
+    upsert_profile,
+)
 from vja.db.users import User, upsert_user_by_google
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
-from vja.verticals import ConfigError, load_vertical_config
+from vja.verticals import ConfigError, available_verticals, load_vertical_config
 
 
 def frontend_dist_dir() -> Path:
@@ -123,6 +129,28 @@ class ProfileCreated(BaseModel):
     profile_id: int
     vertical: str
     resume_version: str
+
+
+class MeUser(BaseModel):
+    """The authed identity in the `/api/me` payload."""
+
+    email: str
+    name: str | None
+
+
+class MeProfile(BaseModel):
+    """The user's one active profile (D-064), or `None` in `MeResponse` when not yet onboarded."""
+
+    vertical: str
+    resume_version: str
+
+
+class MeResponse(BaseModel):
+    """`GET /api/me` — the single source of truth the SPA routes on (D-065): who you are + your one
+    vertical (or `profile: null` ⇒ signed in but not onboarded → send to onboarding, not a 404)."""
+
+    user: MeUser
+    profile: MeProfile | None
 
 
 class PostingsResponse(BaseModel):
@@ -266,7 +294,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if oauth is None:
             raise HTTPException(503, "OAuth not configured (set GOOGLE_CLIENT_ID/SECRET)")
         redirect_uri = oauth_redirect_uri(request)
-        resp = await oauth.google.authorize_redirect(request, redirect_uri)
+        # prompt=select_account: force Google's account chooser so a shared browser can't silently
+        # log the wrong Google session back in (D-065). Authlib forwards it as an auth param.
+        resp = await oauth.google.authorize_redirect(request, redirect_uri, prompt="select_account")
         return cast("RedirectResponse", resp)
 
     @app.get("/auth/callback", name="auth_callback")
@@ -292,17 +322,35 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/api/me")
-    def me(request: Request) -> dict[str, object]:
-        """The authenticated user, or 401 — the frontend's session probe (9.4)."""
-        user = get_current_user(request)
+    def me(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User | None, Depends(get_current_user)],
+    ) -> MeResponse:
+        """The authed user + their one profile (or null) — the SPA routes on this (D-065).
+
+        No session → 401 (auth is required in prod). `profile` is null when the user has signed in
+        but not yet onboarded (picked a vertical + uploaded a résumé), so the SPA sends them to
+        onboarding instead of a 404ing dashboard (the D-064 fix)."""
         if user is None:
             raise HTTPException(401, "not authenticated")
-        return {"id": user.id, "email": user.email, "name": user.name}
+        profile = active_profile_for_user(engine, user.email)
+        return MeResponse(
+            user=MeUser(email=user.email, name=user.name),
+            profile=(
+                MeProfile(vertical=profile.vertical, resume_version=profile.resume_version)
+                if profile is not None
+                else None
+            ),
+        )
 
     @app.get("/api/verticals")
-    def verticals(engine: Annotated[Engine, Depends(_get_engine)]) -> list[str]:
-        """Active verticals — the frontend's vertical picker, so no slug is hardcoded (D-042)."""
-        return active_verticals(engine)
+    def verticals() -> list[str]:
+        """Configured verticals available to join — the onboarding picker's source (D-064/D-065).
+
+        Config-driven, not active-profile-driven: a vertical must stay joinable even with zero
+        profiles in it, else B-4 (deactivating the aviation seed) would hide aviation from a new
+        aviation user. The dashboard routes on `/api/me`, not on this list (the D-064 fix)."""
+        return available_verticals()
 
     @app.get("/api/postings")
     def postings(
@@ -367,6 +415,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             cfg = load_vertical_config(vertical)
         except ConfigError as exc:
             raise HTTPException(404, f"unknown vertical {vertical!r}") from exc
+
+        # One vertical per user (D-064): reject a second vertical. Re-uploading the SAME vertical is
+        # a résumé update (idempotent → new resume_version, D-033), so only a *different* one 409s.
+        existing = active_profile_for_user(engine, user.email)
+        if existing is not None and existing.vertical != vertical:
+            raise HTTPException(
+                409,
+                f"already onboarded to {existing.vertical!r}; one vertical per user "
+                f"(changing verticals is a manual/support action)",
+            )
 
         profile_id = upsert_profile(
             engine,

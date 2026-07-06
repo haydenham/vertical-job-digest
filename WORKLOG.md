@@ -5,6 +5,46 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-06 — Phase B · onboarding / auth-UX overhaul (D-064 + D-065 → done; the beta blocker)
+
+**The real fix behind the broken fresh-account flow: vertical is now a property of the logged-in user, not a
+global picker.** Branch `feat/phase-b-onboarding` (off `main` @ `ccee954`). Built backend-first (paused for
+Hayden's review + commit), then the frontend.
+
+**B-1 backend (committed separately):** new `active_profile_for_user(engine, email)` (the SPA's routing source);
+`GET /api/me` reshaped → `{user, profile|null}` (refactored to inject `get_current_user` via `Depends` so it's
+test-overridable); **one-vertical enforcement** on `POST /api/profiles` (different vertical → **409**;
+same-vertical re-upload stays an idempotent résumé update); **`prompt="select_account"`** on the OAuth redirect.
++7 tests / 2 updated.
+
+**B-2/B-3 frontend:** `App.tsx` is now real route guards off `useAuth()` — `Landing` (logged-out, kills the
+401-as-error leak) · `/login` · `/onboarding` (pick vertical + upload) · `/dashboard` (their vertical) ·
+`/upload` (résumé update, vertical **locked**). `api.ts`/`AuthProvider`/`useAuth` carry `{user, profile}` off
+`/api/me`. **`Dashboard` takes its vertical as a prop from the profile** — dropped `fetchVerticals()`/`vs[0]`,
+which **was the 404 bug**. **Matched-view poll (B-3):** on `justOnboarded` (router state set on the
+onboarding→dashboard navigate), bounded client-side poll (`10s × ~2.5min`) of the backfill, then "full results
+after tonight's run" — no backend push (D-057). Onboarding success **refreshes `/api/me`** before routing so the
+new profile lands (else the guard would bounce back to onboarding).
+
+**Caught in build (not in the plan):** using `active_verticals` (active-profile-driven) for the onboarding
+picker would have **hidden aviation** once B-4 deactivates its seed profile → an aviation beta user couldn't
+onboard (chicken-and-egg). **Fix:** repointed `GET /api/verticals` to **config-driven `available_verticals()`**
+(joinable with zero profiles) and **removed the now-dead `profiles.active_verticals`**.
+
+**Decisions:** D-064 + D-065 → **done**. INVARIANTS: SPA-routing line rewritten (guards + `/api/me` +
+config-driven picker), résumé-upload line (onboarding/locked + refresh→route + matched poll + 409), one-vertical
+line (enforced, not "known defect"). `docs/13` Phase B ticked.
+
+**Verified:** Python gate — ruff/format + mypy (45 files) + import-linter (1/0) + **379 pytest** (+7). Frontend
+gate — eslint clean, `tsc --noEmit` clean, **vitest 45** (+ new guard/poll tests), production `npm run build` ok.
+
+**Next:** **B-4 prod data cleanup** (Hayden runs against Neon — deactivate the aviation seed profile on
+`haydenham10@gmail.com`; grid stays; SQL provided) → deploy via `./deploy/gcp/ship.sh` → **re-run the
+fresh-account walkthrough** before beta invites. Also still open from go-live closeout: email E2E +
+`/security-review`.
+
+---
+
 ## 2026-07-06 — Phase A · thin scripted deploy `ship.sh` (D-066 → done)
 
 **First of the two pre-beta blocks (`docs/13`): the thin redeploy script, so shipping Phase B — the onboarding
