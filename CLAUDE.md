@@ -164,7 +164,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   deep-link catch-all). **Plan of record: `docs/12-cloud-deploy-plan.md`** — four sub-blocks **9.5a app
   hardening** (code) · **9.5b containerization** (code) · **9.5c provision** (GCP+Neon+domain) · **9.5d
   cutover/go-live**; locked: Neon (not Cloud SQL), Cloud Run, a `.com` via Cloudflare, fresh DB + suppressed
-  baseline run.
+  baseline run. **9.5a–d ✅ — go-live infra done (D-067):** live on `role-feed.com`, Postgres/Neon, auth ON,
+  nightly Job+Scheduler running (closeout still open: email E2E + `/security-review`).
+- **Phase 9.x — onboarding overhaul + thin ship-script (NEXT; blocks beta; `docs/13`).** The deployed
+  onboarding/dashboard flow is broken for a fresh account — it treats vertical as a **global** picker, violating
+  the standing **one-vertical-per-user** policy (D-064), so users 404. Fix = **Phase A** thin scripted deploy
+  (D-066) → **Phase B** onboarding overhaul (D-065: static landing → Google auth → pick-vertical+upload → their
+  dashboard; `/api/me`, route guards, one-vertical enforcement). Then invite the two beta users.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch.

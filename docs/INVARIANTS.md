@@ -106,8 +106,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
   `/app/frontend/dist` in the container, where the non-editable install moves the package off the repo
   layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
-  mount gated on a real `index.html`, D-059/D-060). The frontend never hardcodes a vertical —
-  `GET /api/verticals` drives the picker. **Prod ships as one multi-stage image** (`Dockerfile`; SPA built in
+  mount gated on a real `index.html`, D-059/D-060). **One vertical per user (D-064):** the SPA routes each user
+  to *their own* vertical (via `/api/me`), not a cross-user picker. *⚠ Known defect being fixed: the currently
+  **deployed** build still uses a global `GET /api/verticals` picker defaulting to the sorted-first vertical, so
+  other-vertical users 404 — the onboarding overhaul (D-065, `docs/13` Phase B) is the fix.* **Prod ships as one
+  multi-stage image** (`Dockerfile`; SPA built in
   a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**: `vja-api`
   (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042, D-058,
   D-059, D-060)
@@ -149,6 +152,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   login. **Identity still anchors on email** (D-027): `upsert_user_by_google` adopts a pre-existing
   email-only row and **backfills `profiles.user_id` by email**, so the seed profile attaches on first
   login with no data migration. `profiles.user_email` is retained (match/digest recipient unchanged). (D-055)
+- **One vertical per user (policy — D-064).** A user has exactly **one** active profile, in **one** vertical,
+  chosen **once at signup** and **immutable** (changing verticals = a manual/support action, out of scope for
+  v1). The dashboard shows *that* user's vertical — there is **no cross-user vertical picker**; the write path
+  rejects a second vertical. *This was always policy but undocumented → the deployed SPA violates it (global
+  picker → 404); fix = the D-065 onboarding overhaul (`docs/13` Phase B).* (D-064)
 - **Login is Authlib OIDC → a signed-cookie session** (`SessionMiddleware`, secret `VJA_SESSION_SECRET`).
   Login routes are **inert (503) until `GOOGLE_CLIENT_*` are set**; the real Google round-trip is a manual
   check, the suite mocks the token exchange. Cookie hardening (`Secure` via `VJA_COOKIE_SECURE`, `SameSite=Lax`,
@@ -156,9 +164,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   env-gated** (D-059); the actual prod flips + redirect-URI registration land at the deploy (9.5c/d). (D-055, D-059)
 - **The read API resolves the profile from the authenticated user** (the docs/11 §2 seam): authed → *that
   user's* profile for the vertical, another user's `profile_id` → 403; unauthenticated → the single-active
-  default. **Hard enforcement is gated by `VJA_AUTH_REQUIRED`** (default off) — on ⇒ no session is 401;
-  **stays off through 9.4** (the Rolefeed dashboard is anonymous-readable; only `/upload` needs login),
-  flips on at the 9.5 deploy, not re-architected. (D-055, D-005, D-058)
+  default. **Hard enforcement is gated by `VJA_AUTH_REQUIRED`** — on ⇒ no session is 401. **Now ON in prod**
+  (flipped at the 9.5d go-live, D-067): anonymous `/api/postings` → 401; the dashboard requires login. (Default
+  stays off for local dev/tests; it was off through 9.4, not re-architected.) (D-055, D-005, D-058, D-067)
 - **Secrets are env-only** (`GOOGLE_CLIENT_ID/SECRET`, `VJA_SESSION_SECRET`), never in the repo — a
   platform secret store is a config swap. (core, D-055)
 - **Résumé upload is the first write endpoint:** `POST /api/profiles` (multipart), behind

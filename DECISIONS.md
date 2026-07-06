@@ -1066,5 +1066,58 @@ green. Rebuilt image `b2a74fa` redeployed (service + Job, Job also given `--task
 for the real backlog run's duration); execution `vja-nightly-295wd` confirmed hitting `api.anthropic.com` in the
 extraction phase. **Follow-up:** consider auditing for any other `Path(__file__).parents[…]` repo-relative
 resolutions that assume the src layout (the two known — frontend + verticals — are now both env-guarded).
-**Status:** on branch `fix/vertical-config-path-in-container`; merge to `main` pending so deployed `b2a74fa`
-matches the default branch.
+**Status:** accepted; **merged to `main` via PR #49** (`329ff1f`) — deployed `b2a74fa` matches the default branch.
+
+### D-064 · Phase 9 · One vertical per user — made explicit (policy always held) · accepted · 2026-07-06
+**A user belongs to exactly one vertical.** This has been the product policy since inception (a user is matched
+against one bounded employer universe — the moat), but it was **never written down**, and the frontend drifted
+into treating "vertical" as a **global, cross-user picker**: `active_verticals()` (`src/vja/db/profiles.py:131`)
+returns every vertical with any active profile, and `Dashboard.tsx` defaults to the sorted-first
+(`aviation_software`) regardless of who is logged in — so a grid user lands on aviation and 404s. **Decision:**
+one **active** profile per user, in one vertical, chosen **once at signup** and **immutable** — changing
+verticals is a manual/support action, **out of scope for v1** (no switch UI). The dashboard shows *that user's*
+vertical; there is **no cross-user vertical picker**. Enforcement: `/api/me` drives per-user routing and the
+write path (`POST /api/profiles`) rejects a second vertical for a user who already has one. **Supersedes** the
+implied-multi-vertical reading of D-042's "`GET /api/verticals` drives the picker" — that endpoint stays for
+admin/internal use but no longer drives per-user routing. **Why:** it's the product's actual model; the global
+picker was a documentation/communication lapse, not a design change. **Status:** accepted; built in the
+onboarding overhaul (`docs/13` Phase B, D-065).
+
+### D-065 · Phase 9 · Onboarding / auth-UX overhaul — target flow · accepted · 2026-07-06
+The deployed flow is broken for a fresh account: logged out, `/` renders a **401 as an error string** (no login
+landing); after login, the **global-vertical picker 404s** (D-064); the vertical chosen at upload is ignored;
+there is **no onboarding gate** routing a profile-less user to upload. **Decision — target flow** (Hayden,
+2026-07-06): (1) a **static landing page** (minimal placeholder + login CTA) — the dashboard is **never rendered
+logged-out**; (2) **Google-auth signup**; (3) **one page: pick vertical + upload résumé**; (4) **route to their
+dashboard** — *cleaned/all* renders immediately, *matched* shows a **loading indicator** resolved by a
+**bounded client-side poll** (no backend push/status endpoint — honors D-057), timing out to *"full results
+after tonight's run."* Backend adds **`GET /api/me`** (user + their single vertical) and **one-vertical
+enforcement**; frontend adds **route guards** (unauth→landing/login, authed+no-profile→onboarding,
+authed+profile→their dashboard) and **`prompt="select_account"`** on `/auth/login` (Google was silently reusing
+one session). **Why:** the current UX "does not work" for beta users — this is a **launch blocker**, ahead of
+inviting them. **Status:** planned (`docs/13` Phase B); blocks the beta onboarding.
+
+### D-066 · Phase 9 · Thin scripted deploy before the onboarding block; full CI/CD deferred · accepted · 2026-07-06
+To ship the onboarding fix (D-065) **reliably today** without a CI/CD detour: a **single idempotent deploy
+script** (`deploy/gcp/ship.sh` or a Make target) that captures the manual cutover steps — `docker build
+--platform linux/amd64` → push → `gcloud run deploy` (service) → `gcloud run jobs update` (nightly, same image)
+→ health smoke — so no deploy forgets the platform flag, a secret mount, or the Job update. **Rejected for now:**
+full merge-triggered CI/CD (the `docs/11` §5 "9.6" auto-deploy) — a bigger project that would *delay* today's
+ship; deferred until iteration churn justifies it. **Sequence:** ship-script phase (A) → onboarding-fix phase
+(B), both `docs/13`. **Why:** de-risk the many deploys of the hardening week without a multi-day infra detour.
+**Status:** accepted (`docs/13` Phase A).
+
+### D-067 · Phase 9 · 9.5d go-live complete; "green mapping / dead TLS" was a corporate-network block · accepted · 2026-07-06
+9.5d executed end-to-end: image built/pushed, `alembic upgrade head` on Neon, baseline seed (**9,773 postings /
+2 profiles**), Cloud Run service deployed, `*.run.app` smoke + Google login, custom domain **`role-feed.com`**
+mapped (cert green), nightly **Job + Scheduler** (`0 6 * * *` America/Chicago), and the **prod guards flipped**:
+`VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`, `VJA_PUBLIC_BASE_URL=https://role-feed.com` (verified: anon
+`/api/postings` → 401). **Operational lesson (don't re-panic):** `role-feed.com` reset TLS **right after the
+ClientHello** from the office network for ~an hour, while the Cloud Run mapping read `Ready` +
+`CertificateProvisioned` and DNS was correct (DNS-only, Google anycast IPs). Cause was **corporate wifi blocking
+newly-registered domains** (a common firewall category), **not** Cloud Run — proven by success over a phone
+hotspot (and it typically ages out ~30 days post-registration). A delete+recreate of the mapping was a red
+herring but harmless. **Mitigation:** Hayden uses hotspot or has IT allowlist the domain; beta users on their
+own networks are unaffected. **Remaining 9.5d closeout:** real email E2E + `/security-review`. **Caveat:** the
+*cloud cutover* is done, but the **product is not yet usable by beta users** — the onboarding UX (D-065) is a
+blocker. **Status:** accepted; go-live infra done, closeout + onboarding tracked in `docs/13`.

@@ -5,6 +5,45 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-06 — Phase 9 · 9.5d go-live finished + found the onboarding flow is broken; planned the fix (D-064–067)
+
+**Session picked up mid-cutover, live with Hayden. Net: the cloud cutover is done and the app is live on
+`role-feed.com` with auth on — but a fresh-account walkthrough exposed that the onboarding/dashboard flow is
+broken, so we specced the fix instead of inviting beta users.** Branch `docs/onboarding-and-shipping-plan`
+(docs only; no code/ops in-session beyond read-only diagnostics + the two Hayden-run ops noted below).
+
+**Go-live closeout (D-067):** Hayden flipped the prod guards (`VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`,
+`VJA_PUBLIC_BASE_URL=https://role-feed.com`); confirmed anon `/api/postings` → **401**. The scary
+**`role-feed.com` TLS reset** (RST right after ClientHello, from two networks) was **not** Cloud Run — the
+mapping read `Ready`/`CertificateProvisioned`, DNS correct — it was **office wifi blocking a newly-registered
+domain**; **works over hotspot.** (A delete+recreate of the mapping was a red herring; harmless.) Remaining
+closeout: real email E2E + `/security-review`.
+
+**The real finding — onboarding is broken (D-064/065):** a fresh Google account showed every step wrong:
+logged-out `/` renders a **401 as an error string** (no login landing); after login the dashboard **404s**
+because `active_verticals()` returns a **global, cross-user** vertical list and `Dashboard.tsx` defaults to the
+sorted-first (`aviation_software`) regardless of user; the vertical picked at upload is ignored; no onboarding
+gate. **Root cause:** the SPA treats vertical as a global picker, contradicting the standing (but never
+documented) policy **one vertical per user** — a documentation/communication lapse, now fixed in the docs.
+
+**Decisions:** **D-064** one-vertical-per-user made explicit (fixed at signup, immutable, no cross-user picker).
+**D-065** onboarding overhaul target flow: static landing (+login CTA) → Google auth → **one page: pick vertical
++ upload résumé** → their dashboard (cleaned immediate; matched = loading via a bounded client-side poll, no new
+backend; timeout → "full results after tonight's run"); adds `/api/me`, route guards, one-vertical enforcement,
+`prompt="select_account"`. **D-066** ship a **thin scripted deploy** (`ship.sh`) before the fix, not full CI/CD
+(deferred "9.6"). **D-067** go-live done + the corporate-wifi lesson. INVARIANTS updated: one-vertical rule
+added, auth-required now **ON in prod**, the deployed global-picker flagged as a known defect.
+
+**New doc:** `docs/13-onboarding-and-shipping-plan.md` — the plan of record for the next two blocks (**A** thin
+ship-script → **B** onboarding overhaul), the beta-onboarding checklist, and the later roadmap (9.6 CI/CD,
+Phase 10 discovery agent + review queue, beta hardening = expand the employer universe).
+
+**Next (post-reset):** plan/build **Phase A** (ship-script), then **Phase B** (onboarding overhaul — the beta
+blocker). Also pending: deactivate one of Hayden's two seed profiles (the dual-vertical anomaly under one email,
+D-064 §B-4), finish go-live closeout (email E2E + security review), and merge this docs branch.
+
+---
+
 ## 2026-07-02 — Phase 9 · 9.5d go-live (in progress): cloud cutover + container config-path bug fix (D-063)
 
 **Executed most of `deploy/gcp/CUTOVER.md` live with Hayden; hit + fixed a real cutover-blocking bug.** Branch
