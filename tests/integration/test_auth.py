@@ -98,8 +98,11 @@ def test_login_redirects_to_google(
 
     captured: dict[str, object] = {}
 
-    async def fake_authorize_redirect(request: object, redirect_uri: object) -> RedirectResponse:
+    async def fake_authorize_redirect(
+        request: object, redirect_uri: object, **kwargs: object
+    ) -> RedirectResponse:
         captured["redirect_uri"] = str(redirect_uri)
+        captured["kwargs"] = kwargs
         return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?client_id=test")
 
     monkeypatch.setattr(app.state.oauth.google, "authorize_redirect", fake_authorize_redirect)
@@ -108,6 +111,8 @@ def test_login_redirects_to_google(
     assert resp.status_code in (302, 307)
     assert "accounts.google.com" in resp.headers["location"]
     assert str(captured["redirect_uri"]).endswith("/auth/callback")  # our callback wired through
+    # Account chooser forced (D-065) so a shared browser can't silently reuse a Google session.
+    assert captured["kwargs"] == {"prompt": "select_account"}
 
 
 def test_callback_creates_user_links_profile_and_opens_session(
@@ -128,14 +133,15 @@ def test_callback_creates_user_links_profile_and_opens_session(
     # Session opened → /api/me resolves (TestClient carries the cookie across requests).
     me = client.get("/api/me")
     assert me.status_code == 200
-    assert me.json()["email"] == _EMAIL
+    assert me.json()["user"]["email"] == _EMAIL
 
-    # Profile linked to the new user.
+    # Profile linked to the new user (the profile's user_id points at the upserted users row).
     with migrated_engine.connect() as conn:
         linked = conn.execute(
             select(profiles.c.user_id).where(profiles.c.user_email == _EMAIL)
         ).scalar_one()
-    assert linked == me.json()["id"]
+        user_id = conn.execute(select(users.c.id).where(users.c.email == _EMAIL)).scalar_one()
+    assert linked == user_id
 
 
 def test_callback_400_when_userinfo_incomplete(

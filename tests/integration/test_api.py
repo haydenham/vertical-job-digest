@@ -361,3 +361,63 @@ def test_upload_oversize_413(migrated_engine: Engine, monkeypatch: pytest.Monkey
     )
     assert resp.status_code == 413
     assert calls == []
+
+
+# --- /api/me: the SPA's routing source of truth (Phase B, D-064/D-065) ------------------------
+# /api/me now returns {user, profile|null} so the SPA routes to *this user's* vertical instead of a
+# global picker. get_current_user is injected via Depends, so _authed_client's override applies.
+
+
+def test_me_returns_user_and_profile(migrated_engine: Engine) -> None:
+    """Authed + onboarded → the user + their one vertical/resume_version (the SPA routes on it)."""
+    mine = _profile(migrated_engine, email="me@example.com")
+    resp = _authed_client(migrated_engine, "me@example.com").get("/api/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["user"]["email"] == "me@example.com"
+    assert body["profile"] == {
+        "vertical": _VERTICAL,
+        "resume_version": mine.resume_version,
+    }
+
+
+def test_me_profile_null_when_not_onboarded(migrated_engine: Engine) -> None:
+    """Authed but no profile yet → profile is null (⇒ SPA sends them to onboarding, not a 404)."""
+    resp = _authed_client(migrated_engine, "newuser@example.com").get("/api/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["user"]["email"] == "newuser@example.com"
+    assert body["profile"] is None
+
+
+# --- one-vertical-per-user enforcement at the write path (Phase B, D-064) ----------------------
+
+
+def test_upload_second_vertical_rejected_409(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A user already onboarded to grid uploading an aviation résumé → 409; backfill never runs."""
+    user = _user(migrated_engine)
+    _profile(migrated_engine, email=user.email)  # active grid profile
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    resp = client.post("/api/profiles", data={"vertical": "aviation_software"}, files=_TEXT_FILE)
+    assert resp.status_code == 409
+    assert "one vertical per user" in resp.json()["detail"]
+    assert calls == []
+
+
+def test_reupload_same_vertical_updates_resume(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-upload of the SAME vertical is an idempotent résumé update → 202 + new resume_version."""
+    user = _user(migrated_engine)
+    original = _profile(migrated_engine, email=user.email)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["vertical"] == _VERTICAL
+    assert body["resume_version"] != original.resume_version  # résumé text changed → new version
+    assert len(calls) == 1  # backfill runs for the update

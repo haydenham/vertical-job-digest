@@ -7,7 +7,12 @@ deactivates the prior one; `active_profiles` returns only the current one.
 
 from sqlalchemy import Engine, func, select
 
-from vja.db.profiles import active_profiles, resume_version, upsert_profile
+from vja.db.profiles import (
+    active_profile_for_user,
+    active_profiles,
+    resume_version,
+    upsert_profile,
+)
 from vja.db.schema import profiles
 
 
@@ -69,3 +74,25 @@ def test_active_profiles_isolates_vertical(migrated_engine: Engine) -> None:
     )
     assert len(active_profiles(migrated_engine, "grid_power_software")) == 1
     assert len(active_profiles(migrated_engine, "aviation_software")) == 1
+
+
+def test_active_profile_for_user_returns_the_one(migrated_engine: Engine) -> None:
+    """The SPA-routing query: a user's single active profile across verticals (D-064)."""
+    pid = _load(migrated_engine, "RESUME ONE")
+    prof = active_profile_for_user(migrated_engine, "me@example.com")
+    assert prof is not None
+    assert prof.id == pid
+    assert prof.vertical == "grid_power_software"
+
+
+def test_active_profile_for_user_none_when_absent(migrated_engine: Engine) -> None:
+    assert active_profile_for_user(migrated_engine, "nobody@example.com") is None
+
+
+def test_active_profile_for_user_ignores_deactivated(migrated_engine: Engine) -> None:
+    """After a résumé update the prior version is inactive; the query returns only the active."""
+    _load(migrated_engine, "RESUME ONE")
+    second = _load(migrated_engine, "RESUME TWO (edited)")
+    prof = active_profile_for_user(migrated_engine, "me@example.com")
+    assert prof is not None
+    assert prof.id == second

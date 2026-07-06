@@ -147,3 +147,20 @@ def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [_row_to_profile(dict(row)) for row in rows]
+
+
+def active_profile_for_user(engine: Engine, user_email: str) -> Profile | None:
+    """This user's single active profile across all verticals, or None (D-064: one per user).
+
+    The source of truth the SPA routes on (`/api/me`) — it answers "what's *my* vertical?" so the
+    dashboard never guesses from a global picker. One-vertical-per-user means at most one row; a
+    lingering pre-B-4 dual-profile anomaly returns a stable first (ordered) rather than raising, so
+    a stray legacy row can't 500 the session probe."""
+    stmt = (
+        select(*_PROFILE_COLS)
+        .where(profiles.c.user_email == user_email, profiles.c.active == 1)
+        .order_by(profiles.c.vertical)
+    )
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().first()
+    return _row_to_profile(dict(row)) if row is not None else None
