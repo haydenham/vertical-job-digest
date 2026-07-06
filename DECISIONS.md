@@ -1105,7 +1105,10 @@ script** (`deploy/gcp/ship.sh` or a Make target) that captures the manual cutove
 full merge-triggered CI/CD (the `docs/11` §5 "9.6" auto-deploy) — a bigger project that would *delay* today's
 ship; deferred until iteration churn justifies it. **Sequence:** ship-script phase (A) → onboarding-fix phase
 (B), both `docs/13`. **Why:** de-risk the many deploys of the hardening week without a multi-day infra detour.
-**Status:** accepted (`docs/13` Phase A).
+**Status:** **done** — `deploy/gcp/ship.sh` shipped (build → push → deploy service → update Job → `/api/health`
++ anon-401 auth-guard smoke; captures prior revision → prints the `update-traffic` rollback; preserves the guard
+env vars, never sets them). Redeploy-only (schema/seed/domain stay manual, CUTOVER §3). Docs: `deploy/gcp/README.md`
+"Redeploying (`ship.sh`)". Full CI/CD ("9.6") still deferred.
 
 ### D-067 · Phase 9 · 9.5d go-live complete; "green mapping / dead TLS" was a corporate-network block · accepted · 2026-07-06
 9.5d executed end-to-end: image built/pushed, `alembic upgrade head` on Neon, baseline seed (**9,773 postings /

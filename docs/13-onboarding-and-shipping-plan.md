@@ -11,7 +11,8 @@ enforced (`VJA_AUTH_REQUIRED=1`), nightly Job + Scheduler running, digests sendi
 **But the onboarding flow is broken for a fresh account** (see Phase B), which is a **blocker for inviting beta
 users.** Two blocks close that gap, in order:
 
-- **Phase A — thin scripted deploy** (ship reliably, ~30 min). Ships Phase B today. (D-066)
+- **Phase A — thin scripted deploy** (ship reliably, ~30 min). Ships Phase B today. (D-066) — **✅ built**
+  (`deploy/gcp/ship.sh`; DoD's no-op-rebuild deploy is Hayden-run, needs cloud creds).
 - **Phase B — onboarding / auth-UX overhaul** (the real fix). (D-064, D-065)
 
 Everything below the two blocks (discovery agent + review queue, coverage expansion, hardening) is the
@@ -74,7 +75,14 @@ the script — it references Secret Manager by name, same as CUTOVER.
 **DoD:** the script deploys a no-op rebuild end-to-end (service + job on the new image), health green, rollback
 note (`update-traffic`) documented next to it. Docs: a short `deploy/gcp/` README line + this checkbox.
 
-**Open:** whether to also snapshot/echo the current revision for one-command rollback (nice-to-have).
+**✅ Built** (`deploy/gcp/ship.sh`, `feat/phase-a-ship-script`): build (`--platform linux/amd64`) → push →
+capture prior revision → deploy service (full CUTOVER §5 config, no env-var writes → guards preserved) → update
+`vja-nightly` Job → smoke (`/api/health` + anon `/api/postings?vertical=…` → **401**, the guard-survived
+tripwire) → print rollback command. README section added. **Remaining for DoD:** Hayden runs the no-op-rebuild
+deploy (needs cloud creds; not runnable in-sandbox — outward-facing prod deploy).
+
+**Resolved (was open):** yes — the script snapshots the prior serving revision *before* deploy and prints the
+`update-traffic` one-command rollback on success.
 
 ---
 
