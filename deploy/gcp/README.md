@@ -176,3 +176,35 @@ The 9.5d image push target: `${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/r
 (`vja-nightly`) + Cloud Scheduler trigger; map the custom domain; `alembic upgrade head` on Neon;
 suppressed baseline run; load Hayden's profile; flip `VJA_AUTH_REQUIRED=1` + `VJA_COOKIE_SECURE=1`;
 `/security-review`. Full sketch in `docs/12-cloud-deploy-plan.md` §9.5d.
+
+---
+
+## Redeploying (`ship.sh`) — Phase A / D-066
+
+Once 9.5c+9.5d are done and the `rolefeed` service + `vja-nightly` Job exist, **routine code
+redeploys are one command**:
+
+```sh
+./deploy/gcp/ship.sh          # build → push → deploy service → update Job → smoke
+./deploy/gcp/ship.sh --force  # skip the dirty-working-tree confirmation
+```
+
+It captures the `CUTOVER.md` flags so no deploy forgets `--platform linux/amd64`, a secret mount, or
+the Job image update: builds+pushes the image tagged with the current short SHA, re-asserts the full
+proven service/Job config (secrets, SA, `--allow-unauthenticated`), then smokes `/api/health` and an
+anonymous `/api/postings?vertical=…` → **401** to prove the auth guard survived. Locked values
+(`PROJECT_ID`/`REGION`/`AR_REPO`/`RUNTIME_SA`) are env-overridable defaults; **no secret values live in
+the script** (Secret Manager by name only).
+
+**Guards are preserved, never set** — the script passes no `--set-env-vars`, so `VJA_AUTH_REQUIRED` /
+`VJA_COOKIE_SECURE` / `VJA_PUBLIC_BASE_URL` (CUTOVER §9) carry across untouched; it can't reopen auth.
+On a clean deploy it prints the one-command **rollback** naming the prior revision:
+
+```sh
+gcloud run services update-traffic rolefeed --region us-central1 --to-revisions=<PREV>=100
+```
+
+**Scope:** redeploy of already-provisioned resources only. It does **not** migrate the schema
+(`alembic upgrade head` stays a deliberate manual step — CUTOVER §3), seed, or change the domain /
+OAuth redirect URIs. First-time stand-up is still `CUTOVER.md`. This is the thin ship-script (D-066),
+**not** CI/CD — merge-triggered auto-deploy is the deferred 9.6.

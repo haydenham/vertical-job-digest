@@ -5,6 +5,43 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-06 — Phase A · thin scripted deploy `ship.sh` (D-066 → done)
+
+**First of the two pre-beta blocks (`docs/13`): the thin redeploy script, so shipping Phase B — the onboarding
+overhaul — is one command, not a hand-walk of `CUTOVER.md`.** Branch `feat/phase-a-ship-script` (off `main`
+@ `0e5beb1`). Code-only + docs; no cloud ops run in-session.
+
+**Did:** `deploy/gcp/ship.sh` (new, executable) — build (`--platform linux/amd64`, the mandatory arm64→amd64
+footgun) → push (tag = short SHA) → capture prior serving revision → `gcloud run deploy rolefeed` (re-asserts the
+full CUTOVER §5 config: 8 secrets, runtime SA, `--allow-unauthenticated`) → `gcloud run jobs update vja-nightly`
+(same image, D-031 trigger-swap; 5 secrets, no OAuth/session) → smoke (`/api/health` = ok **and** anon
+`/api/postings?vertical=grid_power_software` → **401**) → print the `update-traffic` rollback naming the prior
+revision. **Key contract:** the script passes **no** `--set-env-vars`, so the prod guards (`VJA_AUTH_REQUIRED`/
+`VJA_COOKIE_SECURE`/`VJA_PUBLIC_BASE_URL`, CUTOVER §9) are preserved untouched — it can't reopen auth; the 401
+smoke is the tripwire if that ever regresses. No secret **values** in the script (Secret Manager by name);
+locked values are env-overridable defaults. Redeploy-only — schema (`alembic`), seed, domain, OAuth URIs stay
+manual (CUTOVER). Dirty-tree → confirm/`--force` (tag is the SHA). `deploy/gcp/README.md` gains a "Redeploying
+(`ship.sh`)" section.
+
+**Design calls (approved in plan):** re-assert full config each deploy (self-healing vs drift; cost = the
+`--set-secrets` replace-semantics, kept identical to CUTOVER + loudly commented) over image-only; guards
+preserved-never-set; rollback = capture-prior + print (no auto-rollback).
+
+**Decisions:** **D-066 → done.** No new INVARIANT (a redeploy script isn't a cross-cutting rule; CUTOVER +
+README cover it). `docs/13` Phase A ticked.
+
+**Verified:** `bash -n` clean; `chmod +x`. `shellcheck` not installed locally. **Cannot run the script here** —
+no gcloud/docker/creds in-sandbox, and it's an outward-facing prod deploy. DoD's "no-op rebuild deploys
+end-to-end" is Hayden-run.
+
+**Next:** Hayden commits/PRs `feat/phase-a-ship-script` + runs a no-op `./deploy/gcp/ship.sh` to close Phase-A
+DoD. Then **Phase B — onboarding/auth-UX overhaul** (the actual beta blocker): `/api/me`-driven per-user vertical
+routing, real route guards (static landing → `/onboarding` → their dashboard), one-vertical write enforcement,
+`prompt="select_account"`, matched-view client poll. Plus scope's **closeout** (email E2E + `/security-review`)
+and the B-4 data cleanup (deactivate one of Hayden's two seed profiles).
+
+---
+
 ## 2026-07-06 — Phase 9 · 9.5d go-live finished + found the onboarding flow is broken; planned the fix (D-064–067)
 
 **Session picked up mid-cutover, live with Hayden. Net: the cloud cutover is done and the app is live on
