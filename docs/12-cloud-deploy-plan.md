@@ -10,8 +10,12 @@ working plan.*
 **Status:** **9.5a ✅** (D-059, merged to `main` via PR #45 @ `fd347cd`). **9.5b ✅** (D-060, merged to
 `main` via PR #46 @ `0abbb5b`). **9.5c ✅** (D-061 — GCP project `role-feed-prod`, Neon, Secret Manager,
 Artifact Registry, OAuth, Resend all provisioned; runbook `deploy/gcp/README.md`; merged to `main` via PR #47
-@ `74644e1`). **9.5d next** (cutover/go-live) — the executable runbook is **`deploy/gcp/CUTOVER.md`** (deploy +
-`alembic upgrade` + baseline run + staged smoke + flips + security review); §9.5d below is now just the index.
+@ `74644e1`). **9.5d ✅ (go-live infra done, D-067)** — deployed to Cloud Run + Neon, `role-feed.com` live, auth
+guards flipped ON (`VJA_AUTH_REQUIRED=1`); the mid-cutover `VJA_VERTICALS_DIR` bug was fixed (D-063, PR #49). The
+executable runbook is **`deploy/gcp/CUTOVER.md`**. **Closeout still open:** real email E2E + `/security-review`.
+**Blocker before beta users:** the onboarding/dashboard flow is broken (one-vertical-per-user routing, D-064/065)
+— the fix is the plan of record in **`docs/13-onboarding-and-shipping-plan.md`** (Phase A ship-script → Phase B
+overhaul). §9.5d below is the cutover index.
 
 ---
 

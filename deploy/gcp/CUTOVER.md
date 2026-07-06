@@ -178,10 +178,17 @@ Set the OAuth client's redirect URI to the final `https://role-feed.com/auth/cal
 run.app fallback). Then confirm:
 
 ```sh
-curl -si https://role-feed.com/api/postings | head -1     # 401 (anonymous now refused, D-055)
+# NB: /api/postings requires a `vertical` param — without it FastAPI returns 422 (param validation runs
+# before auth), NOT 401. Pass a real vertical to actually exercise the auth guard:
+curl -si "https://role-feed.com/api/postings?vertical=grid_power_software" | head -1   # 401 (anon refused, D-055)
 ```
 
 …and a full browser login round-trips on `role-feed.com` (cookie is `Secure`; redirect is the https domain).
+
+> **⚠ Networks that block newly-registered domains (D-067).** If `role-feed.com` **resets the TLS connection**
+> (RST right after ClientHello) while the mapping reads `Ready`/`CertificateProvisioned` and DNS is correct,
+> suspect a **corporate/DNS filter blocking newly-registered domains**, *not* Cloud Run. Confirm from a
+> different network (phone hotspot); it typically ages out ~30 days post-registration, or ask IT to allowlist.
 
 ## 10. Verify email end-to-end
 
@@ -211,16 +218,20 @@ Instant, no rebuild. (Written down so it isn't improvised under pressure.)
 
 ## Done when green (hand-off out of 9.5)
 
-- [ ] Image built `--platform linux/amd64` + pushed to Artifact Registry
-- [ ] Runtime SA has `secretmanager.secretAccessor`
-- [ ] `alembic upgrade head` applied to Neon (`alembic current` = head)
-- [ ] Baseline seed run (employers imported, `first_seen_at` stamped, profile loaded)
-- [ ] Service deployed; `*.run.app` smoke green incl. a login round-trip
-- [ ] Custom domain mapped, cert green, `https://role-feed.com` serves
-- [ ] `vja-nightly` Job + Scheduler created; a manual `jobs execute` succeeded
-- [ ] Guards flipped: anon `/api/postings` → 401, login works on `role-feed.com`
+- [x] Image built `--platform linux/amd64` + pushed to Artifact Registry
+- [x] Runtime SA has `secretmanager.secretAccessor`
+- [x] `alembic upgrade head` applied to Neon (`alembic current` = head)
+- [x] Baseline seed run (employers imported, `first_seen_at` stamped, profile loaded — 9,773 postings / 2 profiles)
+- [x] Service deployed; `*.run.app` smoke green incl. a login round-trip
+- [x] Custom domain mapped, cert green, `https://role-feed.com` serves (off corporate wifi — see D-067 note)
+- [x] `vja-nightly` Job + Scheduler created; a manual `jobs execute` succeeded (D-063 fixed Layer-2)
+- [x] Guards flipped: anon `/api/postings?vertical=…` → 401 (browser login round-trip: verify off-office-wifi)
 - [ ] Real test digest delivered to an external inbox from `digest@role-feed.com`
-- [ ] `/security-review` clean; docs updated (INVARIANTS/DECISIONS/docs-11/CLAUDE)
+- [ ] `/security-review` clean; docs updated (INVARIANTS/DECISIONS/docs-11/CLAUDE) — docs done in `docs/13` session
+
+> **Product not yet beta-ready.** The cloud cutover is done, but the **onboarding/dashboard flow is broken**
+> for a fresh account (one-vertical-per-user routing — D-064/065). Fix before inviting users:
+> **`docs/13-onboarding-and-shipping-plan.md`** (Phase A ship-script → Phase B overhaul).
 
 **Deferred past go-live (note, don't silently forget):** deletion/data-subject endpoint (docs/11 §3.1),
 per-IP/edge rate-limiting + captcha (§3.3 — OAuth bounds abuse meanwhile), spend-trend observability/alerting
