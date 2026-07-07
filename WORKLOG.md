@@ -5,6 +5,44 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-06 — Phase 9.6 · merge-triggered CI/CD to Cloud Run (D-068 → built)
+
+**Closed the deploy loop for the beta-hardening week: merging to `main` now auto-deploys prod.** Branch
+`feat/9.6-cicd` (off `main` @ `a085599`). Code + docs; no cloud ops in-session (no gcloud/creds in-sandbox).
+
+**Did:** added a `deploy` job to `.github/workflows/ci.yml` — `needs: [gates, postgres, frontend, secrets]`
+(green CI is a hard edge), `if` push-to-`main`-or-`workflow_dispatch` (never PRs), own non-cancelling
+`deploy-prod` concurrency, `id-token: write` for WIF, `environment: production`. It auths keylessly via
+**Workload Identity Federation** (`google-github-actions/auth@v2` off repo *variables* `GCP_WIF_PROVIDER` /
+`GCP_DEPLOY_SA`), configures docker for Artifact Registry, then **execs `./deploy/gcp/ship.sh --force`** — the
+key call: one code path, so the proven secret/SA/guards-preserved config never gets copied into YAML to drift.
+`ship.sh` gained an **env-gated `ROLLBACK_ON_SMOKE_FAIL`** (CD sets `=1`): a failed health/anon-401 smoke
+auto-shifts traffic back to the prior revision before exiting (deploy already sent 100% traffic to the new one);
+default 0 = unchanged manual behavior. `deploy/gcp/README.md` gained a "CI/CD (9.6)" section: the one-time WIF
+runbook (pool + repo-restricted OIDC provider + `github-deployer` SA with `run.admin`/`artifactregistry.writer`/
+actAs-runtime-SA + `workloadIdentityUser` binding → prints the two repo variables), the migrate-before-merge
+ordering rule, and rollback.
+
+**Design calls (approved in plan):** WIF over a SA JSON key (no long-lived credential); auto-deploy over a
+manual-approval `environment` gate (smoke + auto-rollback + `ship.sh` break-glass are the net); **migrations
+stay manual** (CD deploys code only — schema-changing PRs run `alembic upgrade head` on Neon first); reuse
+`ship.sh` over a YAML re-implementation (anti-drift).
+
+**Decisions:** **D-068 → accepted** (supersedes D-066's "9.6 deferred"). INVARIANTS: new "`main` auto-deploys"
+line under Testing & workflow. `docs/13` 9.6 ticked; `CLAUDE.md` already named 9.6 NEXT (last session).
+
+**Verified:** `bash -n deploy/gcp/ship.sh` clean. shellcheck/actionlint not installed locally → workflow YAML
++ script reviewed by hand. **Cannot run the deploy here** — no gcloud/creds, and it's an outward-facing prod
+deploy. **DoD is Hayden-run:** one-time WIF provisioning + repo variables, then a `workflow_dispatch` first run
+(deploy + smoke green) → a real merge proves the push path.
+
+**Next:** Hayden commits/PRs `feat/9.6-cicd`, runs the WIF setup (README §CI/CD), fires the first
+`workflow_dispatch`. Still open from before: **B-4 prod data cleanup** + fresh-account walkthrough + beta
+invites; go-live closeout (email E2E + `/security-review`); and the beta-hardening backlog (Phenom, landing/login
+polish, coverage ledger).
+
+---
+
 ## 2026-07-06 — Phase B · onboarding / auth-UX overhaul (D-064 + D-065 → done; the beta blocker)
 
 **The real fix behind the broken fresh-account flow: vertical is now a property of the logged-in user, not a

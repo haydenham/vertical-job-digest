@@ -31,6 +31,12 @@ set -euo pipefail
 : "${JOB:=vja-nightly}"
 : "${RUNTIME_SA:=850723734041-compute@developer.gserviceaccount.com}"
 
+# Unattended CD (9.6/D-068) sets this to 1: on a failed smoke, auto-roll traffic back to the prior
+# revision before exiting non-zero (gcloud run deploy sends 100% traffic to the new revision on deploy,
+# so a bad revision is already serving). Default 0 = the manual behavior — print rollback + exit, human
+# is watching.
+: "${ROLLBACK_ON_SMOKE_FAIL:=0}"
+
 # ⚠ --set-secrets has REPLACE semantics: each list below is the COMPLETE set mounted on that target.
 # Adding a secret to prod means adding it here too, or the next deploy drops it. Kept identical to
 # CUTOVER §5 (service, 8) and §8 (job, 5).
@@ -97,12 +103,24 @@ URL="$(gcloud run services describe "$SERVICE" --format='value(status.url)')"
 REVISION="$(gcloud run services describe "$SERVICE" --format='value(status.latestReadyRevisionName)')"
 echo "==> Smoke ($URL)"
 
+# A failed smoke means the just-deployed revision is bad but already serving 100% of traffic. Under
+# ROLLBACK_ON_SMOKE_FAIL=1 (CD), shift traffic back to the prior revision before failing; otherwise just
+# fail (the manual path prints the rollback command below and a human runs it).
+smoke_fail() {
+  echo "    $1" >&2
+  if [[ "$ROLLBACK_ON_SMOKE_FAIL" == "1" && -n "$PREV" && "$PREV" != "$REVISION" ]]; then
+    echo "==> smoke failed — auto-rolling traffic back to $PREV" >&2
+    gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions="$PREV=100" >&2 \
+      || echo "    auto-rollback FAILED — roll back manually: gcloud run services update-traffic $SERVICE --region $REGION --to-revisions=$PREV=100" >&2
+  fi
+  exit 1
+}
+
 health="$(curl -fsS "$URL/api/health" || true)"
 if [[ "$health" == *'"status":"ok"'* ]]; then
   echo "    health: ok"
 else
-  echo "    health: FAILED (got: ${health:-<no response>})" >&2
-  exit 1
+  smoke_fail "health: FAILED (got: ${health:-<no response>})"
 fi
 
 # Auth guard must have survived the redeploy: anon request to a real vertical → 401 (D-055/D-067).
@@ -111,8 +129,7 @@ code="$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/postings?vertical=grid_
 if [[ "$code" == "401" ]]; then
   echo "    auth guard: ok (anon → 401)"
 else
-  echo "    auth guard: FAILED (expected 401, got $code) — VJA_AUTH_REQUIRED may have regressed" >&2
-  exit 1
+  smoke_fail "auth guard: FAILED (expected 401, got $code) — VJA_AUTH_REQUIRED may have regressed"
 fi
 
 echo
