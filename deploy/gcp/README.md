@@ -206,5 +206,80 @@ gcloud run services update-traffic rolefeed --region us-central1 --to-revisions=
 
 **Scope:** redeploy of already-provisioned resources only. It does **not** migrate the schema
 (`alembic upgrade head` stays a deliberate manual step — CUTOVER §3), seed, or change the domain /
-OAuth redirect URIs. First-time stand-up is still `CUTOVER.md`. This is the thin ship-script (D-066),
-**not** CI/CD — merge-triggered auto-deploy is the deferred 9.6.
+OAuth redirect URIs. First-time stand-up is still `CUTOVER.md`.
+
+---
+
+## CI/CD (9.6 / D-068) — merge-triggered auto-deploy
+
+Once WIF is set up (below), **merging to `main` deploys prod automatically**: the `deploy` job in
+`.github/workflows/ci.yml` runs after every CI gate is green (`needs: [gates, postgres, frontend,
+secrets]`), authenticates to GCP keylessly via Workload Identity Federation, and execs this same
+`ship.sh` (with `ROLLBACK_ON_SMOKE_FAIL=1`, so a failed smoke auto-rolls traffic back to the prior
+revision). One code path — the proven secret/SA/guard config lives only here, never copied into YAML.
+
+**Triggers:** push to `main` (post-merge) **or** a manual **Run workflow** from the Actions tab
+(`workflow_dispatch`) — never on PRs. `ship.sh --force` still runs manually as the break-glass path.
+
+### One-time GCP setup (Hayden — needs `gcloud`/console; not runnable in-sandbox)
+
+Keyless: GitHub's OIDC token is federated to a dedicated deploy service account. No key is ever
+downloaded or stored. Paste the §"Locked values" block into your shell first, then:
+
+```sh
+export REPO="haydenham/vertical-job-agent-starter"   # owner/repo, adjust if renamed
+export POOL="github-pool"
+export PROVIDER="github-provider"
+export DEPLOYER="github-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+
+# 1. WIF pool + an OIDC provider restricted to THIS repo (the attribute-condition is the security boundary)
+gcloud iam workload-identity-pools create "$POOL" --location=global --display-name="GitHub Actions"
+gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" \
+  --location=global --workload-identity-pool="$POOL" \
+  --display-name="GitHub OIDC" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository == '${REPO}'"
+
+# 2. Dedicated deploy SA + least-privilege roles (deploy Run, actAs the runtime SA, push images)
+gcloud iam service-accounts create github-deployer --display-name="GitHub Actions deployer"
+for role in roles/run.admin roles/artifactregistry.writer; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$DEPLOYER" --role="$role"
+done
+# actAs the RUNTIME SA (the one ship.sh sets on the service/job) — required or `run deploy` is denied:
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+  --member="serviceAccount:$DEPLOYER" --role=roles/iam.serviceAccountUser
+# (RUNTIME_SA = 850723734041-compute@developer.gserviceaccount.com, ship.sh default)
+
+# 3. Let the GitHub repo's OIDC identity impersonate the deploy SA
+POOL_ID="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}"
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/${POOL_ID}/attribute.repository/${REPO}"
+
+# 4. Print the two values to put in GitHub repo VARIABLES (Settings → Secrets and variables → Actions → Variables):
+echo "GCP_WIF_PROVIDER=${POOL_ID}/providers/${PROVIDER}"
+echo "GCP_DEPLOY_SA=${DEPLOYER}"
+```
+
+These two are **repo variables, not secrets** — they're resource identifiers, and WIF means there's no
+credential to hide. The Secret Manager mounts are unchanged; `ship.sh` still references them by name.
+
+### First run + ordering rule
+
+- **First run:** Actions tab → the **CI** workflow → **Run workflow** (`workflow_dispatch`). Watch `deploy`
+  build, roll the service + `vja-nightly`, and smoke green (`/api/health` ok + anon 401). Then a real merge
+  to `main` proves the push path.
+- **Schema-changing PRs — migrate first.** CD deploys **code only**; migrations stay manual (D-025/D-068).
+  If a PR changes the schema, run `alembic upgrade head` against Neon **before merging**, or the auto-deploy
+  ships code ahead of its schema. (A one-click `workflow_dispatch` migration workflow is a possible future
+  convenience — not built here.)
+- **Rollback:** the deploy auto-rolls back on a failed smoke; for a bad revision that *passed* smoke, the
+  rollback command is printed in the job log (`gcloud run services update-traffic rolefeed …`), or run
+  `ship.sh` locally.
+
+This is **9.6**; the thin `ship.sh` (D-066) it wraps stays the manual break-glass. First-time resource
+stand-up is still `CUTOVER.md`.

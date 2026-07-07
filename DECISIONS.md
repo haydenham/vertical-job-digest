@@ -1131,3 +1131,27 @@ herring but harmless. **Mitigation:** Hayden uses hotspot or has IT allowlist th
 own networks are unaffected. **Remaining 9.5d closeout:** real email E2E + `/security-review`. **Caveat:** the
 *cloud cutover* is done, but the **product is not yet usable by beta users** — the onboarding UX (D-065) is a
 blocker. **Status:** accepted; go-live infra done, closeout + onboarding tracked in `docs/13`.
+
+### D-068 · Phase 9.6 · Merge-triggered CI/CD to Cloud Run (WIF, auto-deploy, migrations stay manual) · accepted · 2026-07-06
+Replaces the manual `ship.sh` invocation (D-066) with **auto-deploy on merge**: the `deploy` job in
+`.github/workflows/ci.yml` runs after every CI gate is green (`needs: [gates, postgres, frontend, secrets]`),
+only on push-to-`main` or `workflow_dispatch` (never PRs), and rolls the new image onto the `rolefeed` service +
+`vja-nightly` Job. **Auth = Workload Identity Federation** (keyless OIDC; a `github-deployer` SA impersonated by
+the repo's OIDC identity, restricted by an `attribute.repository` condition) — **no SA key in the repo**; the two
+identifiers (`GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`) are repo **variables**, not secrets. **The job execs `ship.sh
+--force`, not a re-implementation** — one code path, so the proven secret/SA/`--allow-unauthenticated`/no-env-var
+(guards-preserved) config lives in exactly one place and can't drift. `ship.sh` gained an **env-gated
+`ROLLBACK_ON_SMOKE_FAIL=1`** (CD sets it): a failed `/api/health`-or-anon-401 smoke auto-shifts traffic back to
+the prior revision before failing (deploy sends 100% traffic to the new revision, so a bad one is already live);
+default 0 keeps the manual behavior (print + exit). **Migrations stay manual** (D-025/CUTOVER §3): CD deploys
+**code only** — a schema-changing PR must run `alembic upgrade head` on Neon **before merge**, or the deploy ships
+code ahead of its schema (documented ordering rule; a `workflow_dispatch` migration workflow is a future
+convenience, not built). **Why:** close the deploy loop for the beta-hardening week — shipping a fix becomes
+"merge the PR," not "run a script from a machine with gcloud creds" — without a long infra detour or the risk of
+auto-applying schema changes to prod. Chosen over: a SA JSON key (long-lived credential, rotation burden,
+bigger blast radius); a manual-approval `environment` gate (safer but defeats CD for a solo dev — the smoke +
+auto-rollback + `ship.sh` break-glass are the safety net instead); a separate `deploy.yml` on `workflow_run`
+(fragile default-branch/checkout semantics vs a clean `needs` edge in one workflow). **Status:** code + docs
+shipped on `feat/9.6-cicd`; the one-time WIF provisioning + repo variables + first `workflow_dispatch` run are
+Hayden-run (needs cloud creds — the DoD, per `deploy/gcp/README.md` §"CI/CD"). `ship.sh` (D-066) stays the manual
+break-glass. Supersedes the "9.6 deferred" note in D-066.

@@ -6,6 +6,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch: # manual deploy lever (Actions tab) — first-run test + on-demand redeploy (9.6)
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -120,3 +121,42 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    # 9.6 / D-068: merge-triggered auto-deploy to Cloud Run. Runs ONLY after every gate above is green
+    # (the `needs` edge), and ONLY on a push to main or a manual dispatch — never on PRs. Keyless auth via
+    # Workload Identity Federation (no SA key in the repo). The actual deploy is `ship.sh` — one code path,
+    # so the proven secret/SA/guard config lives in exactly one place (no YAML copy to drift).
+    needs: [gates, postgres, frontend, secrets]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    # Own concurrency group so back-to-back merges QUEUE deploys instead of cancelling one mid-gcloud
+    # (overrides the workflow-level cancel-in-progress group, which is right for the gate jobs).
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # required for the WIF OIDC token exchange
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Deploy (ship.sh — build → push → service + job → smoke, auto-rollback on smoke fail)
+        env:
+          ROLLBACK_ON_SMOKE_FAIL: "1"
+        run: ./deploy/gcp/ship.sh --force

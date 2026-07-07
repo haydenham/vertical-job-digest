@@ -185,8 +185,10 @@ Not a code phase — the ops steps to get the two beta users + Hayden's second a
 
 From the 2026-07-06 planning discussion — sequence after beta users are on and giving feedback:
 
-- **9.6 — full CI/CD** (merge-triggered auto-deploy), when deploy churn justifies replacing the Phase-A script
-  (docs/11 §5).
+- **9.6 — full CI/CD** (merge-triggered auto-deploy) — **✅ built** (D-068, `feat/9.6-cicd`): the `deploy` job
+  in `ci.yml` runs `ship.sh --force` after green CI, keyless via WIF, auto-rollback on smoke fail; migrations
+  stay manual. Remaining for DoD: Hayden runs the one-time WIF provisioning + repo variables + first
+  `workflow_dispatch` (needs cloud creds; runbook in `deploy/gcp/README.md` §CI/CD).
 - **Phase 10 — discovery agent + review queue.** The agent proposes new *employers* (`status=proposed`);
   **human approval stays required for the foreseeable future** (Hayden). The review surface (approve/reject/edit
   `proposed` rows) is the "approval-only, no commands" automation Hayden wants — build it so both the agent

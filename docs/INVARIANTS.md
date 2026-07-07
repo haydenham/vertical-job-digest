@@ -208,6 +208,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Definition of Done:** green tests + ruff/format/mypy + import-linter + a human-read
   diff + updated docs, before merge. CI and pre-commit run the same checks. (D-021)
 - **Toolchain is `uv`; the lockfile must stay in sync** (`uv lock --check` in CI). (D-014)
+- **`main` auto-deploys to prod** — the `deploy` job in `ci.yml` runs after every gate is green
+  (`needs: [gates, postgres, frontend, secrets]`, push-to-`main`/`workflow_dispatch` only), auths to GCP via
+  **keyless Workload Identity Federation** (no SA key in the repo; `GCP_WIF_PROVIDER`/`GCP_DEPLOY_SA` are repo
+  *variables*), then execs **`ship.sh --force`** — one code path, so the guards-preserved prod config never
+  drifts into YAML. CD sets `ROLLBACK_ON_SMOKE_FAIL=1` (auto-roll traffic to the prior revision on a failed
+  smoke). **Migrations stay manual:** CD deploys code only — run `alembic upgrade head` on Neon *before* merging
+  a schema-changing PR. `ship.sh` is still the manual break-glass. (D-068, D-066, D-025)
 - **Frontend gate = eslint + `tsc --noEmit` + vitest** (Vitest + React Testing Library), run
   in the inner loop and path-filtered (pre-commit hook + a CI `frontend` job). The dashboard's
   own behavior is pinned here; the B1 API contract stays pinned by the Python API tests. (D-042)
