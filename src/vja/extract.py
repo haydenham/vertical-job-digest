@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from anthropic import Anthropic
+from anthropic.types import TextBlockParam
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
@@ -39,7 +40,7 @@ from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
-from vja.models import AtsType, Employer, Level, RemoteType
+from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
 
@@ -65,6 +66,14 @@ only what the posting states; use the unknown/empty value when a field is absent
 - comp_min / comp_max: annual USD salary bounds as integers if given; null otherwise.
 - comp_raw: the compensation text exactly as written, if any; null otherwise.
 - posted_at: the posting/start date if present (ISO 8601 preferred); null otherwise."""
+
+# The instruction prefix is stable across every posting in a run, so mark it cacheable. NB: Haiku
+# 4.5's minimum cacheable prefix is 4096 tokens and this prompt is well under that, so it likely
+# won't trigger today — kept as the correct pattern (the token meter now shows whether it caches).
+# The real extraction lever (unique descriptions are uncacheable) is the Batch API, not caching.
+_SYSTEM: list[TextBlockParam] = [
+    {"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+]
 
 DetailResolver = Callable[[Employer, str], dict[str, Any]]
 
@@ -109,6 +118,7 @@ class ExtractionSummary:
     extracted: int
     failed: int
     est_cost_usd: float
+    usage: TokenUsage = TokenUsage()
 
 
 def fields_to_columns(fields: ExtractedFields) -> dict[str, Any]:
@@ -137,21 +147,19 @@ def _source_text(candidate: ExtractionCandidate, resolve_detail: DetailResolver)
     return f"Title: {candidate.title}\n\n{blob}"
 
 
-def extract_posting(client: Anthropic, source_text: str) -> tuple[ExtractedFields, float]:
-    """One extraction call → (validated fields, estimated USD cost from token usage)."""
+def extract_posting(client: Anthropic, source_text: str) -> tuple[ExtractedFields, TokenUsage]:
+    """One extraction call → (validated fields, real token usage). Cost derives from the usage."""
     response = client.messages.parse(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
-        system=_SYSTEM_PROMPT,
+        system=_SYSTEM,
         messages=[{"role": "user", "content": source_text}],
         output_format=ExtractedFields,
     )
-    usage = response.usage
-    cost = usage.input_tokens * _HAIKU_IN_PER_TOKEN + usage.output_tokens * _HAIKU_OUT_PER_TOKEN
     fields = response.parsed_output
     if fields is None:  # refusal / unparseable — surface as a failure for this posting
         raise ValueError("extraction returned no parsed output")
-    return fields, cost
+    return fields, TokenUsage.from_response(response.usage)
 
 
 def run_extraction(
@@ -183,17 +191,17 @@ def run_extraction(
     ]
     extracted = 0
     failed = 0
-    cost = 0.0
+    usage = TokenUsage()
     for candidate in candidates:
         try:
-            fields, call_cost = extract_posting(cli, _source_text(candidate, detail))
+            fields, call_usage = extract_posting(cli, _source_text(candidate, detail))
         except (
             Exception
         ) as exc:  # deliberate per-posting isolation boundary (logged, not swallowed)
             logger.warning("extraction failed for posting %s: %r", candidate.posting_id, exc)
             failed += 1
             continue
-        cost += call_cost
+        usage = usage + call_usage
         columns = fields_to_columns(fields)
         # Compute the durable in_scope gate on the effective (L1-authoritative) location: the stored
         # L1 value wins when present, else the model's read — matching what save_extraction writes.
@@ -217,7 +225,8 @@ def run_extraction(
         total=len(candidates),
         extracted=extracted,
         failed=failed,
-        est_cost_usd=cost,
+        est_cost_usd=usage.cost(_HAIKU_IN_PER_TOKEN, _HAIKU_OUT_PER_TOKEN),
+        usage=usage,
     )
 
 

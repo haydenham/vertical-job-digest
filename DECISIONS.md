@@ -1155,3 +1155,30 @@ auto-rollback + `ship.sh` break-glass are the safety net instead); a separate `d
 shipped on `feat/9.6-cicd`; the one-time WIF provisioning + repo variables + first `workflow_dispatch` run are
 Hayden-run (needs cloud creds — the DoD, per `deploy/gcp/README.md` §"CI/CD"). `ship.sh` (D-066) stays the manual
 break-glass. Supersedes the "9.6 deferred" note in D-066.
+
+### D-069 · Phase 5.x · LLM cost Block 1 — real token metering + Sonnet effort=medium (measure first) · accepted · 2026-07-07
+Two signups cost $6/morning; the Anthropic console showed **~10M input : <1M output (input-bound ~10:1)** with
+only **~7% cache hit**. Reading the code: **extraction** (Haiku) sends the full, unique-per-posting job
+description → **inherently uncacheable** (the input bulk; the lever is the Batch API, not caching), and its
+system prompt wasn't even marked cacheable; **matching** (Sonnet) *is* cache-wired correctly but ran at the
+API-default **`high` effort** (thinking bills as output). And spend was metered only by a **`$0.01`-per-item
+proxy** (`match._NOMINAL_MATCH_USD`) — no real token accounting, so we were optimizing blind. **Decision: stage
+it, measure first.** Block 1 (this ADR): (1) **real per-call token accounting** — a `TokenUsage` value
+(`models.py`: input/output/cache_read/cache_write, `from_response` + cache-aware `cost()` + `cache_hit_rate`)
+returned by `extract_posting`/`match_posting`, summed through the run summaries + `Layer2Summary`, **persisted to
+four new `pipeline_runs` columns** (`input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`;
+additive Alembic migration, born-on-Postgres-verified per D-054), and logged as a per-stage nightly line with the
+matching cache-hit %; (2) **`effort=medium`** on the Sonnet match call, **env-overridable via `VJA_MATCH_EFFORT`**
+(mirrors the D-057 backfill knobs) so `low` can be A/B'd in prod without a redeploy — **eval-gated (D-020):** ship
+the lowest effort that still passes `tests/eval/test_match_eval.py`; (3) extraction system prompt wrapped in
+`cache_control` (**expected no-op** — Haiku's 4096-token cacheable floor exceeds the short prompt — kept as the
+correct pattern; the meter now shows whether it fires). **Why:** the meter is the point — it makes
+extraction-vs-matching and cached-vs-uncached spend visible each night (honouring the standing "meter LLM spend
+from day one" rule the proxy didn't), and it's what sizes/justifies Block 2. **Non-goal → Block 2 (separate):**
+**Batch API** (50% off extraction + matching) — the real structural cut, but it restructures the nightly's
+submit→poll→collect flow, so it waits for Block 1's real numbers (incl. whether the nightly re-extracts unchanged
+postings — a possible `content_hash`-churn bug the meter would expose). Caching is already optimal; "better
+caching" is a dead end for the uncacheable input. **Status:** code + docs shipped on
+`feat/llm-cost-instrumentation`; the eval sweep (medium vs low) + the post-deploy nightly read of the token
+columns are Hayden-run (need `ANTHROPIC_API_KEY` / prod). Supersedes the D-036 "adaptive/high, $0.01 proxy" cost
+posture.

@@ -186,3 +186,59 @@ class RawPosting:
     # Best-available description text for content_hash + later Layer-2 extraction.
     # May be plain text or HTML depending on the ATS; populated by each fetcher.
     description: str | None = None
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """Real per-call LLM token accounting, summed across a stage's calls — the meter that replaces
+    the old ``$0.01``-per-item proxy so extraction-vs-matching and cached-vs-uncached spend shows.
+
+    ``input`` is the uncached input processed at full price; ``cache_read`` / ``cache_write`` are
+    prompt-cache read (~0.1x) / write (~1.25x) tokens; ``output`` includes thinking (billed as out).
+    Centralizes the ``usage`` field reads that ``extract`` / ``match`` previously did ad-hoc.
+    """
+
+    input: int = 0
+    output: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+
+    @classmethod
+    def from_response(cls, usage: Any) -> TokenUsage:
+        """Read a message's ``usage`` object (attrs absent on some SDK/mocks → 0)."""
+        return cls(
+            input=getattr(usage, "input_tokens", 0) or 0,
+            output=getattr(usage, "output_tokens", 0) or 0,
+            cache_read=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            cache_write=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        )
+
+    def __add__(self, other: TokenUsage) -> TokenUsage:
+        return TokenUsage(
+            input=self.input + other.input,
+            output=self.output + other.output,
+            cache_read=self.cache_read + other.cache_read,
+            cache_write=self.cache_write + other.cache_write,
+        )
+
+    def cost(
+        self,
+        in_per_token: float,
+        out_per_token: float,
+        *,
+        cache_write_mult: float = 1.25,  # 5-min ephemeral write premium
+        cache_read_mult: float = 0.1,  # cache read discount
+    ) -> float:
+        """USD cost, crediting cache reads and charging the write premium (priced off input)."""
+        return (
+            self.input * in_per_token
+            + self.output * out_per_token
+            + self.cache_write * cache_write_mult * in_per_token
+            + self.cache_read * cache_read_mult * in_per_token
+        )
+
+    @property
+    def cache_hit_rate(self) -> float:
+        """Fraction of *input* tokens served from cache: read / (read + write + uncached input)."""
+        total_in = self.input + self.cache_read + self.cache_write
+        return self.cache_read / total_in if total_in else 0.0

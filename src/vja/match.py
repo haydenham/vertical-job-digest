@@ -22,10 +22,10 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from anthropic import Anthropic
-from anthropic.types import TextBlockParam
+from anthropic.types import OutputConfigParam, TextBlockParam
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
@@ -38,7 +38,7 @@ from vja.db.matches import (
     save_match,
 )
 from vja.db.profiles import Profile, active_profiles
-from vja.models import MatchTrigger, Verdict
+from vja.models import MatchTrigger, TokenUsage, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import in_scope
 from vja.verticals import VerticalConfig
@@ -48,6 +48,16 @@ logger = logging.getLogger("vja.match")
 _MODEL = "claude-sonnet-4-6"  # strong tier for the user-visible rationale (D-005); eval-gated
 _BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
 _MAX_TOKENS = 4096  # room for adaptive thinking + the structured rationale
+# Sonnet effort (adaptive thinking depth). Matching is a bounded, schema-constrained judgment task,
+# so `high` (the API default) overspends — thinking bills as output ($15/MTok). Default `medium`,
+# validated by the D-020 eval; env-overridable so `low` can be A/B'd in prod without a redeploy.
+_DEFAULT_MATCH_EFFORT = "medium"
+
+
+def _match_effort() -> str:
+    """The Sonnet effort level (`VJA_MATCH_EFFORT`), read at call time (mirrors backfill knobs)."""
+    return os.environ.get("VJA_MATCH_EFFORT") or _DEFAULT_MATCH_EFFORT
+
 
 # Cost/abuse guards (D-057) — the signup backfill is the first user action that spends LLM tokens.
 # Both are env-tunable (read at call time so tests can set them) with conservative defaults.
@@ -56,8 +66,6 @@ _DEFAULT_DAILY_LLM_BUDGET_USD = 5.0  # global daily spend ceiling before a backf
 _NOMINAL_MATCH_USD = 0.01  # spend proxy per match (no per-match ledger; see count_matches_since)
 _SONNET_IN_PER_TOKEN = 3.0 / 1_000_000  # $3 / MTok input
 _SONNET_OUT_PER_TOKEN = 15.0 / 1_000_000  # $15 / MTok output
-_CACHE_WRITE_MULT = 1.25  # 5-min ephemeral cache write premium
-_CACHE_READ_MULT = 0.1  # cache read discount
 
 _SYSTEM_PROMPT = """\
 You are matching one early-career candidate against one job posting. You are given the candidate's
@@ -95,6 +103,7 @@ class MatchingSummary:
     matched: int
     failed: int
     est_cost_usd: float
+    usage: TokenUsage = TokenUsage()
 
 
 class BackfillBudgetExceeded(RuntimeError):
@@ -181,17 +190,9 @@ def _cached_system(resume_text: str, domain_vocabulary: tuple[str, ...]) -> list
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def _call_cost(usage: Any) -> float:
-    """USD cost from token usage, crediting cache reads / charging the cache-write premium."""
-    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
-    cost = (
-        usage.input_tokens * _SONNET_IN_PER_TOKEN
-        + usage.output_tokens * _SONNET_OUT_PER_TOKEN
-        + cache_write * _CACHE_WRITE_MULT * _SONNET_IN_PER_TOKEN
-        + cache_read * _CACHE_READ_MULT * _SONNET_IN_PER_TOKEN
-    )
-    return float(cost)
+def _usage_cost(usage: TokenUsage) -> float:
+    """USD cost for a matching call/run at Sonnet rates (cache-aware; see `TokenUsage.cost`)."""
+    return usage.cost(_SONNET_IN_PER_TOKEN, _SONNET_OUT_PER_TOKEN)
 
 
 def match_posting(
@@ -199,12 +200,13 @@ def match_posting(
     resume_text: str,
     domain_vocabulary: tuple[str, ...],
     posting_text: str,
-) -> tuple[MatchResult, float]:
-    """One match call → (validated rationale, estimated USD cost from token usage)."""
+) -> tuple[MatchResult, TokenUsage]:
+    """One match call → (validated rationale, real token usage). Cost derives from the usage."""
     response = client.messages.parse(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
         thinking={"type": "adaptive"},
+        output_config=cast(OutputConfigParam, {"effort": _match_effort()}),
         system=_cached_system(resume_text, domain_vocabulary),
         messages=[{"role": "user", "content": posting_text}],
         output_format=MatchResult,
@@ -212,7 +214,7 @@ def match_posting(
     result = response.parsed_output
     if result is None:  # refusal / unparseable — surface as a failure for this posting
         raise ValueError("match returned no parsed output")
-    return result, _call_cost(response.usage)
+    return result, TokenUsage.from_response(response.usage)
 
 
 def _match_profile(
@@ -226,8 +228,8 @@ def _match_profile(
     trigger: MatchTrigger,
     now: datetime,
     max_postings: int | None = None,
-) -> tuple[int, int, float]:
-    """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, cost).
+) -> tuple[int, int, TokenUsage]:
+    """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, usage).
 
     The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
     (`since=now−5d`, `trigger=BACKFILL`). `since` bounds the candidate set to the recency window;
@@ -249,16 +251,16 @@ def _match_profile(
     if max_postings is not None:
         candidates = candidates[:max_postings]
     matched = 0
-    cost = 0.0
+    usage = TokenUsage()
     for candidate in candidates:
         try:
-            result, call_cost = match_posting(
+            result, call_usage = match_posting(
                 client, profile.resume_text, config.domain_vocabulary, _posting_text(candidate)
             )
         except Exception as exc:  # deliberate per-posting isolation boundary (logged)
             logger.warning("match failed for posting %s: %r", candidate.posting_id, exc)
             continue
-        cost += call_cost
+        usage = usage + call_usage
         with begin(engine) as conn:
             save_match(
                 conn,
@@ -271,7 +273,7 @@ def _match_profile(
                 now=now,
             )
         matched += 1
-    return len(candidates), matched, cost
+    return len(candidates), matched, usage
 
 
 def run_matching(
@@ -291,9 +293,9 @@ def run_matching(
     cli = client or Anthropic()
     profiles = active_profiles(engine, vertical)
     total = matched = 0
-    cost = 0.0
+    usage = TokenUsage()
     for profile in profiles:
-        prof_total, prof_matched, prof_cost = _match_profile(
+        prof_total, prof_matched, prof_usage = _match_profile(
             engine,
             vertical,
             profile,
@@ -305,7 +307,7 @@ def run_matching(
         )
         total += prof_total
         matched += prof_matched
-        cost += prof_cost
+        usage = usage + prof_usage
 
     return MatchingSummary(
         vertical=vertical,
@@ -313,7 +315,8 @@ def run_matching(
         total=total,
         matched=matched,
         failed=total - matched,
-        est_cost_usd=cost,
+        est_cost_usd=_usage_cost(usage),
+        usage=usage,
     )
 
 
@@ -338,7 +341,7 @@ def run_backfill(
     stamp = now or datetime.now(UTC)
     cli = client or Anthropic()
     since = stamp - timedelta(days=_BACKFILL_WINDOW_DAYS)
-    total, matched, cost = _match_profile(
+    total, matched, usage = _match_profile(
         engine,
         vertical,
         profile,
@@ -355,7 +358,8 @@ def run_backfill(
         total=total,
         matched=matched,
         failed=total - matched,
-        est_cost_usd=cost,
+        est_cost_usd=_usage_cost(usage),
+        usage=usage,
     )
 
 

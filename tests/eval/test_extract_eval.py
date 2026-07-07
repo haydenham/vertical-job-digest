@@ -32,12 +32,12 @@ requires US work authorization; we are unable to provide visa sponsorship.
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
 def test_extract_obvious_senior_us_role() -> None:
-    fields, cost = extract_posting(Anthropic(), _POSTING)
+    fields, usage = extract_posting(Anthropic(), _POSTING)
 
-    # Structural: a schema-valid result with a real cost.
+    # Structural: a schema-valid result with real metered tokens (D-069).
     assert isinstance(fields.level, Level)
     assert isinstance(fields.remote, RemoteType)
-    assert cost > 0
+    assert usage.input > 0
 
     # Behavioral (obvious case): the posting is explicit on each of these.
     assert fields.level == Level.SENIOR

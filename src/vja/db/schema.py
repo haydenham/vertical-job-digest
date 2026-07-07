@@ -289,6 +289,12 @@ pipeline_runs = Table(
     Column("extraction_calls", Integer),
     Column("match_calls", Integer),
     Column("llm_cost_usd", Float),
+    # Real per-run token accounting (D-069) — the meter behind llm_cost_usd, so cached-vs-uncached
+    # and input-vs-output spend is queryable, not just the aggregate estimate.
+    Column("input_tokens", Integer),
+    Column("output_tokens", Integer),
+    Column("cache_read_tokens", Integer),
+    Column("cache_write_tokens", Integer),
     Column("errors", JSON),
     Column("notes", Text),
 )

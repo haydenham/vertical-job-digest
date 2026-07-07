@@ -5,6 +5,56 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-07 — Phase 5.x · LLM cost Block 1 — real token metering + Sonnet effort=medium (D-069 → built)
+
+**Two signups cost $6/morning; the console showed ~10M input : <1M output (input-bound ~10:1) at ~7% cache
+hit. Reading the code found the leak is extraction's unique, uncacheable descriptions — and that spend was
+metered by a `$0.01`/item *proxy*, so we were optimizing blind. Block 1 = measure first (Hayden's call).**
+Branch `feat/llm-cost-instrumentation` (off `main` @ `8d82236`, post-9.6). Code + docs; the eval sweep + the
+post-deploy nightly read are Hayden-run.
+
+**Did:**
+- **Real token metering.** New `TokenUsage` value in `models.py` (input/output/cache_read/cache_write,
+  `from_response` + cache-aware `cost()` + `cache_hit_rate`); `extract_posting`/`match_posting` now **return
+  it** (not a scalar cost), summed through `ExtractionSummary`/`MatchingSummary`/`Layer2Summary` and **persisted
+  to 4 new `pipeline_runs` columns** (additive Alembic migration `b2f4c1a9e07d`, applies clean on SQLite +
+  born-on-PG per D-054). `nightly.py` logs a per-stage line with the matching cache-hit %. Centralized the
+  ad-hoc `usage` reads / cost math that lived in `match._call_cost` + `extract` (both removed).
+- **`effort=medium`** on the Sonnet match call (`output_config`), **env-overridable `VJA_MATCH_EFFORT`** — the
+  API default `high` overspends since thinking bills as output. **Eval-gated (D-020):** ship the lowest
+  eval-passing effort (sweep medium/low with a key).
+- **Extraction `cache_control`** on the system prompt — expected no-op (Haiku's 4096 cacheable floor > the short
+  prompt), kept as the correct pattern; the meter now shows whether it fires.
+
+**Decisions:** **D-069 → accepted** (supersedes D-036's "adaptive/high, $0.01 proxy" cost posture). INVARIANTS:
+metering line rewritten (real `TokenUsage` persisted, not proxy; proxy survives only as the backfill guard),
+model-tiering line notes `effort=medium`.
+
+**Verified:** full offline gate — ruff/format + mypy (110 files) + import-linter (1/0) + **381 pytest** (+2 unit
+tests: effort default/override, extraction cache_control; + integration assertions that usage aggregates and the
+`pipeline_runs` token columns persist). Migration upgrades a fresh DB to a single head with all 4 columns.
+**Not run here:** the `eval` sweep (needs `ANTHROPIC_API_KEY`) and the prod nightly read.
+
+**Next — ship checklist (in order; `feat/llm-cost-instrumentation` is built, uncommitted):**
+1. Commit + push + open PR (gates run, deploy skipped on PRs).
+2. Eval sweep — `VJA_MATCH_EFFORT=medium uv run pytest -m eval tests/eval/test_match_eval.py` (must pass; medium
+   is the shipped default). Optionally `=low`; keep medium for the first measured night unless you set the knob
+   on the prod service **and** job manually (`ship.sh` writes no env vars).
+3. **`alembic upgrade head` on Neon BEFORE merging** — schema-changing PR; first real exercise of the D-068
+   ordering rule, or tonight's nightly errors writing the new columns.
+4. Merge → 9.6 auto-deploys the image onto the service + `vja-nightly` Job.
+
+**Then test tomorrow (after the 6am-Chicago nightly):** read `pipeline_runs`
+(`input/output/cache_read/cache_write_tokens`) + the Cloud Run Job `layer-2 […]` log line. Expect small numbers
+on a steady night (nightly matches only *unmatched* postings) — a fresh signup beforehand fattens the sample;
+`hit=%` near 0 confirms the resume prefix isn't clearing Sonnet's 2048 cache floor. Caveat: `pipeline_runs`
+captures the **nightly**, not signup backfills (background API task, no run row — console/logs only).
+
+**Block 2 (next block) = Batch API** (50% off extraction + matching), sized against these real numbers — incl.
+whether the nightly re-extracts unchanged postings (a possible `content_hash`-churn bug the meter would expose).
+
+---
+
 ## 2026-07-06 — Phase 9.6 · merge-triggered CI/CD to Cloud Run (D-068 → built)
 
 **Closed the deploy loop for the beta-hardening week: merging to `main` now auto-deploys prod.** Branch

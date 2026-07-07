@@ -41,7 +41,7 @@ from vja.extract import run_extraction
 from vja.fetchers.base import Fetcher
 from vja.fetchers.registry import get_fetcher
 from vja.match import run_matching
-from vja.models import AtsType
+from vja.models import AtsType, TokenUsage
 from vja.pipeline import RunSummary, run_pipeline
 from vja.prefilter import PrefilterConfig
 from vja.verticals import available_verticals, load_vertical_config
@@ -56,6 +56,8 @@ class Layer2Summary:
     extracted: int
     matched: int
     est_cost_usd: float
+    extract_usage: TokenUsage = TokenUsage()
+    match_usage: TokenUsage = TokenUsage()
 
 
 # The per-vertical Layer-2 pass, injected so tests run fully offline (mirrors `resolve_fetcher`).
@@ -81,6 +83,8 @@ def _default_layer2(
         extracted=ext.extracted,
         matched=mat.matched,
         est_cost_usd=ext.est_cost_usd + mat.est_cost_usd,
+        extract_usage=ext.usage,
+        match_usage=mat.usage,
     )
 
 
@@ -136,6 +140,7 @@ def run_nightly(
     digests: list[DigestSendResult] = []
     extraction_calls = match_calls = 0
     llm_cost = 0.0
+    usage = TokenUsage()
     # Layer 2 + digests are config-driven (a "vertical is config"): each config-backed vertical
     # gets its LLM passes, then one digest per active profile (D-027).
     for vertical in available_verticals():
@@ -147,11 +152,23 @@ def run_nightly(
         extraction_calls += l2.extracted
         match_calls += l2.matched
         llm_cost += l2.est_cost_usd
+        usage = usage + l2.extract_usage + l2.match_usage
+        # The real per-stage token meter (D-069) — replaces the old $0.01/item proxy. Cache hit % is
+        # the matching prompt-cache signal: near-0 means the resume prefix isn't clearing the
+        # 2048-token floor; the extraction line shows whether description input is uncacheable.
         logger.info(
-            "layer-2 [%s]: extracted=%d matched=%d est_cost=$%.4f",
+            "layer-2 [%s]: extracted=%d (in=%d out=%d) matched=%d (in=%d out=%d "
+            "cache_read=%d cache_write=%d hit=%.0f%%) est_cost=$%.4f",
             vertical,
             l2.extracted,
+            l2.extract_usage.input,
+            l2.extract_usage.output,
             l2.matched,
+            l2.match_usage.input,
+            l2.match_usage.output,
+            l2.match_usage.cache_read,
+            l2.match_usage.cache_write,
+            l2.match_usage.cache_hit_rate * 100,
             l2.est_cost_usd,
         )
 
@@ -175,6 +192,7 @@ def run_nightly(
             extraction_calls=extraction_calls,
             match_calls=match_calls,
             llm_cost_usd=llm_cost,
+            usage=usage,
         )
 
     alerted = False

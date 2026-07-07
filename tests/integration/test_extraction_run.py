@@ -146,6 +146,7 @@ def test_extracts_only_in_scope_unextracted(migrated_engine: Engine) -> None:
 
     assert (summary.total, summary.extracted, summary.failed) == (2, 2, 0)
     assert summary.est_cost_usd > 0
+    assert summary.usage.input == 1600  # 2 postings × 800 input tokens, aggregated (D-069)
     assert detail_calls == ["/job/data-eng"]  # Workday detail fetched once, with the externalPath
 
     swe = _row(migrated_engine, "swe")
