@@ -60,7 +60,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Matching is reasoning, not similarity.** Every rationale must state fits, gaps, and a
   verdict + score. Willingness to say *no* is a product requirement. (D-007, D-036)
 - **Model tiering:** Haiku for extraction, Sonnet for match rationale. Extraction is cached
-  by `content_hash`; match prompts are prompt-cached; matching is eval-gated. (D-035, D-036)
+  by `content_hash`; match prompts are prompt-cached; matching is eval-gated. Sonnet matching runs at
+  **`effort=medium`** (env-overridable `VJA_MATCH_EFFORT`; the lowest eval-passing effort — `high` overspends
+  since thinking bills as output), not the API default `high`. (D-035, D-036, D-069)
 - **Resume input abstracts to `resume_text`;** non-text formats are a signup-time adapter,
   not pipeline concern. (D-033)
 
@@ -184,7 +186,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Cost & safety
 
 - **Cost discipline from day one:** LLM only where structure runs out; cache by content
-  hash; meter LLM spend. (D-035, D-036)
+  hash; meter LLM spend. **Metering is real, not a proxy:** every LLM call's `TokenUsage`
+  (input/output/cache_read/cache_write) is summed per stage and **persisted to `pipeline_runs`**
+  (four token columns) + logged as a per-stage nightly line with the matching cache-hit %. The
+  `$0.01`-per-match figure survives **only** as the backfill budget-guard proxy (below), not as the spend
+  meter. (D-035, D-036, D-069)
 - **Signup backfill is guarded by a per-backfill cap + a global daily ceiling.** The cap
   (`VJA_BACKFILL_MAX_POSTINGS`, default 100) bounds one signup's candidate set inside `run_backfill`
   (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) refuses a backfill

@@ -14,7 +14,10 @@ from typing import Any
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import pipeline_runs
-from vja.models import PipelineRunStatus
+from vja.models import PipelineRunStatus, TokenUsage
+
+# Module-level default (frozen/immutable) — avoids a call in the arg default (ruff B008).
+_NO_USAGE = TokenUsage()
 
 
 def start_run(conn: Connection, now: datetime) -> int:
@@ -68,11 +71,13 @@ def update_llm_metrics(
     extraction_calls: int,
     match_calls: int,
     llm_cost_usd: float,
+    usage: TokenUsage = _NO_USAGE,
 ) -> None:
     """Record the run's Layer-2 LLM totals (extraction + matching) after the per-vertical loop.
 
     `finish_run` writes 0s first (the run row is finalized before the LLM steps run); the nightly
-    loop calls this once the extract/match passes are done, overwriting them with real totals.
+    loop calls this once the extract/match passes are done, overwriting them with real totals —
+    including the actual token breakdown (D-069), the meter behind the `llm_cost_usd` estimate.
     """
     conn.execute(
         pipeline_runs.update()
@@ -81,5 +86,9 @@ def update_llm_metrics(
             extraction_calls=extraction_calls,
             match_calls=match_calls,
             llm_cost_usd=llm_cost_usd,
+            input_tokens=usage.input,
+            output_tokens=usage.output,
+            cache_read_tokens=usage.cache_read,
+            cache_write_tokens=usage.cache_write,
         )
     )

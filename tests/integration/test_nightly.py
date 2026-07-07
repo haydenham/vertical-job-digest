@@ -22,7 +22,7 @@ from vja.db.profiles import active_profiles, upsert_profile
 from vja.db.schema import employers, pipeline_runs, postings
 from vja.digest.send import DigestConfig
 from vja.fetchers.base import FetchError
-from vja.models import AtsType, Employer, RawPosting
+from vja.models import AtsType, Employer, RawPosting, TokenUsage
 from vja.nightly import Layer2Summary, run_nightly
 
 _PASS = lambda _url: True  # noqa: E731  (tiny test stub)
@@ -80,7 +80,15 @@ def _fake_layer2(engine: Engine, vertical: str, *, client: object, now: datetime
                     now=now,
                 )
             matched += 1
-    return Layer2Summary(extracted=matched, matched=matched, est_cost_usd=0.01 * matched)
+    return Layer2Summary(
+        extracted=matched,
+        matched=matched,
+        est_cost_usd=0.01 * matched,
+        extract_usage=TokenUsage(input=800 * matched, output=100 * matched),
+        match_usage=TokenUsage(
+            input=900 * matched, output=200 * matched, cache_read=4000 * matched
+        ),
+    )
 
 
 def _profile(engine: Engine) -> None:
@@ -154,6 +162,11 @@ def test_happy_path_sends_digest_and_does_not_alert(migrated_engine: Engine) -> 
         run_row = conn.execute(select(pipeline_runs)).mappings().one()
     assert run_row["match_calls"] == 1
     assert run_row["llm_cost_usd"] == 0.01
+    # Real token totals persist (D-069), 1 posting: extract 800/100 + match 900/200 + 4000 read.
+    assert run_row["input_tokens"] == 1700  # 800 extract + 900 match
+    assert run_row["output_tokens"] == 300  # 100 extract + 200 match
+    assert run_row["cache_read_tokens"] == 4000
+    assert run_row["cache_write_tokens"] == 0
 
 
 @respx.mock

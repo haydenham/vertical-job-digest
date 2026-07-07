@@ -13,6 +13,7 @@ from anthropic import Anthropic
 
 from vja.match import (
     MatchResult,
+    _usage_cost,
     fields_to_columns,
     match_posting,
 )
@@ -66,13 +67,28 @@ def test_fields_to_columns_maps_lists_to_json_and_enum_to_value() -> None:
     assert "model_version" not in cols  # stamped by save_match, not here
 
 
-def test_match_posting_returns_result_and_cache_aware_cost() -> None:
+def test_match_posting_returns_result_and_real_token_usage() -> None:
     client = cast("Anthropic", _FakeClient())
-    result, cost = match_posting(client, "resume", ("power markets",), "Title: SWE")
+    result, usage = match_posting(client, "resume", ("power markets",), "Title: SWE")
     assert result is _RESULT
+    # The meter reads the raw usage fields (D-069), not a proxy.
+    assert (usage.input, usage.output, usage.cache_read, usage.cache_write) == (1000, 200, 4000, 0)
     # 1000 in × $3/MTok + 200 out × $15/MTok + 4000 cache_read × 0.1 × $3/MTok
     expected = 1000 * 3e-6 + 200 * 15e-6 + 4000 * 0.1 * 3e-6
-    assert cost == pytest.approx(expected)
+    assert _usage_cost(usage) == pytest.approx(expected)
+
+
+def test_match_posting_passes_effort_default_and_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeClient()
+    match_posting(cast("Anthropic", client), "resume", (), "Title: SWE")
+    assert client.messages.calls[0]["output_config"] == {"effort": "medium"}  # D-069 default
+
+    monkeypatch.setenv("VJA_MATCH_EFFORT", "low")
+    client2 = _FakeClient()
+    match_posting(cast("Anthropic", client2), "resume", (), "Title: SWE")
+    assert client2.messages.calls[0]["output_config"] == {"effort": "low"}  # env-overridable knob
 
 
 def test_cached_system_carries_resume_and_cache_control() -> None:

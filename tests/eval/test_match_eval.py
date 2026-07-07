@@ -48,13 +48,13 @@ Stack: Eclipse reservoir simulation, Fortran
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
 def test_match_structural_and_obvious_yes() -> None:
-    result, cost = match_posting(Anthropic(), _RESUME, _VOCAB, _GOOD_POSTING)
+    result, usage = match_posting(Anthropic(), _RESUME, _VOCAB, _GOOD_POSTING)
 
     # Structural (D-007): valid verdict, score in range, non-empty fits AND gaps.
     assert isinstance(result.verdict, Verdict)
     assert 0 <= result.score <= 100
     assert result.fits and result.gaps
-    assert cost > 0
+    assert usage.input > 0 or usage.cache_read > 0  # real tokens metered (D-069)
 
     # Behavioral (obvious yes): an aligned early-career grid-software role.
     assert result.verdict in (Verdict.YES, Verdict.STRONG_YES), result.verdict

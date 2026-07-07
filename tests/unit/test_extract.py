@@ -81,12 +81,20 @@ def test_fields_to_columns_maps_enums_to_values() -> None:
     assert "extracted_at" not in cols  # stamped by save_extraction, not here
 
 
-def test_extract_posting_returns_fields_and_cost() -> None:
+def test_extract_posting_returns_fields_and_real_token_usage() -> None:
     client = cast("Anthropic", _FakeClient())
-    fields, cost = extract_posting(client, "some posting text")
+    fields, usage = extract_posting(client, "some posting text")
     assert fields is _FIELDS
+    assert (usage.input, usage.output) == (1000, 150)  # the meter reads raw usage (D-069)
     # 1000 input × $1/MTok + 150 output × $5/MTok = 0.001 + 0.00075
-    assert cost == pytest.approx(0.00175)
+    assert usage.cost(1e-6, 5e-6) == pytest.approx(0.00175)
+
+
+def test_extract_system_prompt_carries_cache_control() -> None:
+    client = _FakeClient()
+    extract_posting(cast("Anthropic", client), "some posting text")
+    system = client.messages.calls[0]["system"]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}  # stable instruction prefix (D-069)
 
 
 def test_extract_posting_raises_on_no_parsed_output() -> None:
