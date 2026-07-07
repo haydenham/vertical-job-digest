@@ -193,6 +193,14 @@ From the 2026-07-06 planning discussion — sequence after beta users are on and
   **and** manual curation feed the same queue. Already reserved as Phase 10 in `CLAUDE.md`.
 - **Beta hardening** (Hayden's priority = **expand the employer universe** — the infra is strong, under-populated):
   - Finish **Phenom** (next fetcher — the airline portals; relevant to aviation beta users).
+  - **Landing/login visual polish** (reopens the D-065 "minimal placeholder … real marketing design later"
+    deferral). The current `Landing.tsx`/`Login.tsx` are intentional first-iteration placeholders over the
+    Claude-design-studio `theme.css`. Scope agreed: a **polished single-screen** landing (hero + value prop +
+    how-it-works + Google CTA), **keep Landing + Login as two pages** and polish both. **Frontend-only, no
+    backend** — mostly `theme.css` (shared with the dashboard, so a refresh restyles the whole app) plus
+    `Landing.tsx`/`Login.tsx` markup/copy. **Research-first:** gather UI/UX references for a diff/digest tool
+    before building, then hand a concrete direction in (avoids a second blind first-iteration). Its own block +
+    decision entry when scheduled; gated by the frontend gate (eslint / tsc / vitest).
   - A **coverage ledger** (per vertical: fetchable / parked / Layer-2-only / dead) to make expansion a punch
     list, not a vibe.
   - **Prune low-signal employers** (`early_career_volume_estimate`) — total coverage of a *good* universe beats
