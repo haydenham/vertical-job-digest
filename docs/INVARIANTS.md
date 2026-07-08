@@ -19,7 +19,7 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Architecture & code structure
 
 - **Layered imports: lower layers must not import higher ones.** The stack, top→bottom:
-  `nightly` → `pipeline`/`extract`/`match`/`digest` → `fetchers`/`verticals` → `db` →
+  `nightly` → `pipeline`/`extract`/`match`/`digest`/`discover` → `fetchers`/`verticals` → `db` →
   `prefilter`/`scope`/`dates`/`diff`/`hashing` → `models`. **Machine-enforced** by
   `import-linter` (`uv run lint-imports`; pre-commit + CI). `models` imports nothing.
   *One grandfathered back-edge:* `db.employers → fetchers.registry` (see `pyproject.toml`).
@@ -269,3 +269,17 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   D-051, D-052)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
   Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)
+
+## Discovery (Layer 3)
+
+- **The discovery agent finds new *employers*, never postings, and only ever writes `proposed`
+  rows.** Weekly (thin core is on-demand via `vja-discover`), Claude Opus 4.8 with the server-side
+  `web_search`/`web_fetch` tools over oblique sources (VC/PE portfolios, conference sponsor lists,
+  funding news, competitors-of-X). Every proposal is **validated by actually fetching** — the matching
+  registry fetcher must return ≥1 posting (D-017 reuse) → `proposed`/`detected`; else
+  `proposed`/`unknown`/`layer2` for manual triage. Rows are `source=agent_discovered`,
+  `status=proposed`, idempotent on `UNIQUE(vertical, name)`; **only `active` employers are fetched
+  nightly**, so proposals sit inert until a human approves them (**human approval is the rule at
+  first**). Spend is metered (`TokenUsage`, D-069) and bounded (`web_search` `max_uses` +
+  `_MAX_CONTINUATIONS`). Weekly scheduling + the `vja-review` approve/reject CLI are block 10.2.
+  (D-070, D-047, D-017, D-005)

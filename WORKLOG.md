@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-07 — Phase 10.1 · Layer-3 discovery agent, thin core (D-070 → built)
+
+**Started Phase 10 (the last roadmap item) — the discovery agent that finds new *employers* and writes them as
+`proposed` rows for human approval.** (Block 2 of the cost fix was parked — it needs the Block-1 nightly numbers,
+which aren't read yet.) Branch `feat/phase10-discovery-agent` (off `main` @ `cd23d2a`). Code + docs; the live LLM
+smoke is Hayden-run. **Plan-mode first, four decisions run through Hayden → all "recommended":** thin core first ·
+Anthropic web tools · admin CLI review surface · validate-by-fetching.
+
+**Did:**
+- **New top-tier module `src/vja/discover.py`** + `vja-discover` CLI, two cleanly-separated stages:
+  - **Stage 1 (LLM):** Opus 4.8 (`claude-opus-4-8`, adaptive thinking, `effort=medium`) with the server-side
+    `web_search_20260209` + `web_fetch_20260209` tools runs an agentic research loop over oblique sources (VC/PE
+    portfolios, conference sponsors, funding news, competitors-of-X), passed the existing universe as a
+    do-not-repropose list; handles `pause_turn` (bounded by `_MAX_CONTINUATIONS`); a toolless `messages.parse` turn
+    structures the report → `list[CandidateEmployer]`. Bounded by `web_search` `max_uses` (`VJA_DISCOVER_MAX_SEARCHES`);
+    spend metered with the Block-1 `TokenUsage` (D-069) at Opus rates, printed per run.
+  - **Stage 2 (deterministic, LLM-free):** dedup on normalized name, then **validate by actually fetching** — build an
+    `Employer` from the guess and run `registry.get_fetcher(ats).fetch()` (pure reuse of the fetcher spine, D-017).
+    Fetchable + ≥1 posting → `proposed`/`verification=detected` with the real ATS; else → `proposed`/`unknown`/`layer2`
+    with the guess kept in `notes` for manual triage.
+- **`db/employers.py`:** `normalize_employer_name` (lives in `db` so `discover -> db` stays one-directional),
+  `existing_employer_names`, `insert_proposed_employer` (`source=agent_discovered`, `status=proposed`, idempotent on
+  `UNIQUE(vertical, name)`). **No migration** — the schema already had the enum values; only `active` employers are
+  fetched nightly, so proposals sit inert until approved.
+- **`pyproject.toml`:** `vja-discover` entry point; `discover` added to the pipeline import-linter layer.
+
+**Decisions:** **D-070 → accepted** (Phase 10.1 thin core; references D-047/D-017/D-005/D-069). INVARIANTS: new
+"Discovery (Layer 3)" section + `discover` in the layering line. CLAUDE.md Phase 10 ticked (10.1 ✅, 10.2 = review
+CLI + scheduling).
+
+**Verified:** full offline gate — ruff/format + mypy (113 files) + import-linter (1/0) + **395 pytest** (+14: unit
+validate-by-fetch fetchable/unresolved/dedup/unsupported-ATS + the Stage-1 loop incl. `pause_turn` resume;
+integration `insert_proposed_employer` idempotency + `run_discovery` persistence & dry-run, faked client +
+respx-stubbed ATS). CLI `--help` wires up. **Not run here:** the live `vja-discover --vertical grid_power_software
+--limit 5 --dry-run` (needs `ANTHROPIC_API_KEY` + real web search) — Hayden-run.
+
+**Next — 10.2 (block 2 of Phase 10):** the `vja-review` approve/reject admin CLI (`list_proposed` /
+`set_employer_status`) + weekly scheduling (launchd / Cloud Run Job); later, auto-approval, a proposal-precision
+eval once there's a sample, and discovery of non-employer `sources` (HN/niche). **Still open from before:** the
+parked LLM-cost Block 2 (Batch API — needs the Block-1 nightly token read first).
+
+---
+
 ## 2026-07-07 — Phase 5.x · LLM cost Block 1 — real token metering + Sonnet effort=medium (D-069 → built)
 
 **Two signups cost $6/morning; the console showed ~10M input : <1M output (input-bound ~10:1) at ~7% cache

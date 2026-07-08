@@ -144,6 +144,77 @@ def import_employers_from_csv(
     return result
 
 
+def normalize_employer_name(name: str) -> str:
+    """Canonical form for dedup: lowercased, whitespace-collapsed, common corporate
+    suffixes/punctuation dropped. Lives here (not in `discover`) so the layering stays clean
+    (`discover -> db`, never up) and the DB read side dedups the same way the agent does."""
+    lowered = name.casefold().strip()
+    # drop trailing corporate designators + surrounding punctuation
+    for suffix in (" inc", " inc.", " llc", " ltd", " ltd.", " corp", " corp.", " co", " co."):
+        if lowered.endswith(suffix):
+            lowered = lowered[: -len(suffix)]
+    cleaned = "".join(ch for ch in lowered if ch.isalnum() or ch.isspace())
+    return " ".join(cleaned.split())
+
+
+def existing_employer_names(engine: Engine, vertical: str) -> set[str]:
+    """The normalized names already in the universe for `vertical` (any status) — the
+    discovery agent's do-not-repropose set + the persistence dedup guard."""
+    stmt = select(employers.c.name).where(employers.c.vertical == vertical)
+    with engine.connect() as conn:
+        return {normalize_employer_name(row[0]) for row in conn.execute(stmt).all()}
+
+
+def insert_proposed_employer(
+    engine: Engine,
+    *,
+    vertical: str,
+    name: str,
+    ats_type: AtsType,
+    ats_slug: str | None = None,
+    endpoint: str | None = None,
+    careers_url: str | None = None,
+    category: str | None = None,
+    verification: Verification | None = None,
+    notes: str | None = None,
+    now: datetime | None = None,
+) -> int | None:
+    """Insert one discovery-agent proposal (`status=proposed`, `source=agent_discovered`).
+
+    Idempotent per `UNIQUE(vertical, name)`: if a row with this name already exists (in any
+    status) it is left untouched and `None` is returned — a proposal never overwrites a
+    curated/active employer. Returns the new row id on insert.
+    """
+    stamp = now or datetime.now(UTC)
+    with begin(engine) as conn:
+        existing = conn.execute(
+            select(employers.c.id)
+            .where(employers.c.vertical == vertical)
+            .where(employers.c.name == name)
+        ).first()
+        if existing is not None:
+            return None
+        result = conn.execute(
+            employers.insert().values(
+                vertical=vertical,
+                name=name,
+                ats_type=ats_type,
+                ats_slug=ats_slug,
+                endpoint=endpoint,
+                careers_url=careers_url,
+                category=category,
+                source=EmployerSource.AGENT_DISCOVERED,
+                status=EmployerStatus.PROPOSED,
+                verification=verification,
+                notes=notes,
+                created_at=stamp,
+                updated_at=stamp,
+            )
+        )
+    inserted = result.inserted_primary_key
+    return int(inserted[0]) if inserted else None
+
+
 def count_employers(engine: Engine, vertical: str | None = None) -> int:
     """Count employer rows, optionally filtered to one vertical."""
     stmt = select(func.count()).select_from(employers)

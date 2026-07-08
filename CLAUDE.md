@@ -179,7 +179,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   give feedback.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
-  → new companies into the DB. Deferred because it doesn't gate a user-facing launch.
+  → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
+  `vja-discover` — Opus 4.8 `web_search`/`web_fetch` research → **validate-by-fetch** → `proposed`+`agent_discovered`
+  rows (fetchable→`detected`, else `unknown`/`layer2`); metered + bounded; no migration (schema already had the enum
+  values, only `active` is fetched). **10.2 = the `vja-review` approve/reject CLI + weekly scheduling** (+ later:
+  auto-approval, a proposal-precision eval, non-employer `sources`).
 
 ## Conventions for this repo
 
