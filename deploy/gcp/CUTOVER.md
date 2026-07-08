@@ -167,6 +167,35 @@ Prove it before trusting the cron: `gcloud run jobs execute vja-nightly --region
 (`gcloud run jobs executions list --job vja-nightly`). The Job needs DB + Anthropic (extract/match) + Resend +
 `VJA_DIGEST_*` (send) — but **not** OAuth/session (it has no HTTP surface).
 
+## 8b. Weekly discovery agent (Phase 10.2 — NOT yet enabled)
+
+The Layer-3 discovery agent (`vja-discover`) has the same trigger shape as the nightly (D-031: one image,
+entrypoint override + a Cloud Scheduler trigger), but it's **ready-but-off** — do NOT create these until its
+live per-run cost is measured (D-071). Run it manually first (`vja-discover --vertical grid_power_software
+--limit 5 --dry-run` prints the metered `est_cost`), then decide the weekly cadence. When you do enable it:
+
+```sh
+# Discovery Job: same image, entrypoint → vja-discover. Needs DB + Anthropic ONLY (no Resend/digest).
+gcloud run jobs create vja-discover \
+  --image "$IMAGE" \
+  --region "$REGION" \
+  --service-account "$RUNTIME_SA" \
+  --command /app/.venv/bin/vja-discover \
+  --args "--vertical,grid_power_software" \
+  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest"
+
+# Weekly Cloud Scheduler → Jobs Admin :run API (mirrors the launchd Mon-07:00 template)
+gcloud scheduler jobs create http vja-discover-trigger \
+  --location "$REGION" \
+  --schedule "0 7 * * 1" --time-zone "America/Chicago" \
+  --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vja-discover:run" \
+  --http-method POST \
+  --oauth-service-account-email "$RUNTIME_SA"
+```
+
+One Job/trigger per vertical (distinct `--args` + trigger name), or a wrapper. Proposals land as `proposed`
+rows; promote them with `vja-review` — they stay inert until approved (only `active` employers are fetched).
+
 ## 9. Flip the prod guards — **last**
 
 ```sh

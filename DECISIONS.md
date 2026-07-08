@@ -1207,3 +1207,25 @@ loop produces good proposals before wiring the scheduler/review surface; the lit
 CLI (`list_proposed`/`set_employer_status`), auto-approval, a proposal-precision eval, discovery of non-employer
 `sources`. **Status:** code + docs + 14 offline tests on `feat/phase10-discovery-agent`; the live `vja-discover`
 smoke (needs `ANTHROPIC_API_KEY`) is Hayden-run.
+
+### D-071 · Phase 10.2 · Layer-3 review surface — `vja-review` approve/reject CLI + ready-but-off weekly schedule · accepted · 2026-07-08
+The human gate that promotes D-070's `proposed` employers into live coverage (only `active` employers are fetched
+nightly, so proposals are inert without it). **Three decisions, run through Hayden in plan mode:** (1) **Scheduling
+= ready-but-OFF** — build + test the review CLI now; ship the weekly schedule as a *documented, disabled* launchd
+template (`com.vja.discover.plist.template`, not auto-installed) + a Cloud Scheduler runbook (CUTOVER §8b, not
+created). Discovery stays a manual `vja-discover` until its live per-run cost is measured; the trigger is swappable
+config, not code (D-031). (2) **Approve → `active` for fetchable, `approved` for layer2.** A proposal whose
+`ats_type ∈ SUPPORTED_ATS_TYPES` → `active` (fetched next nightly); a no-fetcher (unknown/layer2) proposal →
+`approved` and **parked** with a printed notice — finally giving the `approved` enum value a real job
+(vetted-but-not-fetchable). (3) **Reject → `retired`** (never deleted; mirrors D-009). **Fetchability is keyed on
+`SUPPORTED_ATS_TYPES`, not `verification`** — the exact predicate the nightly fetch uses, so hand-fixing a row's
+`ats_type` to a supported one and approving it correctly activates it (the manual-resolution path, free).
+**Parked-safety is structural:** `active_fetchable_employers` filters on both `status=active` AND a supported ATS,
+so an `approved`/layer2 row *physically can't* be fetched — no log guard needed; `vja-review list --status approved`
+is the flag. **Shape:** new top-tier module `src/vja/review.py` (`approve_employer`/`reject_employer`/`ReviewOutcome`
++ argparse `list`/`approve`/`reject`, entry point `vja-review`, same import-linter layer as `discover`); DB
+primitives `list_employers_by_status`/`get_employer_by_id`/`set_employer_status` + an `EmployerListing` read shape in
+`db/employers.py`. **No migration** (reuses existing `EmployerStatus` values). **Non-goals → later:** auto-approval,
+a proposal-precision eval (needs a real sample), non-employer `sources` review, and actually *enabling* the weekly
+schedule. **Status:** code + docs + 8 offline tests (403 total) on `feat/phase10-discovery-agent`; the live
+`vja-discover` → `vja-review` CLI walkthrough is Hayden-run. References D-070, D-047, D-031, D-017, D-009, D-005.

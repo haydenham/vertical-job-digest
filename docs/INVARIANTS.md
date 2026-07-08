@@ -281,5 +281,16 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `status=proposed`, idempotent on `UNIQUE(vertical, name)`; **only `active` employers are fetched
   nightly**, so proposals sit inert until a human approves them (**human approval is the rule at
   first**). Spend is metered (`TokenUsage`, D-069) and bounded (`web_search` `max_uses` +
-  `_MAX_CONTINUATIONS`). Weekly scheduling + the `vja-review` approve/reject CLI are block 10.2.
-  (D-070, D-047, D-017, D-005)
+  `_MAX_CONTINUATIONS`). (D-070, D-047, D-017, D-005)
+- **Proposals are promoted through `vja-review` (approve/reject/list) — the human gate.** `approve`
+  → `active` if the proposal's `ats_type ∈ SUPPORTED_ATS_TYPES` (fetched next nightly), else →
+  `approved` and **parked** (vetted, no Layer-1 fetcher yet). `reject` → `retired` (never deleted,
+  D-009). Fetchability is keyed on `SUPPORTED_ATS_TYPES` (the nightly's own predicate), **not**
+  `verification`, so fixing a row's `ats_type` and approving it activates it. `approved`/parked rows
+  are **structurally unfetchable** — `active_fetchable_employers` filters on `status=active` AND a
+  supported ATS — so `list --status approved` is the parked-queue flag, no runtime guard needed.
+  (D-071)
+- **The weekly discovery schedule is ready-but-OFF.** `vja-discover` stays a manual command until its
+  live per-run cost is measured; the launchd template (`com.vja.discover.plist.template`, not
+  auto-installed) + Cloud Scheduler runbook (CUTOVER §8b, not created) exist but are disabled. The
+  trigger is swappable config, not code (D-031). (D-071)
