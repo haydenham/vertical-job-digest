@@ -1182,3 +1182,28 @@ caching" is a dead end for the uncacheable input. **Status:** code + docs shippe
 `feat/llm-cost-instrumentation`; the eval sweep (medium vs low) + the post-deploy nightly read of the token
 columns are Hayden-run (need `ANTHROPIC_API_KEY` / prod). Supersedes the D-036 "adaptive/high, $0.01 proxy" cost
 posture.
+
+### D-070 · Phase 10.1 · Layer-3 discovery agent — thin core (research → validate-by-fetch → `proposed`) · accepted · 2026-07-07
+Built the first slice of Phase 10 (the last roadmap item; D-047 demoted it to "shell + formatting around an Opus
+deep-web-search that writes `proposed` employer rows"). **Four decisions, run through Hayden in plan mode:**
+(1) **thin core first** — one PR: discover → resolve ATS → write `proposed` rows behind `vja-discover`; NO weekly
+scheduling, NO approve/reject UI (both → block 10.2); (2) **Anthropic web tools** — Claude Opus 4.8 with the
+server-side `web_search_20260209` + `web_fetch_20260209` (no new vendor/key, stays inside the existing SDK
+dependency); (3) **admin CLI** as the eventual review surface (not the user-facing Rolefeed SPA); the approve
+CLI itself is 10.2, this block only *writes* + prints a summary; (4) **validate by actually fetching** — a
+`proposed` row is high-confidence only if the matching registry fetcher actually returns postings. **Shape:** one
+new top-tier module `src/vja/discover.py`, two cleanly separated stages — Stage 1 (LLM) runs an agentic
+`web_search`/`web_fetch` research loop (bounded by `web_search` `max_uses` + `_MAX_CONTINUATIONS`, handling
+`pause_turn`), then a toolless `messages.parse` turn structures the report into `list[CandidateEmployer]`; Stage 2
+(deterministic, LLM-free) dedups against the existing universe (normalized name) and validates each candidate by
+building an `Employer` from the guess and running `registry.get_fetcher(ats).fetch()` (D-017 reuse) — fetchable+≥1
+posting → `proposed`/`detected`, else → `proposed`/`unknown`/`layer2` for manual triage, guess kept in `notes`.
+All rows `source=agent_discovered`, `status=proposed`, idempotent on `UNIQUE(vertical, name)` — **no migration**
+(the schema already had these enum values, and only `active` is fetched nightly, so proposals sit inert until
+approved). **Cost discipline (D-005):** weekly + bounded by design; spend metered with the Block-1 `TokenUsage`
+(D-069) at Opus rates, printed per run; effort defaults to `medium` (env-overridable). **Why thin:** prove the
+loop produces good proposals before wiring the scheduler/review surface; the literal LLM-read tail (D-052) showed
+"measure the reach first" pays off. **Non-goals → block 10.2:** weekly scheduling, the `vja-review` approve/reject
+CLI (`list_proposed`/`set_employer_status`), auto-approval, a proposal-precision eval, discovery of non-employer
+`sources`. **Status:** code + docs + 14 offline tests on `feat/phase10-discovery-agent`; the live `vja-discover`
+smoke (needs `ANTHROPIC_API_KEY`) is Hayden-run.
