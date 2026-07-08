@@ -34,6 +34,7 @@ vja-backfill = "vja.match:backfill_main"
 vja-api = "vja.api:api_main"
 vja-repair = "vja.repair:repair_main"
 vja-discover = "vja.discover:main"
+vja-review = "vja.review:main"
 
 [dependency-groups]
 dev = [
@@ -101,7 +102,7 @@ type = "layers"
 containers = ["vja"]
 layers = [
     "nightly | api | repair",
-    "pipeline | extract | match | digest | discover",
+    "pipeline | extract | match | digest | discover | review",
     "fetchers | verticals",
     "db",
     "prefilter | scope | dates | diff | hashing | resume",

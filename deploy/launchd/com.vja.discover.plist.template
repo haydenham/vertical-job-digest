@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template for the WEEKLY Layer-3 discovery agent (Phase 10.2). DISABLED by default — install.sh
+     does NOT load this; the discovery schedule stays off until its live per-run cost is measured
+     (see README "Discovery (disabled by default)"). Substitute __WORKDIR__ (repo root) and
+     __VERTICAL__ (one vertical config key, e.g. grid_power_software) before loading; one plist per
+     vertical (give each a distinct Label). Re-run install steps after editing this template. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.vja.discover.__VERTICAL__</string>
+
+    <!-- The editable-install console script: absolute path, so launchd needs no PATH or uv. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__WORKDIR__/.venv/bin/vja-discover</string>
+        <string>--vertical</string>
+        <string>__VERTICAL__</string>
+    </array>
+
+    <!-- So the app's load_dotenv() finds .env (ANTHROPIC_API_KEY) and data/vja.db resolves. -->
+    <key>WorkingDirectory</key>
+    <string>__WORKDIR__</string>
+
+    <!-- Weekly: Mondays at 07:00 local. Weekday 1 = Monday. launchd runs a missed job on wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- App logs to stdout/stderr; the trigger decides the destination (portability rule, D-031). -->
+    <key>StandardOutPath</key>
+    <string>__WORKDIR__/logs/discover.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__WORKDIR__/logs/discover.err.log</string>
+</dict>
+</plist>

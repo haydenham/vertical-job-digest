@@ -182,8 +182,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
   `vja-discover` — Opus 4.8 `web_search`/`web_fetch` research → **validate-by-fetch** → `proposed`+`agent_discovered`
   rows (fetchable→`detected`, else `unknown`/`layer2`); metered + bounded; no migration (schema already had the enum
-  values, only `active` is fetched). **10.2 = the `vja-review` approve/reject CLI + weekly scheduling** (+ later:
-  auto-approval, a proposal-precision eval, non-employer `sources`).
+  values, only `active` is fetched). **10.2 ✅** (D-071): the `vja-review` approve/reject/list CLI — the human gate
+  that promotes proposals (`approve`→`active` if fetchable, else `approved`+parked; `reject`→`retired`; fetchability
+  keyed on `SUPPORTED_ATS_TYPES`, parked rows structurally unfetchable) + weekly scheduling **ready-but-OFF**
+  (disabled launchd template + Cloud Scheduler runbook; discovery stays manual until live cost is measured). **Later:**
+  auto-approval, a proposal-precision eval, non-employer `sources`, and actually enabling the weekly schedule.
 
 ## Conventions for this repo
 

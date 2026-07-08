@@ -215,6 +215,100 @@ def insert_proposed_employer(
     return int(inserted[0]) if inserted else None
 
 
+@dataclass(frozen=True)
+class EmployerListing:
+    """One employer as the `vja-review` surface displays it (`docs/04` §1).
+
+    A read shape, not a fetch-facing `Employer`: it carries the review-relevant fields
+    (status/verification/notes/careers_url) so a human can decide approve vs reject without
+    a second query.
+    """
+
+    id: int
+    vertical: str
+    name: str
+    ats_type: AtsType
+    status: EmployerStatus
+    verification: Verification | None
+    category: str | None
+    careers_url: str | None
+    notes: str | None
+    created_at: datetime
+
+
+_LISTING_COLS = (
+    employers.c.id,
+    employers.c.vertical,
+    employers.c.name,
+    employers.c.ats_type,
+    employers.c.status,
+    employers.c.verification,
+    employers.c.category,
+    employers.c.careers_url,
+    employers.c.notes,
+    employers.c.created_at,
+)
+
+
+def _row_to_listing(row: Any) -> EmployerListing:
+    return EmployerListing(
+        id=row["id"],
+        vertical=row["vertical"],
+        name=row["name"],
+        ats_type=AtsType(row["ats_type"]),
+        status=EmployerStatus(row["status"]),
+        verification=Verification(row["verification"]) if row["verification"] else None,
+        category=row["category"],
+        careers_url=row["careers_url"],
+        notes=row["notes"],
+        created_at=row["created_at"],
+    )
+
+
+def list_employers_by_status(
+    engine: Engine,
+    *,
+    vertical: str | None = None,
+    status: EmployerStatus = EmployerStatus.PROPOSED,
+) -> list[EmployerListing]:
+    """Employers in one lifecycle state, oldest first — the `vja-review list` read side."""
+    stmt = (
+        select(*_LISTING_COLS)
+        .where(employers.c.status == status.value)
+        .order_by(employers.c.created_at, employers.c.id)
+    )
+    if vertical is not None:
+        stmt = stmt.where(employers.c.vertical == vertical)
+    with engine.connect() as conn:
+        return [_row_to_listing(row) for row in conn.execute(stmt).mappings().all()]
+
+
+def get_employer_by_id(engine: Engine, employer_id: int) -> EmployerListing | None:
+    """One employer by id, or None — lets the review layer branch on ats_type/status."""
+    stmt = select(*_LISTING_COLS).where(employers.c.id == employer_id)
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().first()
+    return _row_to_listing(row) if row is not None else None
+
+
+def set_employer_status(
+    engine: Engine, employer_id: int, status: EmployerStatus, *, now: datetime | None = None
+) -> bool:
+    """Move one employer to `status` (+ bump `updated_at`); True iff a row matched.
+
+    The lone write primitive behind `vja-review` approve/reject — the approve-vs-park
+    decision lives in `vja.review`, not here.
+    """
+    stamp = now or datetime.now(UTC)
+    with begin(engine) as conn:
+        result = conn.execute(
+            employers.update()
+            .where(employers.c.id == employer_id)
+            .values(status=status, updated_at=stamp)
+        )
+    return bool(result.rowcount and result.rowcount > 0)
+
+
 def count_employers(engine: Engine, vertical: str | None = None) -> int:
     """Count employer rows, optionally filtered to one vertical."""
     stmt = select(func.count()).select_from(employers)

@@ -5,6 +5,49 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-08 — Phase 10.2 · Layer-3 review surface — `vja-review` CLI + ready-but-off schedule (D-071 → built)
+
+**Built the human approval gate that makes discovery output usable:** D-070's agent writes `proposed`
+employers, but only `active` ones are fetched — so proposals were inert dead weight until now. Branch
+`feat/phase10-discovery-agent` (continues 10.1). Code + docs; the live CLI walkthrough is Hayden-run.
+**Plan-mode first, three decisions run through Hayden:** ready-but-off scheduling · approve→active|approved
+(parked) · reject→retired.
+
+**Did:**
+- **New top-tier module `src/vja/review.py`** + `vja-review` CLI (`list`/`approve`/`reject`), same
+  import-linter layer as `discover` (imports `db` + `fetchers.registry`, no re-fetch — trusts the agent's
+  stamped `ats_type`). `approve_employer`: `ats_type ∈ SUPPORTED_ATS_TYPES` → `active` (fetched next
+  nightly), else → `approved` + **parked** with a printed notice. `reject_employer` → `retired`. Guards
+  not-found + non-proposed. Batch-friendly ids; exit 1 if any id fails.
+- **`db/employers.py`:** `EmployerListing` read shape + `list_employers_by_status` /`get_employer_by_id` /
+  `set_employer_status` (the lone write primitive; the approve-vs-park decision lives in `review`, not the
+  DB layer). **No migration** — reuses existing `EmployerStatus` values (matches 10.1).
+- **Fetchability keyed on `SUPPORTED_ATS_TYPES`, not `verification`** — the nightly's own predicate, so a
+  hand-fixed `ats_type` activates on approve (the manual-resolution path, free). Parked rows are
+  *structurally* unfetchable (`active_fetchable_employers` filters status+ATS), so `list --status approved`
+  is the flag — no runtime guard.
+- **Scheduling ready-but-OFF:** `deploy/launchd/com.vja.discover.plist.template` (weekly Mon-07:00,
+  `RunAtLoad` off, **not** auto-installed by `install.sh`) + README "Discovery (disabled)" section + a
+  Cloud Scheduler runbook (`deploy/gcp/CUTOVER.md` §8b, documented not created). No `ship.sh` change.
+
+**Decisions:** **D-071 → accepted** (references D-070/D-047/D-031/D-017/D-009/D-005). INVARIANTS: extended
+the "Discovery (Layer 3)" section (review-promote rules + parked-safety + ready-but-off schedule, replacing
+the "block 10.2" forward-reference). CLAUDE.md Phase 10 → `10.2 ✅`.
+
+**Verified:** full offline gate — ruff/format + mypy (115 files) + import-linter (1/0, `review` in the
+pipeline layer) + **403 pytest** (+8 integration: approve fetchable→active / layer2→parked / keyed-on-ats-type
+/ reject→retired / not-found / non-proposed-refused / list filters / CLI smoke). **Not run here:** the live
+`vja-discover` → `vja-review` walkthrough (needs `ANTHROPIC_API_KEY` + web search) — Hayden-run; it also
+yields the real per-run cost that gates enabling the weekly schedule.
+
+**Next:** Hayden runs the live CLI walkthrough (10.1's still-pending smoke folds in). Then a week of **beta
+hardening** (expand the employer universe — Phenom next per D-052 — coverage ledger, low-signal pruning,
+landing/login polish) with the two beta users. **Later Phase 10:** auto-approval, a proposal-precision eval
+(needs a sample), non-employer `sources`, enabling the weekly schedule. **Still parked:** the LLM-cost Batch
+API Block 2 (needs the Block-1 nightly token read first).
+
+---
+
 ## 2026-07-07 — Phase 10.1 · Layer-3 discovery agent, thin core (D-070 → built)
 
 **Started Phase 10 (the last roadmap item) — the discovery agent that finds new *employers* and writes them as
