@@ -164,19 +164,21 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   deep-link catch-all). **Plan of record: `docs/12-cloud-deploy-plan.md`** — four sub-blocks **9.5a app
   hardening** (code) · **9.5b containerization** (code) · **9.5c provision** (GCP+Neon+domain) · **9.5d
   cutover/go-live**; locked: Neon (not Cloud SQL), Cloud Run, a `.com` via Cloudflare, fresh DB + suppressed
-  baseline run. **9.5a–d ✅ — go-live infra done (D-067):** live on `role-feed.com`, Postgres/Neon, auth ON,
-  nightly Job+Scheduler running (closeout still open: email E2E + `/security-review`).
+  baseline run. **9.5a–d ✅ — go-live infra done + closeout complete (D-067):** live on `role-feed.com`,
+  Postgres/Neon, auth ON, nightly Job+Scheduler running, digests from the verified `digest@role-feed.com`
+  (email E2E ✅), `/security-review` ✅.
 - **Phase 9.x — onboarding overhaul + thin ship-script (`docs/13`).** The deployed onboarding/dashboard flow was
   broken for a fresh account — it treated vertical as a **global** picker, violating the standing
   **one-vertical-per-user** policy (D-064), so users 404'd. **Phase A ✅** thin scripted deploy (`deploy/gcp/ship.sh`;
   D-066) · **Phase B ✅** onboarding overhaul (D-065: static landing → Google auth → pick-vertical+upload → their
-  dashboard; `/api/me`, route guards, one-vertical enforcement; PR #52). **Remaining before beta invites:** B-4 prod
-  data cleanup (Hayden/Neon) → deploy via `ship.sh` → re-run the fresh-account walkthrough; plus go-live closeout
-  (email E2E + `/security-review`).
-- **Phase 9.6 — full CI/CD (NEXT; `docs/13` later roadmap).** Merge-triggered auto-deploy, replacing the Phase-A
-  script once deploy churn justifies it (docs/11 §5). Beta hardening (expand the employer universe — Phenom next,
-  coverage ledger, low-signal pruning — plus landing/login visual polish) runs alongside as the two beta users
-  give feedback.
+  dashboard; `/api/me`, route guards, one-vertical enforcement; PR #52). **✅ Done — beta invites unblocked:** B-4
+  prod data cleanup + fresh-account walkthrough passed; **real private users are signed up and working.**
+- **Phase 9.6 — full CI/CD ✅ (D-068).** Merge-to-`main` auto-deploys to Cloud Run (keyless WIF, smoke +
+  auto-rollback; migrations stay manual), replacing the manual Phase-A `ship.sh` (which stays the break-glass).
+- **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072).** The pre-broad-invite week: six one-day items —
+  UI rework · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
+  (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers (Phenom
+  next). Runs with the private beta users giving feedback.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
@@ -238,6 +240,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/11-multi-user-and-hosting.md` — living migration ledger: what's already portable, the single-user seams each phase must preserve, and the deferred auth/security/PII/cost work to build at the D-025 cutover. §5 = post-launch change management (data-only vs config/code redeploy loops; drives the vertical-expansion + discovery-agent roadmap).
 - `docs/12-cloud-deploy-plan.md` — Phase 9.5 plan of record (sub-blocks 9.5a–d + locked decisions). Read it + `docs/11` + the WORKLOG top entry to continue 9.5 after a chat reset.
 - `docs/14-discovery-cli-guide.md` — operator guide for the Layer-3 discovery workflow: `vja-discover` + `vja-review` commands, which DB they write (local vs Neon/prod), cost, and the first-run walkthrough (D-070/D-071).
+- `docs/15-beta-hardening-plan.md` — the active beta-hardening week: six one-day items (UI · discovery run · bugs · scaling incl. LLM spend · fetchers), DoD per day, and what's parked. Scope of record: D-072. Read after `WORKLOG.md` top to continue the week.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 
