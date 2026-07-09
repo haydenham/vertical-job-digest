@@ -46,3 +46,6 @@ logs/
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+
+# Layer-3 discovery report checkpoints
+data/discovery_reports/

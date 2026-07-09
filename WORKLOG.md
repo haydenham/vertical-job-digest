@@ -5,6 +5,52 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-09 — Discovery loop cost-hardening — Sonnet 5 + $2 kill-switch + cumulative caps + caching + checkpoint (D-073 → built)
+
+**A live `vja-discover` run burned $7 and produced nothing.** Reading the code found three real defects, all
+fixed this session. Branch `docs/beta-hardening-scope` (continues the beta-hardening work; **note: this branch
+now carries two logical changes — the D-072 scope docs and this D-073 code fix — Hayden may want to split into
+two PRs**). Plan-mode-style: every parameter run through Hayden via options+recommendation.
+
+**The bug (D-073):** (1) **no prompt caching** on an agentic loop re-sending a growing web-page-stuffed transcript
+every `pause_turn` — uncached Opus input on a super-linear prefix; (2) **`max_uses` resets per request**, so the
+resume loop had no real run cap (39 searches under a "15") and **no dollar ceiling at all**; (3) **all-or-nothing
+persist** at the end → a killed Stage-1 discarded everything.
+
+**Corrected a stale-catalog miss:** I claimed "Sonnet 5 doesn't exist" from a cached model list; Hayden pushed
+back; the **live Models API confirmed `claude-sonnet-5`** (standard $3/$15, intro $2/$10 per MTok through
+2026-08-31). Verified, didn't trust memory.
+
+**Did (all in `discover.py`):**
+- **Model default → `claude-sonnet-5`**; **model-aware `_model_rates`** (longest-prefix; standard list price,
+  conservative) replacing hardcoded Opus constants → honest meter + kill-switch under any `VJA_DISCOVER_MODEL`.
+- **Hard `VJA_DISCOVER_MAX_USD` = $2 kill-switch** — loop breaks the turn after `usage.cost()` crosses it.
+- **Cumulative tool budget** (8 searches / 8 fetches) via `_count_tool_uses` counting `server_tool_use` blocks
+  across resumes — the real fix for the reset bug; `max_uses` stays constant per request so the cache holds.
+- **Prompt caching** (`cache_control` ephemeral, SDK-verified) so the growing prefix re-reads at ~0.1×; **`web_fetch
+  max_content_tokens=5000`**.
+- **Checkpoint**: `_dump_report` writes the raw report to `data/discovery_reports/` the moment research finishes
+  (per-candidate DB persist already existed) → a capped/killed run keeps what it paid for. `_MAX_CONTINUATIONS`
+  env-tunable (12→8).
+
+**Net:** a full run now lands well under $1 and **cannot** run away or lose findings.
+
+**Decisions:** **D-073 → accepted** (supersedes D-070's theatrical `max_uses` bound + Opus model/rate). INVARIANTS:
+Discovery section — model → Sonnet 5, new "research loop is cached + $-bounded" invariant replacing the old
+"bounded by max_uses" clause. CLAUDE.md 10.1 + docs/14 updated (model, cost, env knobs). `.gitignore` +=
+`data/discovery_reports/`.
+
+**Verified:** full offline gate — ruff/format + mypy (115 files) + import-linter (1/0) + **409 pytest** (+6:
+dollar-ceiling break / cumulative-tool-cap break / cache_control+fetch-cap wiring / model-aware rates / tool-use
+count / report checkpoint). CLI `--help` + constants smoke. **Not run here:** the live `vja-discover` (Hayden-run,
+needs key + web search) — which now also yields the real per-run cost that gates the weekly schedule (D-071).
+
+**Next:** Hayden re-runs `vja-discover` (should now be sub-$1, bounded). Then back to the beta-hardening week
+(`docs/15`). **Branch hygiene:** consider splitting `docs/beta-hardening-scope` into the scope-docs PR (D-072) +
+this cost-fix PR (D-073).
+
+---
+
 ## 2026-07-08 — Beta hardening · scoped the pre-invite week + reconciled doc drift (D-072 → accepted)
 
 **Docs-only session. Scoped the beta-hardening week and fixed the roadmap drift that had accumulated.** Branch

@@ -182,9 +182,12 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
-  `vja-discover` — Opus 4.8 `web_search`/`web_fetch` research → **validate-by-fetch** → `proposed`+`agent_discovered`
-  rows (fetchable→`detected`, else `unknown`/`layer2`); metered + bounded; no migration (schema already had the enum
-  values, only `active` is fetched). **10.2 ✅** (D-071): the `vja-review` approve/reject/list CLI — the human gate
+  `vja-discover` — **Claude Sonnet 5** `web_search`/`web_fetch` research → **validate-by-fetch** →
+  `proposed`+`agent_discovered` rows (fetchable→`detected`, else `unknown`/`layer2`); metered + bounded; no
+  migration (schema already had the enum values, only `active` is fetched). **Cost-hardened (D-073):** loop is
+  prompt-cached + hard-capped at `VJA_DISCOVER_MAX_USD` ($2) + cumulative tool budget + report checkpoint —
+  after a real run burned $7 uncached with a broken per-request cap (39 searches, nothing saved).
+  **10.2 ✅** (D-071): the `vja-review` approve/reject/list CLI — the human gate
   that promotes proposals (`approve`→`active` if fetchable, else `approved`+parked; `reject`→`retired`; fetchability
   keyed on `SUPPORTED_ATS_TYPES`, parked rows structurally unfetchable) + weekly scheduling **ready-but-OFF**
   (disabled launchd template + Cloud Scheduler runbook; discovery stays manual until live cost is measured). **Later:**

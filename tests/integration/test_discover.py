@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+import pytest
 import respx
 from sqlalchemy import Engine, func, select
 
@@ -30,6 +31,12 @@ from vja.models import AtsType, EmployerSource, EmployerStatus, Verification
 _VERTICAL = "grid_power_software"
 _GH_URL = "https://boards-api.greenhouse.io/v1/boards/newco/jobs?content=true"
 _GH_JOB = {"id": 1, "title": "Software Engineer", "absolute_url": "https://x/1", "content": "..."}
+
+
+@pytest.fixture(autouse=True)
+def _report_dir(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route the Stage-1 report checkpoint to a tmp dir so tests never litter the repo."""
+    monkeypatch.setenv("VJA_DISCOVER_REPORT_DIR", str(tmp_path / "reports"))
 
 
 def _seed_manual(engine: Engine, name: str) -> None:

@@ -14,13 +14,23 @@ import httpx
 import pytest
 import respx
 
+import vja.discover as discover
 from vja.discover import (
     CandidateEmployer,
     _CandidateList,
+    _count_tool_uses,
+    _model_rates,
     discover_candidates,
     validate_candidate,
 )
 from vja.models import AtsType, TokenUsage, Verification
+
+
+@pytest.fixture(autouse=True)
+def _report_dir(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route the Stage-1 report checkpoint to a tmp dir so tests never litter the repo."""
+    monkeypatch.setenv("VJA_DISCOVER_REPORT_DIR", str(tmp_path / "reports"))
+
 
 _GH_URL = "https://boards-api.greenhouse.io/v1/boards/newco/jobs?content=true"
 _GH_JOB = {"id": 1, "title": "Software Engineer", "absolute_url": "https://x/1", "content": "..."}
@@ -171,3 +181,121 @@ def test_discover_candidates_resumes_on_pause_turn(stop: str) -> None:
     assert client.messages.create_calls == 2  # paused once, then resumed to end_turn
     assert len(candidates) == 1
     assert usage.input == 500 * 2 + 300  # two research calls + one structuring call
+
+
+# --- Cost/tool guardrails (the fixes for the $7-and-nothing-to-show run) -----------------------
+
+
+def _tool_block(name: str) -> types.SimpleNamespace:
+    return types.SimpleNamespace(type="server_tool_use", name=name)
+
+
+class _GuardMessages(_FakeMessages):
+    """A never-ending (`pause_turn` forever) research loop emitting configurable per-turn usage +
+    server-tool blocks — so only the dollar/tool guards can stop it, never `end_turn`."""
+
+    def __init__(
+        self,
+        report: str,
+        candidates: list[CandidateEmployer],
+        *,
+        per_turn_usage: tuple[int, int],
+        tool_blocks: list[types.SimpleNamespace],
+    ) -> None:
+        super().__init__(report, candidates)
+        self._per_turn_usage = per_turn_usage
+        self._tool_blocks = tool_blocks
+        self.last_kwargs: dict[str, Any] = {}
+
+    def create(self, **kwargs: Any) -> Any:
+        self.create_calls += 1
+        self.last_kwargs = kwargs
+        content = [types.SimpleNamespace(type="text", text=self._report), *self._tool_blocks]
+        return types.SimpleNamespace(
+            content=content, stop_reason="pause_turn", usage=_usage(*self._per_turn_usage)
+        )
+
+
+def test_count_tool_uses_counts_server_tool_blocks() -> None:
+    content = [
+        types.SimpleNamespace(type="text", text="hi"),
+        _tool_block("web_search"),
+        _tool_block("web_fetch"),
+        _tool_block("web_search"),
+    ]
+    assert _count_tool_uses(content) == (2, 1)
+
+
+def test_model_rates_are_model_aware() -> None:
+    assert _model_rates("claude-sonnet-5") == (3.0 / 1_000_000, 15.0 / 1_000_000)
+    assert _model_rates("claude-opus-4-8") == (5.0 / 1_000_000, 25.0 / 1_000_000)
+    assert _model_rates("claude-fable-5") == (10.0 / 1_000_000, 50.0 / 1_000_000)
+    assert _model_rates("something-unknown") == (3.0 / 1_000_000, 15.0 / 1_000_000)  # fallback
+
+
+def test_discover_stops_at_dollar_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One turn's spend already crosses the ceiling → the loop breaks after that turn, not at
+    `_MAX_CONTINUATIONS`. This is the safety net the old loop lacked."""
+    monkeypatch.setattr(discover, "_MAX_USD", 2.0)
+    monkeypatch.setattr(discover, "_MODEL", "claude-sonnet-5")  # $3/MTok input
+    client = _FakeClient("report", [_candidate()])
+    # 1M input tokens ≈ $3 at sonnet rates → over the $2 ceiling after a single turn.
+    client.messages = _GuardMessages(
+        "report", [_candidate()], per_turn_usage=(1_000_000, 0), tool_blocks=[]
+    )
+
+    _candidates, _usage = discover_candidates(client, "grid_power_software", set())  # type: ignore[arg-type]
+
+    assert client.messages.create_calls == 1  # stopped by cost, despite stop_reason=pause_turn
+
+
+def test_discover_stops_at_cumulative_tool_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cumulative counter is the real cap — a single turn that uses the whole search budget
+    stops the run (the old per-request `max_uses` reset let it run far past the cap)."""
+    monkeypatch.setattr(discover, "_MAX_SEARCHES", 8)
+    monkeypatch.setattr(discover, "_MAX_USD", 999.0)  # keep the money guard out of the way
+    client = _FakeClient("report", [_candidate()])
+    client.messages = _GuardMessages(
+        "report",
+        [_candidate()],
+        per_turn_usage=(100, 20),
+        tool_blocks=[_tool_block("web_search")] * 8,  # hits the search budget in one turn
+    )
+
+    _candidates, _usage = discover_candidates(client, "grid_power_software", set())  # type: ignore[arg-type]
+
+    assert client.messages.create_calls == 1  # cumulative search budget reached → stop
+
+
+def test_discover_passes_cache_control_and_capped_fetch() -> None:
+    """Every research call is prompt-cached and the fetch tool caps page size — the two
+    non-negotiable cost fixes."""
+    client = _FakeClient("report", [_candidate()])
+    client.messages = _GuardMessages(
+        "report",
+        [_candidate()],
+        per_turn_usage=(100, 20),
+        tool_blocks=[_tool_block("web_search")] * 8,
+    )
+
+    discover_candidates(client, "grid_power_software", set())  # type: ignore[arg-type]
+
+    kwargs = client.messages.last_kwargs
+    assert kwargs["cache_control"] == {"type": "ephemeral"}
+    fetch_tool = next(t for t in kwargs["tools"] if t["name"] == "web_fetch")
+    assert fetch_tool["max_content_tokens"] == discover._WEB_FETCH_MAX_CONTENT_TOKENS
+
+
+def test_discover_checkpoints_report_to_disk(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Research output is written to disk before the structuring turn, so a capped run keeps it."""
+    report_dir = tmp_path / "checkpoints"
+    monkeypatch.setenv("VJA_DISCOVER_REPORT_DIR", str(report_dir))
+    client = _FakeClient("the research report body", [_candidate()])
+
+    discover_candidates(client, "grid_power_software", set())  # type: ignore[arg-type]
+
+    written = list(report_dir.glob("grid_power_software_*.md"))
+    assert len(written) == 1
+    assert written[0].read_text(encoding="utf-8") == "the research report body"
