@@ -1131,6 +1131,9 @@ herring but harmless. **Mitigation:** Hayden uses hotspot or has IT allowlist th
 own networks are unaffected. **Remaining 9.5d closeout:** real email E2E + `/security-review`. **Caveat:** the
 *cloud cutover* is done, but the **product is not yet usable by beta users** — the onboarding UX (D-065) is a
 blocker. **Status:** accepted; go-live infra done, closeout + onboarding tracked in `docs/13`.
+**Closeout update (2026-07-08):** both closeout items **done** — email E2E verified (digests sending from the
+verified `digest@role-feed.com`) and `/security-review` complete; the D-065 onboarding blocker is fixed and
+real private users are signed up. Go-live is fully closed; the active work is beta hardening (D-072).
 
 ### D-068 · Phase 9.6 · Merge-triggered CI/CD to Cloud Run (WIF, auto-deploy, migrations stay manual) · accepted · 2026-07-06
 Replaces the manual `ship.sh` invocation (D-066) with **auto-deploy on merge**: the `deploy` job in
@@ -1229,3 +1232,24 @@ primitives `list_employers_by_status`/`get_employer_by_id`/`set_employer_status`
 a proposal-precision eval (needs a real sample), non-employer `sources` review, and actually *enabling* the weekly
 schedule. **Status:** code + docs + 8 offline tests (403 total) on `feat/phase10-discovery-agent`; the live
 `vja-discover` → `vja-review` CLI walkthrough is Hayden-run. References D-070, D-047, D-031, D-017, D-009, D-005.
+
+### D-072 · Beta hardening · Scope of the pre-broad-invite week (six one-day items) · accepted · 2026-07-08
+Go-live is fully closed (D-067 + closeout done) and real private users are signed up, so the launch blockers
+are cleared — this decision scopes the **beta-hardening** week that makes the beta *good* before broader
+invites. **Reconciled Hayden's plan against the docs' scattered "hardening" notes** (which had drifted:
+CLAUDE.md still listed 9.6 CI/CD as "NEXT" though D-068 shipped it, and listed email E2E + `/security-review`
+as open closeout though both are done). **Scope = six items, one day each** (verify each sound before the
+next), plan of record in `docs/15-beta-hardening-plan.md`: **(1)** UI rework — real landing page + dashboard
+polish modeled on a proven leader, timeboxed reference-pick; **(2)** discovery-agent live run (folds in the
+pending 10.1/10.2 smoke) + coverage ledger + low-signal pruning, producing the per-run cost that gates
+enabling the ready-but-OFF weekly schedule (D-071); **(3)** bug shakeout from real usage (regression-test
+first, D-021) + an optional nightly observability/alert (Hayden's call); **(4)** scaling plan across Neon /
+GCP / Resend / Google OAuth **+ Anthropic LLM spend as a fifth pillar** — read the real `pipeline_runs` token
+numbers (D-069) and decide the parked Batch API "Block 2"; **(5)** more fetchers, Phenom next (D-052, the
+airline portals). **Three scoping choices run through Hayden:** LLM cost **folded into the scaling day**
+(not its own day, not deferred); email E2E + `/security-review` **confirmed done** → docs reconciled rather
+than re-scoped; deliverable = the ordered plan **+ the doc reconciliation**. **Only hard dependency:** Day 2 →
+Day 4 (discovery cost feeds the scaling numbers). **Parked (tracked, not this week):** discovery auto-approval
++ precision eval, non-employer `sources`, actually enabling the weekly schedule, moving vertical config out of
+the image (`docs/11` §5). **Status:** accepted; docs written on `docs/beta-hardening-scope`; the per-day work
+is the week ahead. References D-067, D-068, D-069, D-071, D-052, D-057, D-021, D-031.

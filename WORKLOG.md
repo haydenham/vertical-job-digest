@@ -5,6 +5,40 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-08 — Beta hardening · scoped the pre-invite week + reconciled doc drift (D-072 → accepted)
+
+**Docs-only session. Scoped the beta-hardening week and fixed the roadmap drift that had accumulated.** Branch
+`docs/beta-hardening-scope`. Plan-mode-style: three scoping choices run through Hayden before any edit.
+
+**Context:** Phase 10 (the last roadmap item) is done; go-live is fully closed. Hayden's own scope (6 items,
+one day each) was slightly misaligned with the docs, which still read as if launch blockers were open.
+
+**Reconciled (the drift):** CLAUDE.md listed **9.6 CI/CD as "NEXT"** though D-068 shipped it (→ marked ✅), and
+listed **email E2E + `/security-review` as open closeout** though both are done (→ closed out). B-4 prod cleanup
++ fresh-account walkthrough passed; **real private users are signed up** — beta invites are unblocked.
+
+**Did:**
+- **New `docs/15-beta-hardening-plan.md`** — the plan of record: six one-day items (UI rework · discovery-agent
+  live run + coverage ledger + low-signal pruning · bug shakeout + optional nightly alert · scaling plan across
+  Neon/GCP/Resend/OAuth **+ Anthropic LLM spend** incl. the parked Batch API Block 2 · more fetchers, Phenom
+  next) with DoD per day and a parked list. Only hard dep: Day 2 (discovery cost) → Day 4 (scaling).
+- **CLAUDE.md:** 9.5d closeout marked complete; 9.6 CI/CD → ✅ (D-068); new **Phase BH — beta hardening
+  (ACTIVE)** roadmap line; doc-map entry for `docs/15`.
+- **docs/13:** status → DONE (both onboarding blocks landed, B-4 passed); pointer to `docs/15` for hardening.
+- **DECISIONS:** D-067 got a dated **closeout-complete** note; **D-072** appended (beta-hardening scope of record).
+
+**Decisions run through Hayden:** LLM cost **folded into the scaling day** (not its own, not deferred); email
+E2E + `/security-review` **confirmed done** → reconcile docs rather than re-scope; deliverable = ordered plan +
+doc reconciliation. Observability on Day 3 kept as a **flagged optional** sub-item; B-4 marked resolved.
+
+**Verified:** docs-only diff — no code touched, so the pytest/lint gates aren't triggered (DoD here = human-read
+diff + updated docs). Hayden commits/PRs.
+
+**Next:** start **Day 1 (UI rework)** — first timebox the "which leader to model" pick. Day 2 is Hayden-run
+(live `vja-discover`/`vja-review`, needs `ANTHROPIC_API_KEY` + web search).
+
+---
+
 ## 2026-07-08 — Phase 10.2 · Layer-3 review surface — `vja-review` CLI + ready-but-off schedule (D-071 → built)
 
 **Built the human approval gate that makes discovery output usable:** D-070's agent writes `proposed`

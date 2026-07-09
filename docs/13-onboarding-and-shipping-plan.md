@@ -6,19 +6,20 @@ and be able to continue. This is a **plan**, not an invariant source: when a blo
 `DECISIONS.md`, the live rules to `docs/INVARIANTS.md`, and this file's checkboxes get ticked. Authority order
 unchanged (build specs `docs/04+` > `CLAUDE.md` > memos); this doc is a memo-tier working plan.*
 
-**Status:** **9.5d go-live done** (D-067) — the app is live on `https://role-feed.com`, Postgres on Neon, auth
-enforced (`VJA_AUTH_REQUIRED=1`), nightly Job + Scheduler running, digests sending from `digest@role-feed.com`.
-**But the onboarding flow is broken for a fresh account** (see Phase B), which is a **blocker for inviting beta
-users.** Two blocks close that gap, in order:
+**Status: DONE — both blocks landed, beta invites unblocked.** 9.5d go-live done (D-067, closeout complete),
+app live on `https://role-feed.com`, Postgres on Neon, auth enforced (`VJA_AUTH_REQUIRED=1`), nightly Job +
+Scheduler running, digests sending from `digest@role-feed.com`. The onboarding flow is fixed and **real
+private users are signed up and working.** Both blocks:
 
-- **Phase A — thin scripted deploy** (ship reliably, ~30 min). Ships Phase B today. (D-066) — **✅ built**
-  (`deploy/gcp/ship.sh`; DoD's no-op-rebuild deploy is Hayden-run, needs cloud creds).
-- **Phase B — onboarding / auth-UX overhaul** (the real fix). (D-064, D-065) — **✅ built** (`/api/me` +
+- **Phase A — thin scripted deploy** (ship reliably, ~30 min). (D-066) — **✅ built** (`deploy/gcp/ship.sh`).
+  *Now superseded as the default path by 9.6 merge-to-`main` CI/CD (D-068); `ship.sh` stays the break-glass.*
+- **Phase B — onboarding / auth-UX overhaul** (the real fix). (D-064, D-065) — **✅ done** (`/api/me` +
   one-vertical 409 + `prompt=select_account`; SPA route guards, per-user vertical, matched poll; config-driven
-  picker). Remaining: **B-4 prod data cleanup** (Hayden) + deploy via `ship.sh` + re-run the walkthrough.
+  picker). **B-4 prod data cleanup + fresh-account walkthrough passed** — signups work end-to-end.
 
-Everything below the two blocks (discovery agent + review queue, coverage expansion, hardening) is the
-**later roadmap** — captured here so it isn't lost, not scheduled yet.
+The active work now is **beta hardening** — see `docs/15-beta-hardening-plan.md` (scope D-072). The later
+roadmap below (discovery agent + review queue ✅ Phase 10, coverage expansion, hardening) is captured here so
+it isn't lost; the hardening slice is now scheduled in `docs/15`.
 
 ---
 
