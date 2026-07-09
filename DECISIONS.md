@@ -1253,3 +1253,28 @@ Day 4 (discovery cost feeds the scaling numbers). **Parked (tracked, not this we
 + precision eval, non-employer `sources`, actually enabling the weekly schedule, moving vertical config out of
 the image (`docs/11` §5). **Status:** accepted; docs written on `docs/beta-hardening-scope`; the per-day work
 is the week ahead. References D-067, D-068, D-069, D-071, D-052, D-057, D-021, D-031.
+
+### D-073 · Phase 10.x · Discovery loop cost-hardening (Sonnet 5, $ kill-switch, cumulative caps, caching, checkpoint) · accepted · 2026-07-09
+A real `vja-discover` run burned **$7 and produced nothing** — the loop was fundamentally unsafe. Reading the
+code found three defects: (1) **no prompt caching** on an agentic loop that re-sends a growing, web-page-stuffed
+transcript on every `pause_turn` resume — Opus input price paid uncached on a super-linearly growing prefix;
+(2) the **`max_uses` "cap" resets per request**, so the pause_turn resume loop granted a fresh 15-search budget
+each turn (observed: 39 searches under a nominal "15") — there was **no real run bound and no dollar ceiling
+anywhere**; (3) **all-or-nothing persistence** at the very end, so a killed/failed Stage-1 discarded everything
+the money bought. **Decisions run through Hayden (options + recommendation each):** model **Claude Sonnet 5**
+(`claude-sonnet-5`, confirmed live via Models API after a stale-catalog miss — standard $3/$15, intro $2/$10 per
+MTok through 2026-08-31); hard per-run ceiling **`VJA_DISCOVER_MAX_USD` = $2** (checked after each turn — can
+overshoot ~one turn, which caching shrinks); **cumulative** tool budget **8 searches / 8 fetches** (counted from
+`server_tool_use` blocks across resumes, the real fix for the reset bug — `max_uses` stays constant per request
+so the cached prefix isn't invalidated); checkpoint = **raw report → `data/discovery_reports/` + per-candidate
+DB persist**. Non-negotiable fixes: **prompt caching** (`cache_control` ephemeral top-level → growing prefix
+re-reads at ~0.1×; SDK-verified param) and **`web_fetch max_content_tokens=5000`**. **Cost rates are
+model-aware** (`_model_rates`, longest-prefix; standard list price — conservative so the guard trips early and
+survives the Aug-31 intro expiry) replacing the hardcoded Opus constants, so the meter + kill-switch are honest
+under any `VJA_DISCOVER_MODEL`. **Shape:** rewrote `discover_candidates`' loop (cache_control, cumulative
+`_count_tool_uses` counter, dollar-cost break, `_dump_report`); `_MAX_CONTINUATIONS` env-tunable (12→8 default).
+**Net:** a full run now lands well under $1 and **cannot** run away or lose its findings. **Status:** code +
+6 tests (dollar ceiling / cumulative tool cap / cache_control+fetch-cap wiring / model rates / tool-use count /
+report checkpoint; 409 total) + docs, on `docs/beta-hardening-scope`. Live `vja-discover` walkthrough is
+Hayden-run. Supersedes D-070's "bounded by `web_search max_uses` + `_MAX_CONTINUATIONS`" claim (that bound was
+theatrical) and D-070's Opus-4.8 model + hardcoded-Opus-rate meter. References D-070, D-069, D-047, D-017.

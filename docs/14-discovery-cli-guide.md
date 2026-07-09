@@ -4,7 +4,7 @@ The Layer-3 discovery workflow (Phase 10, D-070/D-071): an agent finds new **emp
 them as `proposed` rows, and a human promotes the good ones with a review CLI. This is the operator
 reference for running it.
 
-- `vja-discover` — Opus 4.8 + web search researches new employers → writes `proposed` rows.
+- `vja-discover` — Claude Sonnet 5 + web search researches new employers → writes `proposed` rows.
 - `vja-review` — the human gate: `list` / `approve` / `reject` those proposals.
 
 Related: `deploy/launchd/README.md` (§ "Discovery (disabled by default)" + "Running against prod"),
@@ -37,11 +37,16 @@ nothing is fetched or shown to users until *you* `approve` one to `active`. So t
 bad company in front of anyone by itself.
 
 ### 2. What does a run cost?
-Each `vja-discover` run makes real Opus + web-search calls — **expect a few dollars**. Notes:
+Each `vja-discover` run makes real **Claude Sonnet 5** + web-search calls. A run is **hard-capped at
+`VJA_DISCOVER_MAX_USD` (default $2)** — the loop stops the turn after estimated spend crosses it, so a
+full run typically lands **well under $1** and can never run away (D-073). Notes:
 - `--dry-run` costs the **same** (it skips DB writes, not the LLM research loop).
 - `--limit N` caps how many candidates are *persisted*, not the research cost.
-- The run prints `est_cost=$…` and a token breakdown at the end — that's the real metered number
-  (Opus rates), and it's what gates whether the weekly schedule is worth enabling (D-071).
+- The run prints `est_cost=$…` and a token breakdown at the end — the real metered number (model-aware
+  rates), and what gates whether the weekly schedule is worth enabling (D-071).
+- Tunable via env: `VJA_DISCOVER_MODEL`, `VJA_DISCOVER_MAX_USD`, `VJA_DISCOVER_MAX_SEARCHES` /
+  `_MAX_FETCHES` (cumulative), `VJA_DISCOVER_EFFORT`. The raw research report is checkpointed to
+  `data/discovery_reports/` (or `VJA_DISCOVER_REPORT_DIR`) so a capped run keeps its findings.
 
 ---
 

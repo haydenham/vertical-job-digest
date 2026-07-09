@@ -9,10 +9,14 @@ employers are fetched nightly, so proposals sit inert until a human approves the
 Two cleanly separated stages (mirrors the repo rule: LLM where structure runs out; the deterministic
 fetchers stay LLM-free):
 
-- **Stage 1 — LLM discovery.** Claude Opus 4.8 with the server-side `web_search` + `web_fetch` tools
-  runs an agentic research loop, then a toolless `messages.parse` turn structures its report into a
-  `list[CandidateEmployer]`. Bounded by `web_search` `max_uses` + `max_continuations` (cost
-  discipline); spend metered with the Block-1 `TokenUsage`.
+- **Stage 1 — LLM discovery.** Claude Sonnet 5 (`VJA_DISCOVER_MODEL`) with the server-side
+  `web_search` + `web_fetch` tools runs an agentic research loop, then a toolless `messages.parse`
+  turn structures its report into a `list[CandidateEmployer]`. The loop is **prompt-cached** (the
+  growing transcript re-reads at ~0.1x) and bounded three ways: a hard **per-run dollar ceiling**
+  (`VJA_DISCOVER_MAX_USD`), a **cumulative** tool budget (searches/fetches counted across resumes,
+  not the per-request `max_uses` that resets), and `_MAX_CONTINUATIONS`; spend metered with the
+  Block-1 `TokenUsage` at model-aware rates. The raw report is checkpointed to disk the moment
+  research finishes, so a capped/interrupted run keeps what it paid for.
 - **Stage 2 — deterministic validation + persist.** Each candidate is deduped against the existing
   universe, then **validated by actually fetching**: build an `Employer` from the guessed ATS/slug
   and run the matching registry fetcher (D-017 reuse). A real fetch that returns postings → a
@@ -26,9 +30,11 @@ auto-approval, a proposal-precision eval, and discovery of non-employer `sources
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 from anthropic import Anthropic
@@ -50,21 +56,50 @@ from vja.verticals import load_vertical_config
 
 logger = logging.getLogger("vja.discover")
 
-_MODEL = os.environ.get("VJA_DISCOVER_MODEL", "claude-opus-4-8")
-_EFFORT = os.environ.get("VJA_DISCOVER_EFFORT", "medium")  # bounded weekly cost
-_MAX_SEARCHES = int(os.environ.get("VJA_DISCOVER_MAX_SEARCHES", "15"))  # web_search max_uses
-_MAX_CONTINUATIONS = 12  # bound the pause_turn server-tool loop
+_MODEL = os.environ.get("VJA_DISCOVER_MODEL", "claude-sonnet-5")
+_EFFORT = os.environ.get("VJA_DISCOVER_EFFORT", "medium")  # bounded cost; env-overridable
+# Tool budget is CUMULATIVE across the whole run (see discover_candidates). `max_uses` on the tool
+# def is only a per-request bound and resets on each pause_turn resume — it is NOT the run cap.
+_MAX_SEARCHES = int(os.environ.get("VJA_DISCOVER_MAX_SEARCHES", "8"))
+_MAX_FETCHES = int(os.environ.get("VJA_DISCOVER_MAX_FETCHES", "8"))
+_MAX_CONTINUATIONS = int(os.environ.get("VJA_DISCOVER_MAX_CONTINUATIONS", "8"))
+# Hard per-run dollar kill-switch — the loop stops the turn AFTER estimated spend crosses this (so
+# it can overshoot by ~one turn; caching keeps that small). The real safety net the old loop lacked.
+_MAX_USD = float(os.environ.get("VJA_DISCOVER_MAX_USD", "2.0"))
 _RESEARCH_MAX_TOKENS = 8_000  # per response; < the SDK's ~16k non-streaming timeout guard
 _STRUCTURE_MAX_TOKENS = 4_096
+_WEB_FETCH_MAX_CONTENT_TOKENS = 5_000  # cap a single fetched page so it can't bloat context
 
-# Opus 4.8 list price ($5 / $25 per MTok). Weekly + bounded, so the absolute spend stays small; the
-# meter exists so we *see* it (cost discipline), not because it's large.
-_OPUS_IN_PER_TOKEN = 5.0 / 1_000_000
-_OPUS_OUT_PER_TOKEN = 25.0 / 1_000_000
+# Per-token USD rates by model prefix (standard list price — deliberately conservative so the
+# kill-switch trips a hair early, not late; e.g. Sonnet 5's intro pricing of $2/$10 per MTok through
+# 2026-08-31 makes real spend lower than this estimates). The meter exists so we *see* spend.
+_MODEL_RATES: dict[str, tuple[float, float]] = {
+    "claude-sonnet-5": (3.0 / 1_000_000, 15.0 / 1_000_000),
+    "claude-sonnet-4": (3.0 / 1_000_000, 15.0 / 1_000_000),
+    "claude-opus-4": (5.0 / 1_000_000, 25.0 / 1_000_000),
+    "claude-fable-5": (10.0 / 1_000_000, 50.0 / 1_000_000),
+}
+_DEFAULT_RATES = (3.0 / 1_000_000, 15.0 / 1_000_000)  # sonnet-tier fallback
 
+
+def _model_rates(model: str) -> tuple[float, float]:
+    """(input, output) USD-per-token for `model`, longest-prefix match; sonnet-tier fallback."""
+    for key in sorted(_MODEL_RATES, key=len, reverse=True):
+        if model.startswith(key):
+            return _MODEL_RATES[key]
+    return _DEFAULT_RATES
+
+
+# Constant tool set (never varies per turn) so the cached prefix stays valid — the cumulative cap is
+# enforced in the loop, not by mutating `max_uses` (which would invalidate the cache every request).
 _WEB_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search_20260209", "name": "web_search", "max_uses": _MAX_SEARCHES},
-    {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": _MAX_SEARCHES},
+    {
+        "type": "web_fetch_20260209",
+        "name": "web_fetch",
+        "max_uses": _MAX_FETCHES,
+        "max_content_tokens": _WEB_FETCH_MAX_CONTENT_TOKENS,
+    },
 ]
 
 _RESEARCH_SYSTEM = """\
@@ -151,10 +186,12 @@ class DiscoverySummary:
     skipped_dup: int = 0
     usage: TokenUsage = field(default_factory=TokenUsage)
     dry_run: bool = False
+    model: str = _MODEL
 
     @property
     def est_cost_usd(self) -> float:
-        return self.usage.cost(_OPUS_IN_PER_TOKEN, _OPUS_OUT_PER_TOKEN)
+        in_rate, out_rate = _model_rates(self.model)
+        return self.usage.cost(in_rate, out_rate)
 
 
 def _text_of(content: Any) -> str:
@@ -162,6 +199,36 @@ def _text_of(content: Any) -> str:
     return "\n".join(
         getattr(block, "text", "") for block in content if getattr(block, "type", None) == "text"
     ).strip()
+
+
+def _count_tool_uses(content: Any) -> tuple[int, int]:
+    """(web_search, web_fetch) invocations in one response — server tools emit `server_tool_use`
+    blocks. Counted cumulatively across the loop so the run cap is real: per-request `max_uses`
+    resets on every pause_turn resume — how the old loop ran 39 searches under a '15' cap."""
+    searches = fetches = 0
+    for block in content:
+        if getattr(block, "type", None) == "server_tool_use":
+            name = getattr(block, "name", "")
+            if name == "web_search":
+                searches += 1
+            elif name == "web_fetch":
+                fetches += 1
+    return searches, fetches
+
+
+def _dump_report(vertical_key: str, report: str) -> None:
+    """Checkpoint the raw Stage-1 report to disk the moment research finishes, so a cost-capped or
+    interrupted run keeps what it paid for (Stage-2 then persists each candidate as it goes).
+    Non-fatal: a checkpoint failure must never sink the run."""
+    try:
+        out_dir = Path(os.environ.get("VJA_DISCOVER_REPORT_DIR", "data/discovery_reports"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
+        path = out_dir / f"{vertical_key}_{ts}.md"
+        path.write_text(report, encoding="utf-8")
+        logger.info("discovery report checkpointed to %s", path)
+    except OSError as exc:
+        logger.warning("could not checkpoint discovery report: %s", exc)
 
 
 def discover_candidates(
@@ -179,8 +246,10 @@ def discover_candidates(
         "Find new employers for this vertical, then write the per-candidate report."
     )
 
+    in_rate, out_rate = _model_rates(_MODEL)
     usage = TokenUsage()
     messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
+    searches_used = fetches_used = 0
     response = None
     for _ in range(_MAX_CONTINUATIONS):
         response = client.messages.create(
@@ -191,16 +260,41 @@ def discover_candidates(
             tools=cast("list[ToolUnionParam]", _WEB_TOOLS),
             thinking={"type": "adaptive"},
             output_config=cast(OutputConfigParam, {"effort": effort}),
+            # Auto-cache the growing prefix (system + tools + prior turns, incl. fetched pages) so
+            # each pause_turn resume re-reads it at ~0.1x instead of full input price. The old loop
+            # had NO caching and re-sent the whole page-stuffed transcript uncached every turn.
+            cache_control={"type": "ephemeral"},
         )
         usage = usage + TokenUsage.from_response(response.usage)
         messages.append({"role": "assistant", "content": response.content})
-        if response.stop_reason != "pause_turn":  # server-tool loop still running → resume
+        s, f = _count_tool_uses(response.content)
+        searches_used += s
+        fetches_used += f
+
+        spend = usage.cost(in_rate, out_rate)
+        if spend >= _MAX_USD:  # hard money ceiling — the safety net the old loop lacked
+            logger.warning(
+                "discovery hit the $%.2f cost ceiling (VJA_DISCOVER_MAX_USD) — stopping research",
+                _MAX_USD,
+            )
+            break
+        if searches_used >= _MAX_SEARCHES or fetches_used >= _MAX_FETCHES:
+            logger.info(
+                "discovery hit the tool budget (searches=%d/%d fetches=%d/%d) — stopping research",
+                searches_used,
+                _MAX_SEARCHES,
+                fetches_used,
+                _MAX_FETCHES,
+            )
+            break
+        if response.stop_reason != "pause_turn":  # server-tool loop finished → done researching
             break
 
     report = _text_of(response.content) if response is not None else ""
     if not report:
         logger.warning("discovery research produced no report for %s", vertical_key)
         return [], usage
+    _dump_report(vertical_key, report)  # checkpoint before spending on the structuring turn
 
     parsed = client.messages.parse(
         model=_MODEL,
