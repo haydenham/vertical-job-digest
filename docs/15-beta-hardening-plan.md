@@ -43,7 +43,7 @@ good batch of new companies with **minimal manual input**. This is where the rea
 earns its enable decision.
 
 - **Scope:**
-  - Run the live `vja-discover --vertical grid_power_software` loop (needs `ANTHROPIC_API_KEY` + web search;
+  - Run the live `vja-discover --vertical grid_power_software` loop (needs `OPENAI_API_KEY` + web search;
     Hayden-run) → review/approve via `vja-review`. Operator guide: `docs/14`.
   - **Coverage ledger** — a way to see fetchable vs. parked vs. proposed across the universe, so "how much do
     we actually cover" is a number, not a guess.
@@ -64,6 +64,13 @@ so discovery *yield* is now gated by the Anthropic `web_search`/`web_fetch` rate
 completed only ~1 of ~3 planned source waves. Before flipping the weekly schedule ON, decide whether that limit
 is per-minute (→ add pacing/backoff between waves) or a hard quota. Triage of #91–95 + the BambooHR-fetcher
 question are still open.
+
+**Provider/ATS hardening branch — 2026-07-10:** the next run moves discovery only to GPT-5.6 Terra
+(D-074). It replaces the single Claude loop with three independently capped source waves and reserves a
+separate four-action resolver for each of at most five candidates. Canonical provider-URL evidence plus
+the existing validate-by-fetch gate is required before a supported ATS is stamped; confirmed unsupported
+providers and typed failure reasons remain visible in proposal notes. The first Terra live run now supplies
+the cost/yield/rate-limit evidence that still gates schedule enablement.
 
 ## Day 3 — Bug shakeout
 

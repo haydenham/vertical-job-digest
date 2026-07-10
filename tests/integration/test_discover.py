@@ -25,7 +25,7 @@ from vja.db.employers import (
 )
 from vja.db.engine import begin
 from vja.db.schema import employers
-from vja.discover import CandidateEmployer, _CandidateList, run_discovery
+from vja.discover import ATSOutcome, ATSResolution, CandidateEmployer, _CandidateList, run_discovery
 from vja.models import AtsType, EmployerSource, EmployerStatus, Verification
 
 _VERTICAL = "grid_power_software"
@@ -91,22 +91,57 @@ def test_insert_proposed_employer_writes_and_is_idempotent(migrated_engine: Engi
 
 
 def _fake_client(candidates: list[CandidateEmployer]) -> Any:
-    class _Messages:
-        def create(self, **kwargs: Any) -> Any:
-            block = types.SimpleNamespace(type="text", text="report")
-            return types.SimpleNamespace(
-                content=[block],
-                stop_reason="end_turn",
-                usage=types.SimpleNamespace(input_tokens=1000, output_tokens=200),
-            )
+    details = types.SimpleNamespace(cached_tokens=0, cache_write_tokens=0)
+
+    def response(*, text: str = "", parsed: Any = None) -> Any:
+        return types.SimpleNamespace(
+            output_text=text,
+            output_parsed=parsed,
+            output=[],
+            usage=types.SimpleNamespace(
+                input_tokens=1_000,
+                output_tokens=200,
+                input_tokens_details=details,
+            ),
+        )
+
+    class _Stream:
+        def __init__(self, final: Any) -> None:
+            self.final = final
+
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def __iter__(self) -> Any:
+            return iter(())
+
+        def get_final_response(self) -> Any:
+            return self.final
+
+    class _Responses:
+        def __init__(self) -> None:
+            self.wave = 0
+
+        def stream(self, **kwargs: Any) -> Any:
+            if kwargs.get("text_format") is ATSResolution:
+                resolution = ATSResolution(
+                    outcome=ATSOutcome.RESOLVED_UNSUPPORTED,
+                    provider="bamboohr",
+                    ats_slug="mysteryco",
+                    canonical_url="https://mysteryco.bamboohr.com/careers",
+                    evidence_urls=["https://mysteryco.bamboohr.com/careers"],
+                )
+                return _Stream(response(parsed=resolution))
+            self.wave += 1
+            return _Stream(response(text=f"Company: Wave{self.wave}\nEvidence: https://source"))
 
         def parse(self, **kwargs: Any) -> Any:
-            return types.SimpleNamespace(
-                parsed_output=_CandidateList(candidates=candidates),
-                usage=types.SimpleNamespace(input_tokens=200, output_tokens=50),
-            )
+            return response(parsed=_CandidateList(candidates=candidates))
 
-    return types.SimpleNamespace(messages=_Messages())
+    return types.SimpleNamespace(responses=_Responses())
 
 
 def _candidates() -> list[CandidateEmployer]:
@@ -128,7 +163,7 @@ def test_run_discovery_persists_proposals(migrated_engine: Engine) -> None:
     assert summary.proposed_fetchable == 1
     assert summary.proposed_unresolved == 1
     assert summary.skipped_dup == 1
-    assert summary.est_cost_usd > 0  # metered (Opus rates over the summed usage)
+    assert summary.est_cost_usd > 0  # Terra tokens are metered across waves + structuring/resolver
 
     with migrated_engine.connect() as conn:
         proposed = conn.execute(

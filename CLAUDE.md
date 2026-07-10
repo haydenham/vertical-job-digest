@@ -182,11 +182,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
-  `vja-discover` — **Claude Sonnet 5** `web_search`/`web_fetch` research → **validate-by-fetch** →
+  `vja-discover` — **GPT-5.6 Terra** three-wave web research → budgeted per-candidate **ATS
+  resolution** → **validate-by-fetch** →
   `proposed`+`agent_discovered` rows (fetchable→`detected`, else `unknown`/`layer2`); metered + bounded; no
-  migration (schema already had the enum values, only `active` is fetched). **Cost-hardened (D-073):** loop is
-  prompt-cached + hard-capped at `VJA_DISCOVER_MAX_USD` ($2) + cumulative tool budget + report checkpoint —
-  after a real run burned $7 uncached with a broken per-request cap (39 searches, nothing saved).
+  migration (schema already had the enum values, only `active` is fetched). **Cost-hardened
+  (D-073/D-074):** requests are prompt-cached, independently tool-capped, included in the `$4`
+  token+search-fee meter, and checkpointed incrementally. The ATS resolver requires canonical
+  provider-URL evidence; only a successful registry fetch stamps a supported ATS.
   **10.2 ✅** (D-071): the `vja-review` approve/reject/list CLI — the human gate
   that promotes proposals (`approve`→`active` if fetchable, else `approved`+parked; `reject`→`retired`; fetchability
   keyed on `SUPPORTED_ATS_TYPES`, parked rows structurally unfetchable) + weekly scheduling **ready-but-OFF**
@@ -200,7 +202,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - Per-fetcher health checks with loud alerts; every pipeline run writes a
   summary record. A digest that fails to send is itself an alert.
 - API keys in env config, never in the repo. DB never publicly exposed. A git-ignored `.env` is
-  auto-loaded (python-dotenv); send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `VJA_DIGEST_FROM`
+  auto-loaded (python-dotenv); provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
   (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
   **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's
   `user_email` (D-027/D-037). Nightly job = **`vja-nightly`** (composes run → extract → match → digest

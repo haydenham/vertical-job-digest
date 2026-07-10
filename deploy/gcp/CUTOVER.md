@@ -175,14 +175,14 @@ live per-run cost is measured (D-071). Run it manually first (`vja-discover --ve
 --limit 5 --dry-run` prints the metered `est_cost`), then decide the weekly cadence. When you do enable it:
 
 ```sh
-# Discovery Job: same image, entrypoint → vja-discover. Needs DB + Anthropic ONLY (no Resend/digest).
+# Discovery Job: same image, entrypoint → vja-discover. Needs DB + OpenAI ONLY (no Resend/digest).
 gcloud run jobs create vja-discover \
   --image "$IMAGE" \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
   --command /app/.venv/bin/vja-discover \
   --args "--vertical,grid_power_software" \
-  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest"
+  --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest"
 
 # Weekly Cloud Scheduler → Jobs Admin :run API (mirrors the launchd Mon-07:00 template)
 gcloud scheduler jobs create http vja-discover-trigger \

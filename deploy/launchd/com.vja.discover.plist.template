@@ -18,7 +18,7 @@
         <string>__VERTICAL__</string>
     </array>
 
-    <!-- So the app's load_dotenv() finds .env (ANTHROPIC_API_KEY) and data/vja.db resolves. -->
+    <!-- So the app's load_dotenv() finds .env (OPENAI_API_KEY) and data/vja.db resolves. -->
     <key>WorkingDirectory</key>
     <string>__WORKDIR__</string>
 

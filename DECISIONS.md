@@ -1278,3 +1278,25 @@ under any `VJA_DISCOVER_MODEL`. **Shape:** rewrote `discover_candidates`' loop (
 report checkpoint; 409 total) + docs, on `docs/beta-hardening-scope`. Live `vja-discover` walkthrough is
 Hayden-run. Supersedes D-070's "bounded by `web_search max_uses` + `_MAX_CONTINUATIONS`" claim (that bound was
 theatrical) and D-070's Opus-4.8 model + hardcoded-Opus-rate meter. References D-070, D-069, D-047, D-017.
+
+### D-074 · Phase 10.x · Discovery provider → GPT-5.6 Terra + budgeted ATS-resolution protocol · accepted · 2026-07-10
+The first Claude live batch sourced five real companies but resolved zero fetchable ATS boards; broad sourcing
+consumed the useful research window and ATS inspection became the unfinished tail. **Decisions run through
+Hayden:** migrate only `vja-discover` to OpenAI Responses with **GPT-5.6 Terra** (extraction/matching stay
+Anthropic); preserve the two-stage raw-report → structured-candidates protocol and deterministic human-gated
+persistence; split sourcing into **three sequential waves** (capital ecosystem, industry ecosystem, market
+adjacency), each capped at **5 hosted web actions**; retain at most **5 candidates**, then give each unresolved
+candidate a separate **4-action**, low-reasoning, 2k-output, 120s ATS resolver. Resolution requires a canonical
+provider URL plus slug/endpoint; “supported” is derived from `SUPPORTED_ATS_TYPES`, never trusted from the model,
+and only the existing registry fetch returning ≥1 posting stamps the supported ATS. Confirmed unsupported ATSs
+(e.g. BambooHR), blocked pages, no-jobs results, provider failures, and budget exhaustion stay inert as
+`unknown`/`layer2`, with typed outcome + evidence in existing `notes` (**no migration**). `--limit` now caps paid
+resolution + persistence, not just persistence. Transient provider failures retry twice, checkpoint, and continue
+independent work. One rolling Markdown checkpoint updates after every wave/resolver; streamed web events preserve
+live progress. The **$4 inclusive ceiling** counts exact permitted-family token/cache rates plus $0.01 billable
+search actions; after crossing it no new wave/resolver starts, but one bounded tool-free structuring call preserves
+paid work. `VJA_DISCOVER_MODEL` accepts only priced `gpt-5.6-sol|terra|luna`; default Terra. No Anthropic fallback,
+auto-approval, schedule enablement, schema change, or BambooHR fetcher. **Status:** built on
+`feat/gpt-terra-discovery`; live Terra dry-run remains Hayden-run. Supersedes D-070/D-073 only where they specify
+the discovery provider, Claude tool-loop mechanics, tool budgets, model rates, and checkpoint shape; their safety,
+validate-by-fetch, inert-proposal, and human-review rules remain. References D-070, D-071, D-073, D-017, D-069.

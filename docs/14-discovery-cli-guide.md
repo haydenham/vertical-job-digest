@@ -4,7 +4,8 @@ The Layer-3 discovery workflow (Phase 10, D-070/D-071): an agent finds new **emp
 them as `proposed` rows, and a human promotes the good ones with a review CLI. This is the operator
 reference for running it.
 
-- `vja-discover` — Claude Sonnet 5 + web search researches new employers → writes `proposed` rows.
+- `vja-discover` — GPT-5.6 Terra + web search researches new employers, resolves ATS evidence,
+  then writes `proposed` rows.
 - `vja-review` — the human gate: `list` / `approve` / `reject` those proposals.
 
 Related: `deploy/launchd/README.md` (§ "Discovery (disabled by default)" + "Running against prod"),
@@ -37,22 +38,28 @@ nothing is fetched or shown to users until *you* `approve` one to `active`. So t
 bad company in front of anyone by itself.
 
 ### 2. What does a run cost?
-Each `vja-discover` run makes real **Claude Sonnet 5** + web-search calls. A run is **hard-capped at
-`VJA_DISCOVER_MAX_USD` (default $4)** — the loop stops the turn after estimated spend crosses it, so a
-full run typically lands around **$1–2** and can never run away (D-073). The tool budget is generous by
-default (**20 cumulative searches / 16 fetches**) so the agent can actually source across VC portfolios,
-conference lists, and funding trails — a starved budget makes the model fall back to memory instead of
-live research. Notes:
+Each `vja-discover` run makes real **GPT-5.6 Terra** Responses API + hosted-web-search calls. A run
+uses an inclusive **`VJA_DISCOVER_MAX_USD` ceiling (default $4)**: after a completed response crosses
+the estimate, no new research wave or ATS resolver starts. One bounded tool-free structuring call is
+still allowed so paid research is not lost. The request that crosses can overshoot; its own tool/output
+caps bound that overshoot. The protocol is fixed and inspectable:
+
+- Three sequential discovery waves — capital portfolios, industry lists, and market adjacency —
+  each receive at most **5** web actions.
+- At most **5** candidates proceed by default. Each unresolved candidate receives a separate ATS
+  resolver with at most **4** actions, low reasoning, 2k output tokens, and a 120-second timeout.
+- Supported ATS status requires canonical provider-URL evidence *and* a registry fetch returning at
+  least one posting. Everything else remains `unknown`/`layer2` for review.
+
+Notes:
 - `--dry-run` costs the **same** (it skips DB writes, not the LLM research loop).
-- `--limit N` caps how many candidates are *persisted*, not the research cost.
-- The run prints `est_cost=$…` and a token breakdown at the end — the real metered number (model-aware
-  rates), and what gates whether the weekly schedule is worth enabling (D-071). **The meter counts
-  tokens only** — the web_search/web_fetch server-tool fees (~$0.01/search) sit *outside* it, so real
-  spend runs a little above the printed `est_cost` at high tool budgets.
-- Tunable via env: `VJA_DISCOVER_MODEL`, `VJA_DISCOVER_MAX_USD` (default 4), `VJA_DISCOVER_MAX_SEARCHES`
-  (20) / `VJA_DISCOVER_MAX_FETCHES` (16) (cumulative), `VJA_DISCOVER_MAX_CONTINUATIONS` (12),
-  `VJA_DISCOVER_EFFORT`. The raw research report is checkpointed to `data/discovery_reports/` (or
-  `VJA_DISCOVER_REPORT_DIR`) so a capped run keeps its findings.
+- `--limit N` caps how many candidates are ATS-resolved and persisted; the three sourcing waves still run.
+- The run prints `est_cost=$…`, tokens, all web actions, and billable searches. The estimate includes
+  exact Sol/Terra/Luna token/cache rates plus **$0.01 per search action**.
+- Tunable via env: `VJA_DISCOVER_MODEL` (only `gpt-5.6-sol|terra|luna`; default Terra),
+  `VJA_DISCOVER_MAX_USD` (4), `VJA_DISCOVER_MAX_CANDIDATES` (5), and `VJA_DISCOVER_EFFORT`.
+  One rolling report under `data/discovery_reports/` (or `VJA_DISCOVER_REPORT_DIR`) is updated after
+  each wave and resolver, including partial failures and ATS evidence.
 
 ---
 
@@ -65,17 +72,16 @@ uv run vja-discover --vertical <key> [--limit N] [--dry-run]
 | flag | meaning |
 |------|---------|
 | `--vertical` (required) | `grid_power_software` or `aviation_software` |
-| `--limit N` | cap how many candidates are persisted (research cost is unchanged) |
+| `--limit N` | cap how many candidates are ATS-resolved and persisted (waves still run) |
 | `--dry-run` | run + print + meter, but **write nothing** |
 
 Each candidate is validated by actually fetching it: a supported ATS that returns postings →
 `proposed` + `detected` (fetchable); anything unresolved → `proposed` + `unknown`/`layer2` (the guess
 is kept in the row's `notes` for manual triage). Duplicates of the existing universe are skipped.
 
-The research phase logs a **per-turn heartbeat** to stderr (`research turn N/M: … est $X, stop=…`),
-bracketed by a start and a `research finished …` line, so a multi-minute run shows live progress —
-which turn it's on, cumulative tool-budget burn, and running spend against the ceiling — instead of
-sitting silent until the final `est_cost=` summary.
+The research and ATS phases stream progress to stderr: wave/resolver bookends plus web
+search/open/find events and the running cost after each completed request. A failed wave is retried by
+the SDK twice, checkpointed, and the independent remaining work continues.
 
 ### `vja-review` — approve / reject / list proposals
 ```sh
@@ -137,7 +143,8 @@ is needed; the data reached prod through the database, not through code.
 ---
 
 ## Prerequisites
-- `ANTHROPIC_API_KEY` in `.env` (the agent's web search + reasoning; auto-loaded).
+- `OPENAI_API_KEY` in `.env` (the discovery agent only; auto-loaded). Anthropic remains the provider
+  for extraction/matching elsewhere in the pipeline.
 - The target database migrated (`alembic upgrade head`). Prod/Neon already is; a fresh local sqlite
   needs it before the first run.
 - Verticals available: `grid_power_software`, `aviation_software` (`config/verticals/*.yaml`).

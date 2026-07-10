@@ -1,30 +1,9 @@
-"""Layer-3 discovery agent — finds new *employers* for a vertical (Phase 10.1 thin core).
+"""Layer-3 employer discovery: GPT research -> ATS resolution -> validate -> propose.
 
-The agent's job is NOT to find postings but to expand the universe below it (`docs/02` §4): a
-weekly, deliberately-oblique web search over energy-/aviation-focused VC & PE portfolios, conference
-sponsor lists, funding news, and competitors-of-X trails, producing candidate employers that land as
-`proposed` + `agent_discovered` rows for human approval (D-047, `docs/04` §1). Only active
-employers are fetched nightly, so proposals sit inert until a human approves them.
-
-Two cleanly separated stages (mirrors the repo rule: LLM where structure runs out; the deterministic
-fetchers stay LLM-free):
-
-- **Stage 1 — LLM discovery.** Claude Sonnet 5 (`VJA_DISCOVER_MODEL`) with the server-side
-  `web_search` + `web_fetch` tools runs an agentic research loop, then a toolless `messages.parse`
-  turn structures its report into a `list[CandidateEmployer]`. The loop is **prompt-cached** (the
-  growing transcript re-reads at ~0.1x) and bounded three ways: a hard **per-run dollar ceiling**
-  (`VJA_DISCOVER_MAX_USD`), a **cumulative** tool budget (searches/fetches counted across resumes,
-  not the per-request `max_uses` that resets), and `_MAX_CONTINUATIONS`; spend metered with the
-  Block-1 `TokenUsage` at model-aware rates. The raw report is checkpointed to disk the moment
-  research finishes, so a capped/interrupted run keeps what it paid for.
-- **Stage 2 — deterministic validation + persist.** Each candidate is deduped against the existing
-  universe, then **validated by actually fetching**: build an `Employer` from the guessed ATS/slug
-  and run the matching registry fetcher (D-017 reuse). A real fetch that returns postings → a
-  high-confidence `proposed` row (`verification=detected`); anything un-resolvable → `proposed` +
-  `unknown` + `verification=layer2` for manual triage, the guess kept in `notes`.
-
-Deferred to block 10.2 (out of scope here): weekly scheduling, the `vja-review` approve/reject CLI,
-auto-approval, a proposal-precision eval, and discovery of non-employer `sources`.
+The model finds employers, never postings. GPT-5.6 runs three bounded, deliberately-oblique
+research waves and a separately budgeted ATS-resolution pass. Deterministic registry fetchers
+remain authoritative: only a supported ATS that actually returns postings is persisted as
+fetchable. Every other proposal is inert (``unknown``/``layer2``) until human review.
 """
 
 from __future__ import annotations
@@ -33,13 +12,15 @@ import argparse
 import datetime as dt
 import logging
 import os
+import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+from urllib.parse import urlparse
 
-from anthropic import Anthropic
-from anthropic.types import MessageParam, OutputConfigParam, ToolUnionParam
 from dotenv import load_dotenv
+from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 
@@ -56,312 +37,369 @@ from vja.verticals import load_vertical_config
 
 logger = logging.getLogger("vja.discover")
 
-_MODEL = os.environ.get("VJA_DISCOVER_MODEL", "claude-sonnet-5")
-_EFFORT = os.environ.get("VJA_DISCOVER_EFFORT", "medium")  # bounded cost; env-overridable
-# Tool budget is CUMULATIVE across the whole run (see discover_candidates). `max_uses` on the tool
-# def (below) tracks these values, so it is never the *earlier* limiter — a single turn can burst
-# parallel searches without hitting a mid-turn wall, and the between-turn cumulative check + the $
-# ceiling are the real caps. (Coupling the two at 8 each is what starved the first live run: one
-# blocked parallel-search turn exhausted the whole run's budget → the loop broke after turn 1.)
-_MAX_SEARCHES = int(os.environ.get("VJA_DISCOVER_MAX_SEARCHES", "20"))
-_MAX_FETCHES = int(os.environ.get("VJA_DISCOVER_MAX_FETCHES", "16"))
-_MAX_CONTINUATIONS = int(os.environ.get("VJA_DISCOVER_MAX_CONTINUATIONS", "12"))
-# Hard per-run dollar kill-switch — the loop stops the turn AFTER estimated spend crosses this (so
-# it can overshoot by ~one turn; caching keeps that small). The real safety net the old loop lacked.
-# NB: this meters *tokens* only — web_search/web_fetch server-tool fees (~$0.01/search) are not
-# counted, so real spend runs a little above the metered figure at high tool budgets.
+_MODEL = os.environ.get("VJA_DISCOVER_MODEL", "gpt-5.6-terra")
+_EFFORT = os.environ.get("VJA_DISCOVER_EFFORT", "medium")
 _MAX_USD = float(os.environ.get("VJA_DISCOVER_MAX_USD", "4.0"))
-_RESEARCH_MAX_TOKENS = 8_000  # per response; < the SDK's ~16k non-streaming timeout guard
+_MAX_CANDIDATES = int(os.environ.get("VJA_DISCOVER_MAX_CANDIDATES", "5"))
+_WAVE_MAX_TOOL_CALLS = 5
+_ATS_MAX_TOOL_CALLS = 4
+_RESEARCH_MAX_TOKENS = 8_000
 _STRUCTURE_MAX_TOKENS = 4_096
-_WEB_FETCH_MAX_CONTENT_TOKENS = 5_000  # cap a single fetched page so it can't bloat context
+_ATS_MAX_TOKENS = 2_000
+_ATS_TIMEOUT_SECONDS = 120.0
+_SEARCH_CALL_USD = 0.01
 
-# Per-token USD rates by model prefix (standard list price — deliberately conservative so the
-# kill-switch trips a hair early, not late; e.g. Sonnet 5's intro pricing of $2/$10 per MTok through
-# 2026-08-31 makes real spend lower than this estimates). The meter exists so we *see* spend.
-_MODEL_RATES: dict[str, tuple[float, float]] = {
-    "claude-sonnet-5": (3.0 / 1_000_000, 15.0 / 1_000_000),
-    "claude-sonnet-4": (3.0 / 1_000_000, 15.0 / 1_000_000),
-    "claude-opus-4": (5.0 / 1_000_000, 25.0 / 1_000_000),
-    "claude-fable-5": (10.0 / 1_000_000, 50.0 / 1_000_000),
+_PROVIDER_ALIASES = {
+    "oracle": "oracle_hcm",
+    "oracle hcm": "oracle_hcm",
+    "smart recruiters": "smartrecruiters",
 }
-_DEFAULT_RATES = (3.0 / 1_000_000, 15.0 / 1_000_000)  # sonnet-tier fallback
+_PROVIDER_HOST_MARKERS: dict[str, tuple[str, ...]] = {
+    "greenhouse": ("greenhouse.io",),
+    "lever": ("lever.co",),
+    "ashby": ("ashbyhq.com",),
+    "workday": ("myworkdayjobs.com",),
+    "icims": ("icims.com", "careers-site.com"),
+    "workable": ("workable.com",),
+    "smartrecruiters": ("smartrecruiters.com",),
+    "oracle_hcm": ("oraclecloud.com",),
+    "radancy": ("radancy.com", "talentbrew.com"),
+    "bamboohr": ("bamboohr.com",),
+}
 
+# Standard direct-API prices per token: input, output. Cache reads are 0.1x input and writes
+# 1.25x; TokenUsage.cost already applies those multipliers. Unknown overrides are rejected.
+_MODEL_RATES: dict[str, tuple[float, float]] = {
+    "gpt-5.6-sol": (5.0 / 1_000_000, 30.0 / 1_000_000),
+    "gpt-5.6-terra": (2.5 / 1_000_000, 15.0 / 1_000_000),
+    "gpt-5.6-luna": (1.0 / 1_000_000, 6.0 / 1_000_000),
+}
 
-def _model_rates(model: str) -> tuple[float, float]:
-    """(input, output) USD-per-token for `model`, longest-prefix match; sonnet-tier fallback."""
-    for key in sorted(_MODEL_RATES, key=len, reverse=True):
-        if model.startswith(key):
-            return _MODEL_RATES[key]
-    return _DEFAULT_RATES
+_WAVES: tuple[tuple[str, str], ...] = (
+    (
+        "capital ecosystem",
+        "Search focused VC, PE, and accelerator portfolio pages for relevant employers.",
+    ),
+    (
+        "industry ecosystem",
+        "Search industry conference exhibitors/sponsors, associations, and event participants.",
+    ),
+    (
+        "market adjacency",
+        "Search funding announcements, competitors, partners, and newly emerging vendors.",
+    ),
+)
 
-
-# Constant tool set (never varies per turn) so the cached prefix stays valid — the cumulative cap is
-# enforced in the loop, not by mutating `max_uses` (which would invalidate the cache every request).
-_WEB_TOOLS: list[dict[str, Any]] = [
-    {"type": "web_search_20260209", "name": "web_search", "max_uses": _MAX_SEARCHES},
-    {
-        "type": "web_fetch_20260209",
-        "name": "web_fetch",
-        "max_uses": _MAX_FETCHES,
-        "max_content_tokens": _WEB_FETCH_MAX_CONTENT_TOKENS,
-    },
-]
-
-_RESEARCH_SYSTEM = """\
+_RESEARCH_INSTRUCTIONS = """\
 You are a sourcing analyst expanding a curated employer universe for a vertical job-intelligence
-tool. Your job is to find NEW EMPLOYERS (companies that hire) for the given vertical — not postings.
+tool. Find NEW EMPLOYERS (companies that hire), never job postings. Use only the assigned source
+wave; do not fall back to model memory. Prefer companies genuinely in the vertical with real US
+early-career software/data hiring.
 
-Use deliberately oblique sources, not job boards:
-- portfolio pages of venture/PE investors focused on this vertical,
-- sponsor/exhibitor lists of the vertical's industry conferences (a sponsor list is a lead list),
-- funding announcements and "competitors of X" trails.
+For each promising company, open its careers page or an actual job/apply link. Report exactly:
+Company: <display name>
+Careers URL: <url or unknown>
+ATS: <provider or unknown>
+ATS slug/endpoint: <value or unknown>
+Category: <short category>
+Evidence: <source URLs and one-line fit rationale>
 
-For each promising company, use web_fetch to open its careers page and identify its
-applicant-tracking system (ATS) and the company token/slug in the ATS URL. Common ATS URL shapes:
-- Greenhouse: boards.greenhouse.io/{slug} or job-boards.greenhouse.io/{slug}  -> "greenhouse"
-- Lever: jobs.lever.co/{slug}                                                -> ats_type "lever"
-- Ashby: jobs.ashbyhq.com/{slug}                                             -> ats_type "ashby"
-- Workday: {tenant}.wd{N}.myworkdayjobs.com/...  (give the full careers URL as the endpoint)
-- Otherwise report your best guess or "unknown".
+Do not propose a company in the supplied existing/earlier-wave list. A concise evidence-backed
+report is more valuable than speculative volume."""
 
-Do NOT propose any company already in the existing universe (below). Prefer companies genuinely
-in-scope for the vertical with real early-career software/data hiring.
+_STRUCTURE_INSTRUCTIONS = """\
+Convert the supplied research reports into candidate employers. Deduplicate companies, rank the
+strongest vertical fits first, and return no more than the stated limit. Copy ATS evidence; do not
+invent a company, URL, provider, slug, or endpoint absent from the reports. Use "unknown" when the
+research is unsure."""
 
-When done researching, write a concise report: one block per candidate with its name, careers URL,
-your ATS guess, the slug (or full Workday endpoint), a category, and one line on where you found it
-and why it fits."""
+_ATS_INSTRUCTIONS = """\
+Resolve the applicant-tracking system for exactly one employer. Spend the bounded web allowance
+in this order: (1) canonical careers page, (2) an actual job/apply link, (3) a targeted ATS-host
+search, (4) one fallback search. A provider is resolved only with a canonical URL that exposes the
+company slug or a complete endpoint. Model confidence without URL evidence is unresolved.
 
-_STRUCTURE_SYSTEM = """\
-Convert the research report into a structured list of candidate employers. Include every distinct
-company the report proposes. Copy the analyst's ATS guess and slug/endpoint verbatim; use "unknown"
-for ats_type when the report is unsure. Do not invent companies not present in the report."""
+Known examples include Greenhouse, Lever, Ashby, Workday, iCIMS/Jibe, Workable, SmartRecruiters,
+Oracle HCM, and Radancy. Identify unsupported providers such as BambooHR too: accurate unsupported
+resolution is useful even though it remains parked. Return the strict schema and no prose."""
 
 
 class CandidateEmployer(BaseModel):
-    """One proposed employer as the discovery agent reports it (pre-validation).
-
-    Lives here, not in `models.py`: it's the agent's raw output shape, not a DB entity — the same
-    reason the extraction Pydantic models live in `extract.py`. The `*_guess` fields are unverified;
-    Stage 2 resolves them against the real fetchers before anything is persisted.
-    """
+    """Unverified employer emitted by the structured discovery stage."""
 
     name: str = Field(description="Company display name.")
     careers_url: str | None = Field(default=None, description="Careers page URL, or null.")
-    ats_type_guess: str = Field(
-        default="unknown", description="Guessed ATS slug, e.g. 'greenhouse'/'lever'/'workday'."
-    )
-    ats_slug_guess: str | None = Field(
-        default=None, description="Company token in the ATS URL (GH/Lever/Ashby), or null."
-    )
-    endpoint_guess: str | None = Field(
-        default=None, description="Full careers/API endpoint for Workday-style ATSs, or null."
-    )
-    category: str | None = Field(default=None, description="Rough category, e.g. 'IPP', 'Storage'.")
-    rationale: str | None = Field(default=None, description="One line: where found + why it fits.")
+    ats_type_guess: str = Field(default="unknown", description="ATS provider identifier.")
+    ats_slug_guess: str | None = Field(default=None, description="Company ATS slug, or null.")
+    endpoint_guess: str | None = Field(default=None, description="Complete ATS endpoint, or null.")
+    category: str | None = None
+    rationale: str | None = None
 
 
 class _CandidateList(BaseModel):
-    """Root object for structured output (the API needs an object, not a bare list)."""
-
     candidates: list[CandidateEmployer] = Field(default_factory=list)
+
+
+class ATSOutcome(StrEnum):
+    RESOLVED_SUPPORTED = "resolved_supported"
+    RESOLVED_UNSUPPORTED = "resolved_unsupported"
+    CAREERS_PAGE_ONLY = "careers_page_only"
+    BLOCKED_OR_JS_RENDERED = "blocked_or_js_rendered"
+    NO_JOBS_FOUND = "no_jobs_found"
+    UNRESOLVED_BUDGET_EXHAUSTED = "unresolved_budget_exhausted"
+    RESOLVER_FAILED = "resolver_failed"
+
+
+class ATSResolution(BaseModel):
+    """Evidence-bearing result of one candidate's bounded GPT resolver call."""
+
+    outcome: ATSOutcome
+    provider: str = "unknown"
+    ats_slug: str | None = None
+    endpoint: str | None = None
+    canonical_url: str | None = None
+    evidence_urls: list[str] = Field(default_factory=list)
+    detail: str = ""
 
 
 @dataclass(frozen=True)
 class ValidationResult:
-    """Outcome of validating one candidate against the existing universe + the real fetchers."""
-
     candidate: CandidateEmployer
-    outcome: str  # "fetchable" | "unresolved" | "skipped_dup"
+    outcome: str  # fetchable | unresolved | skipped_dup
     ats_type: AtsType = AtsType.UNKNOWN
     ats_slug: str | None = None
     endpoint: str | None = None
     verification: Verification | None = None
     posting_count: int = 0
-    detail: str | None = None  # short reason, kept in the row's notes for triage
+    detail: str | None = None
+
+
+@dataclass
+class DiscoveryMeter:
+    """Provider usage plus hosted-tool counts for one complete run."""
+
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    tool_actions: int = 0
+    billable_searches: int = 0
+
+    def add_response(self, response: Any) -> None:
+        self.usage = self.usage + _openai_usage(getattr(response, "usage", None))
+        actions, searches = _count_web_actions(getattr(response, "output", []))
+        self.tool_actions += actions
+        self.billable_searches += searches
+
+    def cost(self, model: str = _MODEL) -> float:
+        in_rate, out_rate = _model_rates(model)
+        return self.usage.cost(in_rate, out_rate) + self.billable_searches * _SEARCH_CALL_USD
 
 
 @dataclass
 class DiscoverySummary:
-    """What one `vja-discover` run did (observability + test assertions)."""
-
     vertical: str
     candidates: int = 0
     proposed_fetchable: int = 0
     proposed_unresolved: int = 0
     skipped_dup: int = 0
+    waves_completed: int = 0
+    waves_failed: int = 0
+    resolver_attempted: int = 0
+    resolver_resolved: int = 0
     usage: TokenUsage = field(default_factory=TokenUsage)
+    tool_actions: int = 0
+    billable_searches: int = 0
     dry_run: bool = False
     model: str = _MODEL
 
     @property
     def est_cost_usd(self) -> float:
         in_rate, out_rate = _model_rates(self.model)
-        return self.usage.cost(in_rate, out_rate)
+        return self.usage.cost(in_rate, out_rate) + self.billable_searches * _SEARCH_CALL_USD
 
 
-def _text_of(content: Any) -> str:
-    """Join the text blocks of a response's content list."""
-    return "\n".join(
-        getattr(block, "text", "") for block in content if getattr(block, "type", None) == "text"
-    ).strip()
+@dataclass
+class _ReportCheckpoint:
+    path: Path | None
+    sections: list[str] = field(default_factory=list)
+
+    @classmethod
+    def create(cls, vertical_key: str) -> _ReportCheckpoint:
+        try:
+            out_dir = Path(os.environ.get("VJA_DISCOVER_REPORT_DIR", "data/discovery_reports"))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
+            return cls(out_dir / f"{vertical_key}_{stamp}.md")
+        except OSError as exc:
+            logger.warning("could not create discovery checkpoint: %s", exc)
+            return cls(None)
+
+    def append(self, heading: str, body: str) -> None:
+        self.sections.append(f"## {heading}\n\n{body.strip()}\n")
+        if self.path is None:
+            return
+        try:
+            self.path.write_text("# Discovery run checkpoint\n\n" + "\n".join(self.sections))
+            logger.info("discovery checkpoint updated: %s", self.path)
+        except OSError as exc:
+            logger.warning("could not update discovery checkpoint: %s", exc)
 
 
-def _count_tool_uses(content: Any) -> tuple[int, int]:
-    """(web_search, web_fetch) invocations in one response — server tools emit `server_tool_use`
-    blocks. Counted cumulatively across the loop so the run cap is real: per-request `max_uses`
-    resets on every pause_turn resume — how the old loop ran 39 searches under a '15' cap."""
-    searches = fetches = 0
-    for block in content:
-        if getattr(block, "type", None) == "server_tool_use":
-            name = getattr(block, "name", "")
-            if name == "web_search":
-                searches += 1
-            elif name == "web_fetch":
-                fetches += 1
-    return searches, fetches
-
-
-def _dump_report(vertical_key: str, report: str) -> None:
-    """Checkpoint the raw Stage-1 report to disk the moment research finishes, so a cost-capped or
-    interrupted run keeps what it paid for (Stage-2 then persists each candidate as it goes).
-    Non-fatal: a checkpoint failure must never sink the run."""
+def _model_rates(model: str) -> tuple[float, float]:
     try:
-        out_dir = Path(os.environ.get("VJA_DISCOVER_REPORT_DIR", "data/discovery_reports"))
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-        path = out_dir / f"{vertical_key}_{ts}.md"
-        path.write_text(report, encoding="utf-8")
-        logger.info("discovery report checkpointed to %s", path)
-    except OSError as exc:
-        logger.warning("could not checkpoint discovery report: %s", exc)
+        return _MODEL_RATES[model]
+    except KeyError:
+        allowed = ", ".join(sorted(_MODEL_RATES))
+        message = f"unsupported VJA_DISCOVER_MODEL={model!r}; choose one of: {allowed}"
+        raise ValueError(message) from None
+
+
+def _openai_usage(usage: Any) -> TokenUsage:
+    """Translate Responses usage, whose cached/write counts live under input details."""
+    if usage is None:
+        return TokenUsage()
+    total_input = int(getattr(usage, "input_tokens", 0) or 0)
+    details = getattr(usage, "input_tokens_details", None)
+    cached = int(getattr(details, "cached_tokens", 0) or 0)
+    cache_write = int(getattr(details, "cache_write_tokens", 0) or 0)
+    return TokenUsage(
+        input=max(0, total_input - cached - cache_write),
+        output=int(getattr(usage, "output_tokens", 0) or 0),
+        cache_read=cached,
+        cache_write=cache_write,
+    )
+
+
+def _count_web_actions(output: Any) -> tuple[int, int]:
+    """Return (all web actions, billable search actions) from a completed Response."""
+    actions = searches = 0
+    for item in output or []:
+        if getattr(item, "type", None) != "web_search_call":
+            continue
+        actions += 1
+        action = getattr(item, "action", None)
+        if getattr(action, "type", None) == "search":
+            searches += 1
+    return actions, searches
+
+
+def _log_stream_event(event: Any, label: str) -> None:
+    kind = str(getattr(event, "type", ""))
+    if "web_search_call" not in kind:
+        return
+    action = getattr(getattr(event, "item", None), "action", None)
+    action_name = getattr(action, "type", None) or kind.rsplit(".", 1)[-1]
+    logger.info("%s: web %s", label, action_name)
+
+
+def _stream_response(client: Any, *, label: str, **kwargs: Any) -> Any:
+    """Run one streamed Response and return its complete response object."""
+    with client.responses.stream(**kwargs) as stream:
+        for event in stream:
+            _log_stream_event(event, label)
+        return stream.get_final_response()
+
+
+def _company_names(report: str) -> set[str]:
+    return {
+        normalize_employer_name(match.group(1))
+        for match in re.finditer(r"(?im)^Company:\s*(.+?)\s*$", report)
+    }
 
 
 def discover_candidates(
-    client: Anthropic,
+    client: Any,
     vertical_key: str,
     existing_names: set[str],
     *,
+    limit: int | None = None,
     effort: str = _EFFORT,
-) -> tuple[list[CandidateEmployer], TokenUsage]:
-    """Stage 1: the agentic web-research loop + a structuring turn → (candidates, metered usage)."""
-    universe = "\n".join(f"- {n}" for n in sorted(existing_names)) or "(none yet)"
-    user_prompt = (
-        f"Vertical: {vertical_key}\n\n"
-        f"Existing universe (do NOT re-propose these normalized names):\n{universe}\n\n"
-        "Find new employers for this vertical, then write the per-candidate report."
-    )
+    checkpoint: _ReportCheckpoint | None = None,
+) -> tuple[list[CandidateEmployer], DiscoveryMeter, int, int]:
+    """Run three bounded sourcing waves, then one tool-free structuring call."""
+    _model_rates(_MODEL)  # validate override before the first paid request
+    cp = checkpoint or _ReportCheckpoint.create(vertical_key)
+    meter = DiscoveryMeter()
+    reports: list[str] = []
+    excluded = set(existing_names)
+    completed = failed = 0
 
-    in_rate, out_rate = _model_rates(_MODEL)
-    usage = TokenUsage()
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
-    searches_used = fetches_used = 0
-    response = None
-    turn = 0
-    logger.info(
-        "starting discovery research for %s (<=%d turns, $%.2f ceiling, tool budget %d searches / "
-        "%d fetches)",
-        vertical_key,
-        _MAX_CONTINUATIONS,
-        _MAX_USD,
-        _MAX_SEARCHES,
-        _MAX_FETCHES,
-    )
-    for turn in range(1, _MAX_CONTINUATIONS + 1):
-        response = client.messages.create(
-            model=_MODEL,
-            max_tokens=_RESEARCH_MAX_TOKENS,
-            system=_RESEARCH_SYSTEM,
-            messages=cast("list[MessageParam]", messages),
-            tools=cast("list[ToolUnionParam]", _WEB_TOOLS),
-            thinking={"type": "adaptive"},
-            output_config=cast(OutputConfigParam, {"effort": effort}),
-            # Auto-cache the growing prefix (system + tools + prior turns, incl. fetched pages) so
-            # each pause_turn resume re-reads it at ~0.1x instead of full input price. The old loop
-            # had NO caching and re-sent the whole page-stuffed transcript uncached every turn.
-            cache_control={"type": "ephemeral"},
+    for wave_number, (wave_name, wave_task) in enumerate(_WAVES, 1):
+        if meter.cost() >= _MAX_USD:
+            cp.append(wave_name, "Skipped: global spend ceiling reached.")
+            continue
+        universe = "\n".join(f"- {name}" for name in sorted(excluded)) or "(none yet)"
+        prompt = (
+            f"Vertical: {vertical_key}\nAssigned wave: {wave_name}\n{wave_task}\n\n"
+            f"Do not propose these existing/earlier-wave names:\n{universe}"
         )
-        usage = usage + TokenUsage.from_response(response.usage)
-        messages.append({"role": "assistant", "content": response.content})
-        s, f = _count_tool_uses(response.content)
-        searches_used += s
-        fetches_used += f
-
-        spend = usage.cost(in_rate, out_rate)
-        # Per-turn heartbeat so the multi-minute research phase isn't a silent black box: this
-        # turn's tool use, cumulative budget burn, running spend vs ceiling, and whether it goes on.
-        logger.info(
-            "research turn %d/%d: +%d search +%d fetch (cum searches %d/%d, fetches %d/%d), "
-            "est $%.2f, stop=%s",
-            turn,
-            _MAX_CONTINUATIONS,
-            s,
-            f,
-            searches_used,
-            _MAX_SEARCHES,
-            fetches_used,
-            _MAX_FETCHES,
-            spend,
-            response.stop_reason,
+        label = f"research wave {wave_number}/{len(_WAVES)} ({wave_name})"
+        logger.info("starting %s (<=%d web actions)", label, _WAVE_MAX_TOOL_CALLS)
+        try:
+            response = _stream_response(
+                client,
+                label=label,
+                model=_MODEL,
+                instructions=_RESEARCH_INSTRUCTIONS,
+                input=prompt,
+                tools=[{"type": "web_search", "search_context_size": "medium"}],
+                max_tool_calls=_WAVE_MAX_TOOL_CALLS,
+                max_output_tokens=_RESEARCH_MAX_TOKENS,
+                reasoning={"effort": effort},
+                store=False,
+            )
+        except OpenAIError as exc:
+            failed += 1
+            logger.warning("%s failed after retries: %s", label, exc)
+            cp.append(wave_name, f"FAILED after retries: {exc}")
+            continue
+        meter.add_response(response)
+        report = str(getattr(response, "output_text", "") or "").strip()
+        if not report:
+            failed += 1
+            cp.append(wave_name, "FAILED: response contained no report.")
+            continue
+        completed += 1
+        reports.append(f"### {wave_name}\n\n{report}")
+        excluded.update(_company_names(report))
+        cp.append(
+            wave_name,
+            f"{report}\n\nCost after wave: ${meter.cost():.4f}; "
+            f"web actions: {meter.tool_actions}; searches: {meter.billable_searches}",
         )
-        if spend >= _MAX_USD:  # hard money ceiling — the safety net the old loop lacked
-            logger.warning(
-                "discovery hit the $%.2f cost ceiling (VJA_DISCOVER_MAX_USD) — stopping research",
-                _MAX_USD,
-            )
-            break
-        if searches_used >= _MAX_SEARCHES or fetches_used >= _MAX_FETCHES:
-            logger.info(
-                "discovery hit the tool budget (searches=%d/%d fetches=%d/%d) — stopping research",
-                searches_used,
-                _MAX_SEARCHES,
-                fetches_used,
-                _MAX_FETCHES,
-            )
-            break
-        if response.stop_reason != "pause_turn":  # server-tool loop finished → done researching
-            break
+        logger.info("finished %s; est $%.4f", label, meter.cost())
 
-    report = _text_of(response.content) if response is not None else ""
-    if not report:
-        logger.warning("discovery research produced no report for %s", vertical_key)
-        return [], usage
-    logger.info(
-        "research finished after %d turn(s), %d-char report, est $%.2f so far — structuring",
-        turn,
-        len(report),
-        usage.cost(in_rate, out_rate),
-    )
-    _dump_report(vertical_key, report)  # checkpoint before spending on the structuring turn
+    if not reports:
+        return [], meter, completed, failed
 
-    parsed = client.messages.parse(
+    candidate_limit = min(_MAX_CANDIDATES, limit) if limit is not None else _MAX_CANDIDATES
+    combined = "\n\n".join(reports)
+    parsed = client.responses.parse(
         model=_MODEL,
-        max_tokens=_STRUCTURE_MAX_TOKENS,
-        system=_STRUCTURE_SYSTEM,
-        messages=[{"role": "user", "content": report}],
-        output_format=_CandidateList,
+        instructions=_STRUCTURE_INSTRUCTIONS,
+        input=f"Candidate limit: {max(0, candidate_limit)}\n\n{combined}",
+        text_format=_CandidateList,
+        max_output_tokens=_STRUCTURE_MAX_TOKENS,
+        store=False,
     )
-    usage = usage + TokenUsage.from_response(parsed.usage)
-    candidates = parsed.parsed_output.candidates if parsed.parsed_output is not None else []
-    return list(candidates), usage
+    meter.add_response(parsed)
+    structured = getattr(parsed, "output_parsed", None)
+    candidates = list(structured.candidates) if structured is not None else []
+    return candidates[: max(0, candidate_limit)], meter, completed, failed
 
 
 def validate_candidate(candidate: CandidateEmployer, existing_names: set[str]) -> ValidationResult:
-    """Stage 2: dedup, then prove the candidate is real by actually fetching it (D-017 reuse).
-
-    A clean fetch that returns ≥1 posting is the bar for a high-confidence proposal. A dedup hit, an
-    ATS with no Layer-1 fetcher, a fetch error, or a zero-posting board all fall to `unresolved` —
-    the guess is preserved in `detail` so a human can finish the resolution.
-    """
+    """Deduplicate and require a successful real registry fetch with at least one posting."""
     if normalize_employer_name(candidate.name) in existing_names:
         return ValidationResult(candidate, "skipped_dup")
 
-    guess = (candidate.ats_type_guess or "unknown").strip().lower()
+    guess = _normalize_provider(candidate.ats_type_guess)
     try:
         ats = AtsType(guess)
     except ValueError:
         ats = AtsType.UNKNOWN
-
-    hint = f"agent guess: ats={guess} slug={candidate.ats_slug_guess} url={candidate.careers_url}"
+    hint = (
+        f"agent guess: ats={guess} slug={candidate.ats_slug_guess} "
+        f"endpoint={candidate.endpoint_guess} url={candidate.careers_url}"
+    )
     if ats not in SUPPORTED_ATS_TYPES:
         return ValidationResult(
             candidate, "unresolved", verification=Verification.LAYER2, detail=hint
@@ -380,9 +418,8 @@ def validate_candidate(candidate: CandidateEmployer, existing_names: set[str]) -
     except (FetchError, ValueError) as exc:
         logger.info("validation fetch failed for %r: %s", candidate.name, exc)
         return ValidationResult(
-            candidate, "unresolved", verification=Verification.LAYER2, detail=hint
+            candidate, "unresolved", verification=Verification.LAYER2, detail=f"{hint}; {exc}"
         )
-
     if not postings:
         return ValidationResult(
             candidate,
@@ -401,67 +438,140 @@ def validate_candidate(candidate: CandidateEmployer, existing_names: set[str]) -
     )
 
 
-def run_discovery(
-    engine: Engine,
-    vertical_key: str,
-    *,
-    limit: int | None = None,
-    dry_run: bool = False,
-    client: Anthropic | None = None,
-) -> DiscoverySummary:
-    """Orchestrate discovery for one vertical: research → validate → persist `proposed` rows.
+def _normalize_provider(provider: str) -> str:
+    normalized = provider.strip().lower().replace("-", "_")
+    return _PROVIDER_ALIASES.get(normalized, normalized.replace(" ", "_"))
 
-    `client` is injected so tests run fully offline. `dry_run` runs the LLM + validation but writes
-    nothing (the loop is the metered cost either way).
-    """
-    load_vertical_config(vertical_key)  # validate the vertical exists before spending on the LLM
-    cli = client or Anthropic()
-    existing = existing_employer_names(engine, vertical_key)
 
-    candidates, usage = discover_candidates(cli, vertical_key, existing)
-    if limit is not None:
-        candidates = candidates[:limit]
+def _provider_url_matches(provider: str, url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    markers = _PROVIDER_HOST_MARKERS.get(provider)
+    if markers is not None:
+        return any(host == marker or host.endswith(f".{marker}") for marker in markers)
+    provider_token = provider.replace("_", "")
+    return bool(provider_token) and provider_token in host.replace("-", "").replace("_", "")
 
-    summary = DiscoverySummary(
-        vertical=vertical_key, candidates=len(candidates), usage=usage, dry_run=dry_run
+
+def _evidence_is_sufficient(resolution: ATSResolution) -> bool:
+    url = resolution.canonical_url or ""
+    provider = _normalize_provider(resolution.provider)
+    return (
+        url.startswith(("https://", "http://"))
+        and provider not in {"", "unknown"}
+        and _provider_url_matches(provider, url)
+        and bool(resolution.ats_slug or resolution.endpoint)
     )
-    for candidate in candidates:
-        result = validate_candidate(candidate, existing)
-        if result.outcome == "skipped_dup":
-            summary.skipped_dup += 1
-            continue
-
-        fetchable = result.outcome == "fetchable"
-        if not dry_run:
-            inserted = insert_proposed_employer(
-                engine,
-                vertical=vertical_key,
-                name=candidate.name,
-                ats_type=result.ats_type,
-                ats_slug=result.ats_slug,
-                endpoint=result.endpoint,
-                careers_url=candidate.careers_url,
-                category=candidate.category,
-                verification=result.verification,
-                notes=_proposal_notes(candidate, result),
-            )
-            if inserted is None:  # lost a race to an existing (vertical, name)
-                summary.skipped_dup += 1
-                continue
-        # count the proposal (also guard the dry-run path against re-proposing within this run)
-        existing.add(normalize_employer_name(candidate.name))
-        if fetchable:
-            summary.proposed_fetchable += 1
-        else:
-            summary.proposed_unresolved += 1
-
-    return summary
 
 
-def _proposal_notes(candidate: CandidateEmployer, result: ValidationResult) -> str:
+def resolve_candidate_ats(
+    client: Any,
+    candidate: CandidateEmployer,
+    meter: DiscoveryMeter,
+    checkpoint: _ReportCheckpoint,
+) -> tuple[CandidateEmployer, ATSResolution]:
+    """Run one separately bounded resolver and enforce the canonical-URL evidence bar."""
+    if meter.cost() >= _MAX_USD:
+        resolution = ATSResolution(
+            outcome=ATSOutcome.UNRESOLVED_BUDGET_EXHAUSTED,
+            detail="global discovery spend ceiling reached before ATS resolution",
+        )
+        checkpoint.append(f"ATS — {candidate.name}", resolution.model_dump_json(indent=2))
+        return candidate, resolution
+
+    prompt = (
+        f"Employer: {candidate.name}\nCareers URL: {candidate.careers_url or 'unknown'}\n"
+        f"Current ATS guess: {candidate.ats_type_guess}\n"
+        f"Current slug: {candidate.ats_slug_guess or 'unknown'}\n"
+        f"Current endpoint: {candidate.endpoint_guess or 'unknown'}"
+    )
+    label = f"ATS resolver ({candidate.name})"
+    logger.info("starting %s (<=%d web actions)", label, _ATS_MAX_TOOL_CALLS)
+    try:
+        response = _stream_response(
+            client,
+            label=label,
+            model=_MODEL,
+            instructions=_ATS_INSTRUCTIONS,
+            input=prompt,
+            tools=[{"type": "web_search", "search_context_size": "low"}],
+            max_tool_calls=_ATS_MAX_TOOL_CALLS,
+            max_output_tokens=_ATS_MAX_TOKENS,
+            reasoning={"effort": "low"},
+            text_format=ATSResolution,
+            timeout=_ATS_TIMEOUT_SECONDS,
+            store=False,
+        )
+        meter.add_response(response)
+        parsed = getattr(response, "output_parsed", None)
+        if parsed is None:
+            raise ValueError("resolver returned no structured output")
+        resolution = parsed
+    except (OpenAIError, ValueError) as exc:
+        resolution = ATSResolution(outcome=ATSOutcome.RESOLVER_FAILED, detail=str(exc))
+
+    provider = _normalize_provider(resolution.provider)
+    if resolution.outcome in {
+        ATSOutcome.RESOLVED_SUPPORTED,
+        ATSOutcome.RESOLVED_UNSUPPORTED,
+    } and not _evidence_is_sufficient(resolution):
+        resolution = resolution.model_copy(
+            update={
+                "outcome": ATSOutcome.CAREERS_PAGE_ONLY,
+                "detail": f"insufficient canonical URL/slug evidence; {resolution.detail}".strip(),
+            }
+        )
+    elif resolution.outcome in {
+        ATSOutcome.RESOLVED_SUPPORTED,
+        ATSOutcome.RESOLVED_UNSUPPORTED,
+    }:
+        try:
+            provider_type = AtsType(provider)
+        except ValueError:
+            provider_type = AtsType.UNKNOWN
+        inferred_outcome = (
+            ATSOutcome.RESOLVED_SUPPORTED
+            if provider_type in SUPPORTED_ATS_TYPES
+            else ATSOutcome.RESOLVED_UNSUPPORTED
+        )
+        resolution = resolution.model_copy(
+            update={"provider": provider, "outcome": inferred_outcome}
+        )
+
+    updated = candidate.model_copy(
+        update={
+            "careers_url": resolution.canonical_url or candidate.careers_url,
+            "ats_type_guess": resolution.provider or "unknown",
+            "ats_slug_guess": resolution.ats_slug,
+            "endpoint_guess": resolution.endpoint,
+        }
+    )
+    checkpoint.append(f"ATS — {candidate.name}", resolution.model_dump_json(indent=2))
+    logger.info("finished %s: %s; est $%.4f", label, resolution.outcome.value, meter.cost())
+    return updated, resolution
+
+
+def _resolution_note(resolution: ATSResolution | None) -> str | None:
+    if resolution is None:
+        return None
+    evidence = ", ".join(resolution.evidence_urls) or resolution.canonical_url or "none"
+    return (
+        f"ats_resolution={resolution.outcome.value} provider={resolution.provider} "
+        f"slug={resolution.ats_slug} endpoint={resolution.endpoint} evidence={evidence} "
+        f"detail={resolution.detail}"
+    )
+
+
+def _proposal_notes(
+    candidate: CandidateEmployer,
+    result: ValidationResult,
+    resolution: ATSResolution | None = None,
+) -> str:
     parts = ["discovered by agent"]
     if candidate.rationale:
         parts.append(candidate.rationale)
+    note = _resolution_note(resolution)
+    if note:
+        parts.append(note)
     if result.outcome == "fetchable":
         parts.append(f"validated: {result.posting_count} open postings")
     elif result.detail:
@@ -469,23 +579,126 @@ def _proposal_notes(candidate: CandidateEmployer, result: ValidationResult) -> s
     return " | ".join(parts)
 
 
+def run_discovery(
+    engine: Engine,
+    vertical_key: str,
+    *,
+    limit: int | None = None,
+    dry_run: bool = False,
+    client: Any | None = None,
+) -> DiscoverySummary:
+    """Research, resolve ATSs, validate with registry fetchers, and persist inert proposals."""
+    load_vertical_config(vertical_key)
+    _model_rates(_MODEL)
+    cli = client or OpenAI(max_retries=2)
+    existing = existing_employer_names(engine, vertical_key)
+    checkpoint = _ReportCheckpoint.create(vertical_key)
+    checkpoint.append(
+        "Run configuration",
+        f"vertical={vertical_key}\nmodel={_MODEL}\nmax_usd={_MAX_USD}\n"
+        f"candidate_limit={min(_MAX_CANDIDATES, limit) if limit is not None else _MAX_CANDIDATES}",
+    )
+
+    candidates, meter, waves_completed, waves_failed = discover_candidates(
+        cli, vertical_key, existing, limit=limit, checkpoint=checkpoint
+    )
+    summary = DiscoverySummary(
+        vertical=vertical_key,
+        candidates=len(candidates),
+        waves_completed=waves_completed,
+        waves_failed=waves_failed,
+        dry_run=dry_run,
+    )
+
+    for candidate in candidates:
+        result = validate_candidate(candidate, existing)
+        if result.outcome == "skipped_dup":
+            summary.skipped_dup += 1
+            continue
+
+        resolution: ATSResolution | None = None
+        resolved_candidate = candidate
+        if result.outcome != "fetchable":
+            if meter.cost() < _MAX_USD:
+                summary.resolver_attempted += 1
+            resolved_candidate, resolution = resolve_candidate_ats(
+                cli, candidate, meter, checkpoint
+            )
+            if resolution.outcome == ATSOutcome.RESOLVED_SUPPORTED:
+                verified = validate_candidate(resolved_candidate, existing)
+                if verified.outcome == "fetchable":
+                    result = verified
+                    summary.resolver_resolved += 1
+                else:
+                    result = ValidationResult(
+                        resolved_candidate,
+                        "unresolved",
+                        verification=Verification.LAYER2,
+                        detail=f"resolved ATS failed deterministic validation: {verified.detail}",
+                    )
+            else:
+                result = ValidationResult(
+                    resolved_candidate,
+                    "unresolved",
+                    verification=Verification.LAYER2,
+                    detail=result.detail,
+                )
+
+        fetchable = result.outcome == "fetchable"
+        if not dry_run:
+            inserted = insert_proposed_employer(
+                engine,
+                vertical=vertical_key,
+                name=resolved_candidate.name,
+                ats_type=result.ats_type if fetchable else AtsType.UNKNOWN,
+                ats_slug=result.ats_slug if fetchable else None,
+                endpoint=result.endpoint if fetchable else None,
+                careers_url=resolved_candidate.careers_url,
+                category=resolved_candidate.category,
+                verification=result.verification,
+                notes=_proposal_notes(resolved_candidate, result, resolution),
+            )
+            if inserted is None:
+                summary.skipped_dup += 1
+                continue
+        existing.add(normalize_employer_name(resolved_candidate.name))
+        if fetchable:
+            summary.proposed_fetchable += 1
+        else:
+            summary.proposed_unresolved += 1
+
+    summary.usage = meter.usage
+    summary.tool_actions = meter.tool_actions
+    summary.billable_searches = meter.billable_searches
+    checkpoint.append(
+        "Final summary",
+        f"candidates={summary.candidates}\nfetchable={summary.proposed_fetchable}\n"
+        f"unresolved={summary.proposed_unresolved}\nsearches={summary.billable_searches}\n"
+        f"tool_actions={summary.tool_actions}\nest_cost=${summary.est_cost_usd:.4f}",
+    )
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI: `vja-discover --vertical <key> [--limit N] [--dry-run]`."""
     load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(prog="vja-discover", description="Layer-3 employer discovery.")
     parser.add_argument("--vertical", required=True, help="vertical config key")
-    parser.add_argument("--limit", type=int, default=None, help="max candidates to persist")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="max candidates to resolve and persist"
+    )
     parser.add_argument("--dry-run", action="store_true", help="run + meter but write nothing")
     args = parser.parse_args(argv)
 
-    engine = get_engine()
-    summary = run_discovery(engine, args.vertical, limit=args.limit, dry_run=args.dry_run)
+    summary = run_discovery(get_engine(), args.vertical, limit=args.limit, dry_run=args.dry_run)
     prefix = "[dry-run] " if summary.dry_run else ""
     print(
         f"{prefix}discover [{summary.vertical}]: candidates={summary.candidates} "
         f"proposed(fetchable)={summary.proposed_fetchable} "
         f"proposed(unresolved)={summary.proposed_unresolved} skipped_dup={summary.skipped_dup} "
+        f"waves(ok/failed)={summary.waves_completed}/{summary.waves_failed} "
+        f"ats(attempted/resolved)={summary.resolver_attempted}/{summary.resolver_resolved} "
+        f"web(actions/searches)={summary.tool_actions}/{summary.billable_searches} "
         f"est_cost=${summary.est_cost_usd:.4f} "
         f"tokens(in/out/cr/cw)={summary.usage.input}/{summary.usage.output}/"
         f"{summary.usage.cache_read}/{summary.usage.cache_write}"
