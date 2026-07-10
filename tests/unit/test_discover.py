@@ -253,6 +253,26 @@ def test_resolver_derives_support_from_registry_not_model_label() -> None:
     assert actual.outcome is ATSOutcome.RESOLVED_UNSUPPORTED
 
 
+def test_resolver_accepts_applytojob_as_canonical_jazzhr_evidence() -> None:
+    """Utilidata's applytojob.com board is canonical JazzHR evidence, not careers-page-only."""
+    resolution = ATSResolution(
+        outcome=ATSOutcome.RESOLVED_SUPPORTED,
+        provider="JazzHR",
+        ats_slug="utilidata",
+        endpoint="https://utilidata.applytojob.com/apply",
+        canonical_url="https://utilidata.applytojob.com/apply",
+        evidence_urls=["https://utilidata.applytojob.com/apply"],
+    )
+    client = _Client([], [], [resolution])
+
+    _candidate_result, actual = resolve_candidate_ats(
+        client, _candidate(name="Utilidata"), DiscoveryMeter(), _ReportCheckpoint(None)
+    )
+
+    assert actual.provider == "jazzhr"
+    assert actual.outcome is ATSOutcome.RESOLVED_UNSUPPORTED
+
+
 def test_resolver_skips_call_when_global_budget_is_exhausted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

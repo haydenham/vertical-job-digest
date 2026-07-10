@@ -29,9 +29,11 @@ proposal safety are unchanged.
 
 **Docs:** D-074 appended; Discovery invariant, CLAUDE roadmap/config, docs/14 operator guide, docs/15
 Day-2 note, `.env.example`, disabled launchd template/readme, and ready-but-off GCP runbook/secrets updated.
+The live run then exposed one safe false-negative: JazzHR uses `applytojob.com`; that deterministic
+provider-host mapping + an exact Utilidata regression test now classify it `resolved_unsupported`.
 
 **Verified:** `uv lock --check`; ruff format/check; mypy (115 files); import-linter (1 kept / 0 broken);
-**407 offline tests** (423 collected, 16 opt-in deselected); `git diff --check`; CLI `--help`; installed SDK
+**408 offline tests** (424 collected, 16 opt-in deselected); `git diff --check`; CLI `--help`; installed SDK
 signature/usage-field smoke. **Not run:** live Terra discovery — Hayden-run next with `OPENAI_API_KEY`,
 starting with `vja-discover --vertical grid_power_software --limit 5 --dry-run`. The weekly schedule
 remains OFF until that run records yield, ATS-resolution rate, rate-limit behavior, and real cost.
