@@ -54,6 +54,17 @@ earns its enable decision.
 - **DoD:** new `active` employers in the DB (surfacing on the next nightly); ledger exists; measured per-run
   cost recorded (WORKLOG + Day 4). Any new tooling gets tests.
 
+**First live run — 2026-07-10 (partial):** after fixing a self-starving tool budget (searches/fetches 8→20/16,
+`$` ceiling 2→4; the old per-request `max_uses`==cumulative-cap coupling ended the run after one blocked turn —
+see WORKLOG) the loop did **real oblique sourcing**: 5 candidates off the Energy Impact Partners portfolio
+(GridBeyond, GridX, Emerald AI, CivilGrid, eSmart Systems), all landing `proposed`/`layer2` (GridBeyond's ATS
+confirmed **BambooHR** — not yet a supported fetcher; the other four JS-rendered/unresolved). **New binding
+constraint (feeds Day 4):** the run stopped on an **external web-tool rate limit (429s), not our `$`/tool caps** —
+so discovery *yield* is now gated by the Anthropic `web_search`/`web_fetch` rate limit, not our budget. It
+completed only ~1 of ~3 planned source waves. Before flipping the weekly schedule ON, decide whether that limit
+is per-minute (→ add pacing/backoff between waves) or a hard quota. Triage of #91–95 + the BambooHR-fetcher
+question are still open.
+
 ## Day 3 — Bug shakeout
 
 Fix bugs surfaced by real private-user usage and the Day-2 run. Bug fixes **start with a failing regression

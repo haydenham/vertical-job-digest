@@ -5,6 +5,37 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-10 — First live discovery run (beta-hardening Day 2, partial) — budget fix validated, rate limit is the new ceiling
+
+**Ran `vja-discover --vertical grid_power_software` for real against prod Neon** (not `--dry-run`) — the first
+genuine live discovery run. Low-risk by design: writes only `proposed`/`agent_discovered` rows, inert until a
+human `vja-review approve` (only `active` employers are fetched nightly). Docs-only session; no code changed.
+
+**The budget fix worked.** After this branch's loosening (searches/fetches 8→20/16, `$` ceiling 2→4), the loop
+did **real oblique sourcing** instead of the earlier memory-only fallback: 5 candidates all off the **Energy
+Impact Partners portfolio** — GridBeyond, GridX, Emerald AI, CivilGrid, eSmart Systems (rows #91–95, all
+`proposed`/`layer2`/`unknown`). GridBeyond's ATS was confirmed **BambooHR** (slug `gridbeyond`) — but BambooHR
+isn't in `SUPPORTED_ATS_TYPES`, so it parked; the other four are JS-rendered careers pages it couldn't resolve.
+**Zero auto-fetchable this run** — all need manual ATS resolution (or a BambooHR fetcher for GridBeyond).
+
+**The finding that matters (feeds Day 4 scaling):** the run stopped on an **external web-tool rate limit (429s
+on `web_search`/`web_fetch`), NOT our `$4`/`_MAX_SEARCHES` caps** — those never engaged. So discovery *yield* is
+now gated by the Anthropic web-tool rate limit, not our budget. The run completed only ~1 of ~3 planned source
+waves (never reached DistribuTECH/RE+ exhibitor lists, Congruent/Breakthrough Energy portfolios, or a $12.5M
+grid-funding lead it spotted). **Open question before enabling the weekly schedule (D-071):** is that limit
+per-minute (→ add pacing/backoff between search waves) or a hard account quota?
+
+**Docs:** `docs/15` Day 2 gained a "First live run — 2026-07-10 (partial)" note (candidates + the rate-limit
+finding as a Day-4 input). No DECISIONS/INVARIANTS change (the D-073 bounds + D-071 gate are unchanged; this is
+an observation, not a new rule).
+
+**Not done here (open threads):** triage/approve of #91–95; the BambooHR-fetcher question; the rate-limit
+per-minute-vs-quota investigation; an optional resume/second-wave run. Per-run **cost** was not captured (the
+run stopped on rate limits well under the `$4` cap; exact `est_cost` wasn't recorded — Day 4 still needs a clean
+full-run number).
+
+---
+
 ## 2026-07-10 — Discovery tool budget loosened — fixed the self-starving run (same branch `fix/discover-progress-logging`)
 
 **The new progress logging paid off immediately:** a cheap (~few cents) run that "worked" turned out to
