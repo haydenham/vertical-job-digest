@@ -59,13 +59,18 @@ logger = logging.getLogger("vja.discover")
 _MODEL = os.environ.get("VJA_DISCOVER_MODEL", "claude-sonnet-5")
 _EFFORT = os.environ.get("VJA_DISCOVER_EFFORT", "medium")  # bounded cost; env-overridable
 # Tool budget is CUMULATIVE across the whole run (see discover_candidates). `max_uses` on the tool
-# def is only a per-request bound and resets on each pause_turn resume — it is NOT the run cap.
-_MAX_SEARCHES = int(os.environ.get("VJA_DISCOVER_MAX_SEARCHES", "8"))
-_MAX_FETCHES = int(os.environ.get("VJA_DISCOVER_MAX_FETCHES", "8"))
-_MAX_CONTINUATIONS = int(os.environ.get("VJA_DISCOVER_MAX_CONTINUATIONS", "8"))
+# def (below) tracks these values, so it is never the *earlier* limiter — a single turn can burst
+# parallel searches without hitting a mid-turn wall, and the between-turn cumulative check + the $
+# ceiling are the real caps. (Coupling the two at 8 each is what starved the first live run: one
+# blocked parallel-search turn exhausted the whole run's budget → the loop broke after turn 1.)
+_MAX_SEARCHES = int(os.environ.get("VJA_DISCOVER_MAX_SEARCHES", "20"))
+_MAX_FETCHES = int(os.environ.get("VJA_DISCOVER_MAX_FETCHES", "16"))
+_MAX_CONTINUATIONS = int(os.environ.get("VJA_DISCOVER_MAX_CONTINUATIONS", "12"))
 # Hard per-run dollar kill-switch — the loop stops the turn AFTER estimated spend crosses this (so
 # it can overshoot by ~one turn; caching keeps that small). The real safety net the old loop lacked.
-_MAX_USD = float(os.environ.get("VJA_DISCOVER_MAX_USD", "2.0"))
+# NB: this meters *tokens* only — web_search/web_fetch server-tool fees (~$0.01/search) are not
+# counted, so real spend runs a little above the metered figure at high tool budgets.
+_MAX_USD = float(os.environ.get("VJA_DISCOVER_MAX_USD", "4.0"))
 _RESEARCH_MAX_TOKENS = 8_000  # per response; < the SDK's ~16k non-streaming timeout guard
 _STRUCTURE_MAX_TOKENS = 4_096
 _WEB_FETCH_MAX_CONTENT_TOKENS = 5_000  # cap a single fetched page so it can't bloat context

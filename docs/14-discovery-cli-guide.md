@@ -38,15 +38,21 @@ bad company in front of anyone by itself.
 
 ### 2. What does a run cost?
 Each `vja-discover` run makes real **Claude Sonnet 5** + web-search calls. A run is **hard-capped at
-`VJA_DISCOVER_MAX_USD` (default $2)** — the loop stops the turn after estimated spend crosses it, so a
-full run typically lands **well under $1** and can never run away (D-073). Notes:
+`VJA_DISCOVER_MAX_USD` (default $4)** — the loop stops the turn after estimated spend crosses it, so a
+full run typically lands around **$1–2** and can never run away (D-073). The tool budget is generous by
+default (**20 cumulative searches / 16 fetches**) so the agent can actually source across VC portfolios,
+conference lists, and funding trails — a starved budget makes the model fall back to memory instead of
+live research. Notes:
 - `--dry-run` costs the **same** (it skips DB writes, not the LLM research loop).
 - `--limit N` caps how many candidates are *persisted*, not the research cost.
 - The run prints `est_cost=$…` and a token breakdown at the end — the real metered number (model-aware
-  rates), and what gates whether the weekly schedule is worth enabling (D-071).
-- Tunable via env: `VJA_DISCOVER_MODEL`, `VJA_DISCOVER_MAX_USD`, `VJA_DISCOVER_MAX_SEARCHES` /
-  `_MAX_FETCHES` (cumulative), `VJA_DISCOVER_EFFORT`. The raw research report is checkpointed to
-  `data/discovery_reports/` (or `VJA_DISCOVER_REPORT_DIR`) so a capped run keeps its findings.
+  rates), and what gates whether the weekly schedule is worth enabling (D-071). **The meter counts
+  tokens only** — the web_search/web_fetch server-tool fees (~$0.01/search) sit *outside* it, so real
+  spend runs a little above the printed `est_cost` at high tool budgets.
+- Tunable via env: `VJA_DISCOVER_MODEL`, `VJA_DISCOVER_MAX_USD` (default 4), `VJA_DISCOVER_MAX_SEARCHES`
+  (20) / `VJA_DISCOVER_MAX_FETCHES` (16) (cumulative), `VJA_DISCOVER_MAX_CONTINUATIONS` (12),
+  `VJA_DISCOVER_EFFORT`. The raw research report is checkpointed to `data/discovery_reports/` (or
+  `VJA_DISCOVER_REPORT_DIR`) so a capped run keeps its findings.
 
 ---
 

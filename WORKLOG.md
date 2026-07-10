@@ -5,6 +5,41 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-10 — Discovery tool budget loosened — fixed the self-starving run (same branch `fix/discover-progress-logging`)
+
+**The new progress logging paid off immediately:** a cheap (~few cents) run that "worked" turned out to
+have done **no live web research** — the checkpointed report (`data/discovery_reports/…`) showed the model
+fell back to domain-knowledge guesses after "early failed parallel attempts consumed the quota." Dug into why.
+
+**Root cause (not the $ ceiling — the tool budget strangled it):** per-request `max_uses` (tool def) and
+the cumulative `_MAX_SEARCHES` were **both 8**, so the first turn's search allowance *was* the whole run's.
+Turn 1 the model fired a parallel `web_search` burst → server ran 8 (hit `max_uses`), errored the rest,
+some of the 8 failed → thin results, model wrapped up. Our cumulative counter saw 8 `server_tool_use`
+blocks → `searches_used >= 8` → **loop broke after turn 1.** The $2 ceiling never engaged.
+
+**Fix (scope = "beef up the tool", aggressiveness run through Hayden → *Generous*):** raised the defaults so
+the model has room, dollar ceiling as the real backstop. `_MAX_SEARCHES` 8→**20**, `_MAX_FETCHES` 8→**16**,
+`_MAX_CONTINUATIONS` 8→**12**, `_MAX_USD` 2.0→**4.0**. Per-request `max_uses` still tracks the cumulative caps
+(via `_WEB_TOOLS`), so it's never the *earlier* limiter and a single turn can burst parallel searches without
+a mid-turn wall — the between-turn cumulative check + $ ceiling bound the run. All env-overridable.
+
+**Caveat recorded (in code + docs/14):** `TokenUsage.cost` meters **tokens only** — web_search/web_fetch
+server-tool fees (~$0.01/search) sit outside it, so real spend runs a little above the printed `est_cost`
+at high tool budgets. Still bounded by the token ceiling + tool caps.
+
+**Test:** `test_web_tools_max_uses_not_below_cumulative_caps` pins the invariant that starved the run —
+per-request `max_uses` must never sit below the cumulative cap.
+
+**Docs:** `docs/14` cost section rewritten (new defaults, the "generous budget → real sourcing" rationale,
+the meter caveat, the added env knobs). No INVARIANTS/DECISIONS change — D-073's bounds stay the rule, only
+the default *values* moved (still hard-capped + cumulative + cached + checkpointed).
+
+**Verified:** full offline gate — ruff/format + mypy + import-linter (1/0) + **411 pytest** (+1). **Not run
+here:** the live `vja-discover` — Hayden re-runs with the beefed-up budget (should now do real multi-turn
+sourcing, land ~$1–2) and `caffeinate -i`.
+
+---
+
 ## 2026-07-09 — Discovery per-turn progress logging — the research loop stops being a silent black box (branch `fix/discover-progress-logging`)
 
 **Problem (observed live):** `vja-discover`'s research loop emitted nothing per-turn — logging is wired
