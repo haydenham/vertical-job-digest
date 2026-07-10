@@ -5,6 +5,50 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-09 — Discovery per-turn progress logging — the research loop stops being a silent black box (branch `fix/discover-progress-logging`)
+
+**Problem (observed live):** `vja-discover`'s research loop emitted nothing per-turn — logging is wired
+(INFO → stderr) but the loop only logged at the cost/tool guard-breaks and the final `est_cost=` print. So
+the multi-minute `web_search`/`web_fetch` phase was a silent black box, then either the summary or (this
+session, from a sleeping-laptop network drop) a raw `APITimeoutError` traceback. Plan-mode first; **scope run
+through Hayden = logging only** (the timeout crash was self-inflicted `caffeinate`, not a code bug → left alone
+to keep the branch true to its name).
+
+**Did (all in `discover.py`, observability only — no behavior change):**
+- **Per-turn heartbeat** INFO line in the research loop: `research turn N/M: +s search +f fetch (cum
+  searches …/…, fetches …/…), est $X, stop=…` — which turn, this turn's tool use, cumulative tool-budget
+  burn, running spend vs the `$MAX_USD` ceiling, and whether it continues. All values were already computed
+  each turn; they were just never logged. The existing guard-break warnings stay (they explain *why* it stopped).
+- **Bookend lines:** a `starting discovery research for <vertical> (<=N turns, $X ceiling, tool budget …)`
+  before the loop and a `research finished after N turn(s), <len>-char report, est $X so far — structuring`
+  after research (before the structuring turn).
+- `for _ in range(...)` → `for turn in range(1, _MAX_CONTINUATIONS + 1)` (+ `turn = 0` guard) for the counter.
+
+**Test:** `test_discover_logs_per_turn_progress` (unit) — a 2-turn (pause→end) fake client asserts one
+heartbeat per turn with the advancing counter + the start/finished bookends.
+
+**Gotcha worth flagging (pre-existing, NOT my change):** the first cut used `caplog`; it passed alone but
+failed in the full suite. Traced it down — a **prior test corrupts global logging state**: after
+`tests/system/test_run_pipeline.py` runs, `vja.discover`'s `isEnabledFor(INFO)` returns `False` even with
+`manager.disable=0`, level INFO, and a handler attached directly to the logger — so INFO records simply
+aren't emitted suite-wide. `caplog` (and even a hand-attached handler) captured nothing. Sidestepped by
+spying on the module `logger` (monkeypatched fake recording `info/warning` calls) → pins *what the code
+logs*, immune to logging config. **Open thread:** that global-logging corruption is a real test-isolation
+bug (some pipeline-run dependency mutates logging and never restores it); out of scope here, but it will bite
+the next person who reaches for `caplog`.
+
+**Docs:** `docs/14` gained a per-turn-heartbeat note under `vja-discover`. No INVARIANTS/DECISIONS change —
+this alters no cross-cutting rule (pure observability), so no ADR minted (run through Hayden).
+
+**Verified:** full offline gate — ruff/format clean + mypy (1 file) + import-linter (1/0) + **410 pytest**
+(+1: the new progress-logging test). **Not run here:** live `vja-discover` (Hayden-run; needs key + web
+search + `caffeinate -i` this time).
+
+**Next:** Hayden commits/PRs this branch, then re-runs `vja-discover` (now with live progress) to get the
+per-run cost that gates the weekly schedule (D-071); then back to the beta-hardening week (`docs/15`).
+
+---
+
 ## 2026-07-09 — Discovery loop cost-hardening — Sonnet 5 + $2 kill-switch + cumulative caps + caching + checkpoint (D-073 → built)
 
 **A live `vja-discover` run burned $7 and produced nothing.** Reading the code found three real defects, all
