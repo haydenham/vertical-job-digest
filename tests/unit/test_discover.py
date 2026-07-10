@@ -267,6 +267,53 @@ def test_discover_stops_at_cumulative_tool_budget(monkeypatch: pytest.MonkeyPatc
     assert client.messages.create_calls == 1  # cumulative search budget reached → stop
 
 
+class _SpyLogger:
+    """Records the rendered messages our code passes to `logger.info/warning`. We spy on the module
+    logger rather than use `caplog` because the shared pytest suite corrupts global logging state
+    (another test leaves the root at WARNING with a stray handler, so INFO records don't propagate);
+    a spy pins *what the code logs* deterministically, independent of any logging configuration."""
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def info(self, msg: str, *args: Any) -> None:
+        self.messages.append(msg % args if args else msg)
+
+    def warning(self, msg: str, *args: Any) -> None:
+        self.messages.append(msg % args if args else msg)
+
+
+def test_discover_logs_per_turn_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every research turn emits a heartbeat line (turn counter + tool budget + spend), bracketed by
+    a start + finished line, so the multi-minute loop isn't a silent black box — the whole point of
+    `fix/discover-progress-logging`."""
+    monkeypatch.setattr(discover, "_MAX_USD", 999.0)  # let it run to end_turn, not a guard-break
+    spy = _SpyLogger()
+    monkeypatch.setattr(discover, "logger", spy)
+    client = _FakeClient("report", [_candidate()])
+
+    # Pause once then finish → two research turns, so we can assert the counter advances.
+    class _TwoTurnMessages(_FakeMessages):
+        def create(self, **kwargs: Any) -> Any:
+            self.create_calls += 1
+            reason = "pause_turn" if self.create_calls == 1 else "end_turn"
+            block = types.SimpleNamespace(type="text", text=self._report)
+            return types.SimpleNamespace(
+                content=[block], stop_reason=reason, usage=_usage(500, 100)
+            )
+
+    client.messages = _TwoTurnMessages("report", [_candidate()])
+
+    discover_candidates(client, "grid_power_software", set())  # type: ignore[arg-type]
+
+    turn_lines = [m for m in spy.messages if m.startswith("research turn")]
+    assert len(turn_lines) == 2  # one heartbeat per research call
+    assert "research turn 1/" in turn_lines[0]
+    assert "research turn 2/" in turn_lines[1]
+    assert any("starting discovery research for grid_power_software" in m for m in spy.messages)
+    assert any(m.startswith("research finished after 2 turn") for m in spy.messages)
+
+
 def test_discover_passes_cache_control_and_capped_fetch() -> None:
     """Every research call is prompt-cached and the fetch tool caps page size — the two
     non-negotiable cost fixes."""

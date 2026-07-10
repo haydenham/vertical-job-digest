@@ -251,7 +251,17 @@ def discover_candidates(
     messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
     searches_used = fetches_used = 0
     response = None
-    for _ in range(_MAX_CONTINUATIONS):
+    turn = 0
+    logger.info(
+        "starting discovery research for %s (<=%d turns, $%.2f ceiling, tool budget %d searches / "
+        "%d fetches)",
+        vertical_key,
+        _MAX_CONTINUATIONS,
+        _MAX_USD,
+        _MAX_SEARCHES,
+        _MAX_FETCHES,
+    )
+    for turn in range(1, _MAX_CONTINUATIONS + 1):
         response = client.messages.create(
             model=_MODEL,
             max_tokens=_RESEARCH_MAX_TOKENS,
@@ -272,6 +282,22 @@ def discover_candidates(
         fetches_used += f
 
         spend = usage.cost(in_rate, out_rate)
+        # Per-turn heartbeat so the multi-minute research phase isn't a silent black box: this
+        # turn's tool use, cumulative budget burn, running spend vs ceiling, and whether it goes on.
+        logger.info(
+            "research turn %d/%d: +%d search +%d fetch (cum searches %d/%d, fetches %d/%d), "
+            "est $%.2f, stop=%s",
+            turn,
+            _MAX_CONTINUATIONS,
+            s,
+            f,
+            searches_used,
+            _MAX_SEARCHES,
+            fetches_used,
+            _MAX_FETCHES,
+            spend,
+            response.stop_reason,
+        )
         if spend >= _MAX_USD:  # hard money ceiling — the safety net the old loop lacked
             logger.warning(
                 "discovery hit the $%.2f cost ceiling (VJA_DISCOVER_MAX_USD) — stopping research",
@@ -294,6 +320,12 @@ def discover_candidates(
     if not report:
         logger.warning("discovery research produced no report for %s", vertical_key)
         return [], usage
+    logger.info(
+        "research finished after %d turn(s), %d-char report, est $%.2f so far — structuring",
+        turn,
+        len(report),
+        usage.cost(in_rate, out_rate),
+    )
     _dump_report(vertical_key, report)  # checkpoint before spending on the structuring turn
 
     parsed = client.messages.parse(

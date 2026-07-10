@@ -66,6 +66,11 @@ Each candidate is validated by actually fetching it: a supported ATS that return
 `proposed` + `detected` (fetchable); anything unresolved → `proposed` + `unknown`/`layer2` (the guess
 is kept in the row's `notes` for manual triage). Duplicates of the existing universe are skipped.
 
+The research phase logs a **per-turn heartbeat** to stderr (`research turn N/M: … est $X, stop=…`),
+bracketed by a start and a `research finished …` line, so a multi-minute run shows live progress —
+which turn it's on, cumulative tool-budget burn, and running spend against the ceiling — instead of
+sitting silent until the final `est_cost=` summary.
+
 ### `vja-review` — approve / reject / list proposals
 ```sh
 uv run vja-review list [--vertical <key>] [--status proposed|approved|active|retired]
