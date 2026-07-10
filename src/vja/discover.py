@@ -65,6 +65,7 @@ _PROVIDER_HOST_MARKERS: dict[str, tuple[str, ...]] = {
     "oracle_hcm": ("oraclecloud.com",),
     "radancy": ("radancy.com", "talentbrew.com"),
     "bamboohr": ("bamboohr.com",),
+    "jazzhr": ("applytojob.com",),
 }
 
 # Standard direct-API prices per token: input, output. Cache reads are 0.1x input and writes
