@@ -314,6 +314,16 @@ def test_discover_logs_per_turn_progress(monkeypatch: pytest.MonkeyPatch) -> Non
     assert any(m.startswith("research finished after 2 turn") for m in spy.messages)
 
 
+def test_web_tools_max_uses_not_below_cumulative_caps() -> None:
+    """Per-request `max_uses` must never sit *below* the cumulative run cap. If it does, one turn's
+    tool budget bounds the whole run, so a single blocked parallel-search turn ends discovery after
+    turn 1 — exactly what starved the first live run (both were 8). Coupling them keeps the
+    between-turn cumulative check + the $ ceiling as the real caps."""
+    tools = {t["name"]: t for t in discover._WEB_TOOLS}
+    assert tools["web_search"]["max_uses"] >= discover._MAX_SEARCHES
+    assert tools["web_fetch"]["max_uses"] >= discover._MAX_FETCHES
+
+
 def test_discover_passes_cache_control_and_capped_fetch() -> None:
     """Every research call is prompt-cached and the fetch tool caps page size — the two
     non-negotiable cost fixes."""
