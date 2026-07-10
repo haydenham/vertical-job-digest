@@ -273,23 +273,24 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Discovery (Layer 3)
 
 - **The discovery agent finds new *employers*, never postings, and only ever writes `proposed`
-  rows.** Weekly (thin core is on-demand via `vja-discover`), **Claude Sonnet 5** (`VJA_DISCOVER_MODEL`)
-  with the server-side `web_search`/`web_fetch` tools over oblique sources (VC/PE portfolios, conference
-  sponsor lists, funding news, competitors-of-X). Every proposal is **validated by actually fetching** —
+  rows.** Weekly (thin core is on-demand via `vja-discover`), **GPT-5.6 Terra** by default
+  (`VJA_DISCOVER_MODEL`; only priced 5.6 Sol/Terra/Luna models are accepted) runs three sequential,
+  separately bounded waves: capital portfolios, industry lists, and market adjacency. Every proposal
+  is **validated by actually fetching** —
   the matching registry fetcher must return ≥1 posting (D-017 reuse) → `proposed`/`detected`; else
   `proposed`/`unknown`/`layer2` for manual triage. Rows are `source=agent_discovered`,
   `status=proposed`, idempotent on `UNIQUE(vertical, name)`; **only `active` employers are fetched
   nightly**, so proposals sit inert until a human approves them (**human approval is the rule at
   first**). (D-070, D-047, D-017, D-005)
-- **The research loop is prompt-cached and bounded by a hard per-run dollar ceiling.** The agentic
-  `web_search`/`web_fetch` loop re-sends a growing transcript every `pause_turn` resume, so it (1)
-  **auto-caches the prefix** (`cache_control` ephemeral → re-reads at ~0.1×), (2) stops the turn after
-  estimated spend crosses **`VJA_DISCOVER_MAX_USD`** (default **$2**; model-aware rates), (3) enforces a
-  **cumulative** tool budget (searches/fetches counted across resumes — per-request `max_uses` *resets*
-  on resume and is NOT the run cap), and (4) caps `web_fetch` page size (`max_content_tokens`). The raw
-  report is **checkpointed to disk** the moment research finishes (Stage-2 then persists each candidate as
-  it validates), so a capped/interrupted run keeps what it paid for. Spend is metered
-  (`TokenUsage`, D-069). (D-073, D-070)
+- **Discovery and ATS resolution are separately bounded and incrementally checkpointed.** Each of
+  three research waves gets at most **5** hosted web actions; at most **5** deduped candidates proceed,
+  and each unresolved candidate gets at most **4** more actions (low reasoning, 2k output, 120s).
+  Resolution requires a canonical provider URL plus slug/endpoint and derives “supported” from the
+  fetcher registry, never the model's label. Confirmed-but-unsupported or failed validation stays
+  `unknown`/`layer2`, with typed outcome + evidence in `notes`. `VJA_DISCOVER_MAX_USD` defaults to **$4**
+  and includes model-aware tokens, cache pricing, and $0.01 billable search actions; no new paid wave
+  or resolver starts after crossing it, but one bounded tool-free structuring call preserves completed
+  work. One rolling report is updated after every wave/resolver. (D-074, D-073, D-070)
 - **Proposals are promoted through `vja-review` (approve/reject/list) — the human gate.** `approve`
   → `active` if the proposal's `ats_type ∈ SUPPORTED_ATS_TYPES` (fetched next nightly), else →
   `approved` and **parked** (vetted, no Layer-1 fetcher yet). `reject` → `retired` (never deleted,

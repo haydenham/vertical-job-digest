@@ -47,6 +47,7 @@ logged and included in any alert body but don't, on their own, trigger an alert 
 
 `com.vja.discover.plist.template` schedules the **weekly Layer-3 discovery agent** (`vja-discover`,
 Phase 10.2) — it researches new *employers* and writes them as `proposed` rows for you to `vja-review`.
+It reads `OPENAI_API_KEY` from the repo's git-ignored `.env`; Anthropic is not used by this command.
 It is **ready but OFF**: `install.sh` does **not** load it, and there's no `RunAtLoad`. Discovery stays
 a manual command until its live per-run cost is measured (D-071) — run it by hand when you want to
 expand coverage:

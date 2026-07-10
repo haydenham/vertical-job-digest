@@ -5,6 +5,39 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-10 — Discovery → GPT-5.6 Terra + separately budgeted ATS resolution (D-074 → built)
+
+**Migrated only Layer-3 discovery from Anthropic to OpenAI Responses** on
+`feat/gpt-terra-discovery`; extraction/matching remain Anthropic. The trigger was the first Claude
+batch: five legitimate employers, zero fetchable ATS resolutions. Broad sourcing had consumed the
+useful research window, leaving ATS work as an unbounded best-effort tail.
+
+**Decisions run through Hayden:** Terra default (5.6 family allow-list); three explicit sourcing waves
+(capital portfolios / industry lists / market adjacency), **5 hosted web actions each**; at most five
+candidates, then **4 actions per unresolved ATS** (low reasoning, 2k output, 120s); canonical
+provider-URL + slug/endpoint evidence required; two transient retries then checkpoint+continue; `$4`
+inclusive meter; streamed web progress; one rolling report; `--limit` caps resolution + persistence.
+
+**Built:** OpenAI SDK + `OPENAI_API_KEY`; streamed Responses calls with implicit caching and
+`store=False`; exact Sol/Terra/Luna token/cache rates plus $0.01/search accounting; spend checks between
+every paid request; tool-free structuring still runs after a cap so research survives. The ATS outcome
+is typed (`resolved_supported` / `resolved_unsupported` / blocked / no jobs / budget / failure), but
+requires **no migration**: unsupported/unvalidated evidence lands in existing proposal `notes` and stays
+`unknown`/`layer2`. “Supported” is derived from `SUPPORTED_ATS_TYPES`, not the model, and the existing
+registry fetch must return ≥1 posting before a supported ATS is persisted. Human approval and inert
+proposal safety are unchanged.
+
+**Docs:** D-074 appended; Discovery invariant, CLAUDE roadmap/config, docs/14 operator guide, docs/15
+Day-2 note, `.env.example`, disabled launchd template/readme, and ready-but-off GCP runbook/secrets updated.
+
+**Verified:** `uv lock --check`; ruff format/check; mypy (115 files); import-linter (1 kept / 0 broken);
+**407 offline tests** (423 collected, 16 opt-in deselected); `git diff --check`; CLI `--help`; installed SDK
+signature/usage-field smoke. **Not run:** live Terra discovery — Hayden-run next with `OPENAI_API_KEY`,
+starting with `vja-discover --vertical grid_power_software --limit 5 --dry-run`. The weekly schedule
+remains OFF until that run records yield, ATS-resolution rate, rate-limit behavior, and real cost.
+
+---
+
 ## 2026-07-10 — First live discovery run (beta-hardening Day 2, partial) — budget fix validated, rate limit is the new ceiling
 
 **Ran `vja-discover --vertical grid_power_software` for real against prod Neon** (not `--dry-run`) — the first

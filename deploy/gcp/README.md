@@ -96,7 +96,7 @@ values in this file. Repeat the pattern per secret:
 
 ```sh
 # one-time create (per name):
-for s in ANTHROPIC_API_KEY RESEND_API_KEY VJA_DATABASE_URL VJA_SESSION_SECRET \
+for s in ANTHROPIC_API_KEY OPENAI_API_KEY RESEND_API_KEY VJA_DATABASE_URL VJA_SESSION_SECRET \
          GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET VJA_DIGEST_FROM VJA_DIGEST_RECIPIENT; do
   gcloud secrets create "$s" --replication-policy=automatic
 done
@@ -110,6 +110,7 @@ Values to load:
 | Secret | Source |
 |---|---|
 | `ANTHROPIC_API_KEY` | existing (Layer-2 extraction + matching) |
+| `OPENAI_API_KEY` | GPT-5.6 Terra (ready-but-off Layer-3 discovery Job) |
 | `RESEND_API_KEY` | existing (digest + alert email) |
 | `VJA_DATABASE_URL` | Neon, `+psycopg` rewritten (§3) |
 | `VJA_SESSION_SECRET` | `openssl rand -hex 32` (fresh for prod) |
