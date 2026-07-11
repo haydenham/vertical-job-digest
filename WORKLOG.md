@@ -5,6 +5,45 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-10 — Fetcher roadmap re-ranked by discovery demand (D-076; docs-only, beta-hardening Day-5 prep)
+
+**Planning session — deliverable is the plan, no fetcher code.** Built the demand-ranked "which ATS next" list
+Hayden asked for after the Terra runs skewed Paylocity-heavy.
+
+**Evidence gathered:** (1) per-candidate resolver JSON across the nine `data/discovery_reports/` files (not raw
+mentions — the prompt's provider list pollutes those): **Paylocity #1 unsupported (4 proposals** — Veryon, Trax
++ 2 grid), JazzHR 2, BambooHR 2 (incl. GridBeyond), singleton tail (Kula/Rippling/Gusto/TriNet/Trakstar/
+Pinpoint), and 8 candidates on already-supported ATSs needing no work. (2) **Live probes:** Southwest + Thales
+are **Workday under their Phenom skins** (`swa:wd1:external` cxs-verified, 57 jobs; `thales.wd3`/`Careers`) —
+config-only onboards, killing 2 of Phenom's 3 expected wins; **United is the only real Phenom need** (Taleo
+under; `/widgets` refineSearch paginates on `totalHits`, 155 jobs, `jobDetail` lazy detail); **Paylocity is an
+easy build** (complete embedded `window.pageData` JSON, single-response, `JobId`, lazy detail; the v2 feed API
+200s but is empty — not the data path); **BambooHR trivial** (`/careers/list` single-response JSON).
+
+**Decisions run through Hayden (→ D-076):** order = Workday configs (SWA/Thales) → Paylocity → Phenom (United)
+→ BambooHR → JazzHR probe/singletons; ledger lives in docs/07 (Day-2 "coverage ledger" first edition) + docs/15
+Day 5 rewritten, no new doc; Getro/YC portfolio boards are not fetcher targets (park; later non-employer
+`sources`). Host-marker hardening (paylocity/kula/gusto/rippling/trinet_hire/trakstar/pinpoint/phenom) rides
+along with the builds.
+
+**Second decision, same session (→ D-077):** Hayden flagged misresolved proposals (real Greenhouse companies
+parked `unknown`) and the missing "new fetcher shipped → activate its waiting proposals" path. Reading
+`review.py` also surfaced a real bug: **`approve` refuses parked (`approved`) rows**, contradicting its own
+docstring + D-071. Decisions run through Hayden: corrections go through `vja-review` — never raw SQL, never
+CSV-graduation (provenance) — via a new **`set-ats`** subcommand (validate-by-fetch before stamping, status
+untouched) + **`list --provider`** (the evidence sits in notes, not `ats_type`, per D-074); the sweep is a
+composed runbook (docs/14), not a batch command; the parked-re-approve bugfix rides along (regression test
+first). No interim SQL — the misresolved rows stay inert until the tooling ships **with the Paylocity block**.
+
+**Docs:** D-076 + D-077 appended; INVARIANTS fetcher-build-order line replaced + a new correction-protocol
+bullet; docs/07 gained the demand ledger + probe findings + rewritten steps 8–13; docs/15 Day 5 rewritten
+(incl. the D-077 rider on the Paylocity block); docs/14 parked-row guidance replaced with the D-077 runbook;
+CLAUDE.md Phase-8/BH lines updated. **Next:** implement blocks 1–2 (SWA/Thales seed-CSV flip + the Paylocity
+fetcher + the D-077 tooling) in the next session; per-fetcher build notes are in docs/07 so no re-probing
+needed.
+
+---
+
 ## 2026-07-10 — Discovery stream crash → complete Responses transport (D-075 → built)
 
 **Observed:** the first live Terra aviation run completed and checkpointed wave 1 (est. $0.2161), then
