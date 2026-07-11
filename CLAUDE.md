@@ -149,7 +149,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   `external_id` = the `/job/{slug}/{id}` path (Workday parity); +1 (NextEra) → **43→44** (NRG/National Grid/
   L3Harris parked `proposed` until their search base verifies). **SWA + Thales Workday config onboards ✅**
   (D-076; live-verified 2026-07-11; discovery-expanded production coverage **64 → 66**). **Next:**
-  Paylocity → Phenom (United) → BambooHR →
+  **Paylocity ✅** (D-076/D-077; 4 proposal activations pending deploy) → Phenom (United) → BambooHR →
   JazzHR probe/singletons, then the Layer-2 LLM-read tail for what truly has no platform (demand ledger:
   `docs/07`).
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
@@ -181,8 +181,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072).** The pre-broad-invite week: six one-day items —
   UI rework · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
   (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
-  (demand-ranked, D-076: SWA/Thales Workday configs → Paylocity → Phenom → BambooHR; the Paylocity block
-  carries the D-077 `vja-review set-ats` correction/activation tooling). Runs with the private beta users
+  (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
+  Phenom → BambooHR). Runs with the private beta users
   giving feedback.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search

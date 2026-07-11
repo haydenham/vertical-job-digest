@@ -228,8 +228,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Coverage / fetchers
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
-  SmartRecruiters + Oracle done**) → Tier-C (**Radancy done**) → **demand-ranked next (D-076): Workday
-  config onboards (SWA/Thales — Phenom-skinned Workday) → Paylocity → Phenom (United) → BambooHR →
+  SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy done**) → **demand-ranked next (D-076):
+  Phenom (United) → BambooHR →
   JazzHR probe/singletons** → Layer-2 LLM-read for the custom tail + HN/niche. The discovery-demand
   ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
@@ -265,8 +265,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `external_id` = the `/job/{slug}/{id}` **path** (Workday `externalPath` parity — the detail URL needs the slug;
   the id alone 404s); `apply_url` is that path absolute; `updated_at` from the `jobDate` cell. Endpoint is
   **explicit per-tenant** (not slug-derived). (D-052)
+- **Paylocity fetcher targets the server-rendered tenant listing whose `window.pageData.Jobs` is the complete
+  set.** Explicit per-tenant UUID/name endpoint; single-response false-closure guard; `external_id = JobId`;
+  `apply_url` constructed as `/Recruiting/jobs/Apply/{JobId}`; description lazily fetched from the public detail
+  page. The empty v2 feed is not a data path. (D-076)
 - **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`** (Workday +
-  SmartRecruiters + Oracle + Radancy) — fetched only for in-scope survivors (cost discipline); every other ATS carries
+  SmartRecruiters + Oracle + Radancy + Paylocity) — fetched only for in-scope survivors (cost discipline); every other ATS carries
   the description in `raw_payload`. Adding a list-only ATS is a one-line map entry, no per-company branching. (D-050,
   D-051, D-052)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
@@ -302,8 +306,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   supported ATS — so `list --status approved` is the parked-queue flag, no runtime guard needed.
   (D-071)
 - **Proposal corrections go through `vja-review`, never raw SQL on prod and never the seed CSV** (CSV +
-  `vja-import-employers` is reserved for *curated seed* rows). `set-ats` (ships with the Paylocity
-  block) stamps `ats_type`/`ats_slug`/`endpoint` **only after a successful registry fetch** (≥1 posting
+  `vja-import-employers` is reserved for *curated seed* rows). `set-ats` stamps
+  `ats_type`/`ats_slug`/`endpoint` **only after a successful registry fetch** (≥1 posting
   — the same D-070 gate the agent is held to) and never touches `status`; `approve` stays the only
   promotion gate and must also promote **parked** rows whose ATS became fetchable. The new-fetcher
   activation sweep is a composed runbook (`list --provider` → `set-ats` → `approve`, docs/14), not a

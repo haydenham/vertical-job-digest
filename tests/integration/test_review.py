@@ -8,8 +8,10 @@ predicate), not `verification` — so a supported ats_type activates even with a
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
 from vja.db.employers import (
     active_fetchable_employers,
@@ -17,10 +19,38 @@ from vja.db.employers import (
     insert_proposed_employer,
     list_employers_by_status,
 )
-from vja.models import AtsType, EmployerStatus, Verification
-from vja.review import approve_employer, main, reject_employer
+from vja.db.schema import employers
+from vja.fetchers.base import FetchError
+from vja.models import AtsType, Employer, EmployerStatus, RawPosting, Verification
+from vja.review import approve_employer, main, reject_employer, set_employer_ats
 
 _VERTICAL = "grid_power_software"
+
+
+class _FakeFetcher:
+    ats_type = AtsType.GREENHOUSE
+
+    def __init__(
+        self, postings: list[RawPosting] | None = None, error: Exception | None = None
+    ) -> None:
+        self.postings = postings if postings is not None else [_posting()]
+        self.error = error
+
+    def fetch(self, employer: Employer) -> list[RawPosting]:
+        if self.error is not None:
+            raise self.error
+        return self.postings
+
+
+def _posting() -> RawPosting:
+    return RawPosting(
+        external_id="1",
+        title="Engineer",
+        apply_url="https://example.com/jobs/1",
+        location="Chicago, IL",
+        updated_at=None,
+        raw={},
+    )
 
 
 def _propose(
@@ -95,6 +125,134 @@ def test_approve_keys_on_ats_type_not_verification(migrated_engine: Engine) -> N
     assert outcome.ok is True
     assert outcome.status is EmployerStatus.ACTIVE
     assert outcome.parked is False
+
+
+def test_approve_parked_employer_after_ats_becomes_fetchable(migrated_engine: Engine) -> None:
+    """D-077 regression: an approved/parked row must be re-promotable after ATS correction."""
+    eid = _propose(
+        migrated_engine,
+        "ParkedCo",
+        ats_type=AtsType.UNKNOWN,
+        verification=Verification.LAYER2,
+    )
+    assert approve_employer(migrated_engine, eid).status is EmployerStatus.APPROVED
+
+    correction = set_employer_ats(
+        migrated_engine,
+        eid,
+        ats_type=AtsType.GREENHOUSE,
+        ats_slug="parkedco",
+        fetcher=_FakeFetcher(),
+    )
+    assert correction.ok is True
+
+    outcome = approve_employer(migrated_engine, eid)
+    assert outcome.ok is True
+    assert outcome.status is EmployerStatus.ACTIVE
+
+
+def test_set_ats_validates_then_preserves_status_and_appends_audit_note(
+    migrated_engine: Engine,
+) -> None:
+    eid = _propose(
+        migrated_engine, "CorrectMe", ats_type=AtsType.UNKNOWN, verification=Verification.LAYER2
+    )
+    assert approve_employer(migrated_engine, eid).status is EmployerStatus.APPROVED
+    stamp = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
+
+    outcome = set_employer_ats(
+        migrated_engine,
+        eid,
+        ats_type=AtsType.PAYLOCITY,
+        endpoint="https://recruiting.paylocity.com/recruiting/jobs/All/uuid/name",
+        fetcher=_FakeFetcher(),
+        now=stamp,
+    )
+
+    assert outcome.ok is True
+    assert outcome.posting_count == 1
+    with migrated_engine.connect() as conn:
+        row = conn.execute(select(employers).where(employers.c.id == eid)).mappings().one()
+    assert row["ats_type"] == AtsType.PAYLOCITY.value
+    assert row["endpoint"].endswith("/uuid/name")
+    assert row["verification"] == Verification.VERIFIED.value
+    assert row["status"] == EmployerStatus.APPROVED.value
+    assert "ats_corrected_at=2026-07-11T12:00:00+00:00" in row["notes"]
+
+
+@pytest.mark.parametrize("postings", [[], None])
+def test_set_ats_failure_leaves_row_unchanged(
+    migrated_engine: Engine, postings: list[RawPosting] | None
+) -> None:
+    eid = _propose(
+        migrated_engine, "NoWriteCo", ats_type=AtsType.UNKNOWN, verification=Verification.LAYER2
+    )
+    fetcher = (
+        _FakeFetcher(postings=[])
+        if postings == []
+        else _FakeFetcher(error=FetchError("broken endpoint"))
+    )
+
+    outcome = set_employer_ats(
+        migrated_engine,
+        eid,
+        ats_type=AtsType.GREENHOUSE,
+        ats_slug="no-write",
+        fetcher=fetcher,
+    )
+
+    assert outcome.ok is False
+    row = get_employer_by_id(migrated_engine, eid)
+    assert row is not None
+    assert row.ats_type is AtsType.UNKNOWN
+    assert row.status is EmployerStatus.PROPOSED
+
+
+def test_set_ats_refuses_unsupported_or_active_employer(migrated_engine: Engine) -> None:
+    eid = _propose(
+        migrated_engine, "GuardedCo", ats_type=AtsType.UNKNOWN, verification=Verification.LAYER2
+    )
+    unsupported = set_employer_ats(
+        migrated_engine, eid, ats_type=AtsType.JOBVITE, fetcher=_FakeFetcher()
+    )
+    assert unsupported.ok is False
+    assert "no Layer-1 fetcher" in unsupported.message
+
+    with migrated_engine.begin() as conn:
+        conn.execute(
+            employers.update()
+            .where(employers.c.id == eid)
+            .values(ats_type=AtsType.GREENHOUSE.value, status=EmployerStatus.ACTIVE.value)
+        )
+    active = set_employer_ats(
+        migrated_engine, eid, ats_type=AtsType.GREENHOUSE, fetcher=_FakeFetcher()
+    )
+    assert active.ok is False
+    assert "already active" in active.message
+
+
+def test_list_provider_matches_notes_or_current_ats_type(migrated_engine: Engine) -> None:
+    paylocity_note = insert_proposed_employer(
+        migrated_engine,
+        vertical=_VERTICAL,
+        name="EvidenceCo",
+        ats_type=AtsType.UNKNOWN,
+        verification=Verification.LAYER2,
+        notes="ats_resolution=resolved_unsupported provider=Paylocity slug=x",
+    )
+    assert paylocity_note is not None
+    current_type = _propose(
+        migrated_engine,
+        "TypedCo",
+        ats_type=AtsType.PAYLOCITY,
+        verification=Verification.VERIFIED,
+    )
+    _propose(migrated_engine, "OtherCo", ats_type=AtsType.UNKNOWN, verification=Verification.LAYER2)
+
+    rows = list_employers_by_status(
+        migrated_engine, status=EmployerStatus.PROPOSED, provider="PAYLOCITY"
+    )
+    assert {row.id for row in rows} == {paylocity_note, current_type}
 
 
 def test_reject_retires(migrated_engine: Engine) -> None:
@@ -172,3 +330,46 @@ def test_cli_list_approve_reject(
     assert main(["reject", "8888"]) == 1
     out = capsys.readouterr().out
     assert "not found" in out
+
+
+def test_cli_provider_filter_and_set_ats(
+    migrated_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("vja.review.get_engine", lambda: migrated_engine)
+    monkeypatch.setattr("vja.review.get_fetcher", lambda ats: _FakeFetcher())
+    eid = insert_proposed_employer(
+        migrated_engine,
+        vertical=_VERTICAL,
+        name="CliCorrectionCo",
+        ats_type=AtsType.UNKNOWN,
+        verification=Verification.LAYER2,
+        notes="ats_resolution=resolved_unsupported provider=paylocity slug=tenant",
+    )
+    assert eid is not None
+
+    assert main(["list", "--provider", "paylocity"]) == 0
+    assert "CliCorrectionCo" in capsys.readouterr().out
+
+    endpoint = "https://recruiting.paylocity.com/recruiting/jobs/All/uuid/tenant"
+    assert (
+        main(
+            [
+                "set-ats",
+                str(eid),
+                "--ats-type",
+                "paylocity",
+                "--endpoint",
+                endpoint,
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "verified 1 posting" in output
+    row = get_employer_by_id(migrated_engine, eid)
+    assert row is not None and row.status is EmployerStatus.PROPOSED
+
+    assert main(["approve", str(eid)]) == 0
+    assert get_employer_by_id(migrated_engine, eid).status is EmployerStatus.ACTIVE  # type: ignore[union-attr]

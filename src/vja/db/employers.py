@@ -270,6 +270,7 @@ def list_employers_by_status(
     *,
     vertical: str | None = None,
     status: EmployerStatus = EmployerStatus.PROPOSED,
+    provider: str | None = None,
 ) -> list[EmployerListing]:
     """Employers in one lifecycle state, oldest first — the `vja-review list` read side."""
     stmt = (
@@ -279,6 +280,12 @@ def list_employers_by_status(
     )
     if vertical is not None:
         stmt = stmt.where(employers.c.vertical == vertical)
+    if provider is not None:
+        normalized = provider.strip().casefold()
+        stmt = stmt.where(
+            (func.lower(employers.c.notes).contains(f"provider={normalized}"))
+            | (employers.c.ats_type == normalized)
+        )
     with engine.connect() as conn:
         return [_row_to_listing(row) for row in conn.execute(stmt).mappings().all()]
 
@@ -305,6 +312,39 @@ def set_employer_status(
             employers.update()
             .where(employers.c.id == employer_id)
             .values(status=status, updated_at=stamp)
+        )
+    return bool(result.rowcount and result.rowcount > 0)
+
+
+def update_employer_ats(
+    engine: Engine,
+    employer_id: int,
+    *,
+    ats_type: AtsType,
+    ats_slug: str | None,
+    endpoint: str | None,
+    audit_note: str,
+    now: datetime | None = None,
+) -> bool:
+    """Atomically stamp validated ATS config without changing lifecycle status (D-077)."""
+    stamp = now or datetime.now(UTC)
+    with begin(engine) as conn:
+        row = conn.execute(select(employers.c.notes).where(employers.c.id == employer_id)).first()
+        if row is None:
+            return False
+        current = row[0]
+        notes = f"{current} | {audit_note}" if current else audit_note
+        result = conn.execute(
+            employers.update()
+            .where(employers.c.id == employer_id)
+            .values(
+                ats_type=ats_type,
+                ats_slug=ats_slug,
+                endpoint=endpoint,
+                verification=Verification.VERIFIED,
+                notes=notes,
+                updated_at=stamp,
+            )
         )
     return bool(result.rowcount and result.rowcount > 0)
 

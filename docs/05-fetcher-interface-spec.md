@@ -61,6 +61,15 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
 - `external_id` = Workday's `bulletFields`/`externalPath` job id. Treat as best-effort; verify the apply link survives.
 - Most seed `unverified` rows (the big utilities/banks/exchanges) will land here.
 
+### Paylocity — `ats_type: paylocity`
+- **Endpoint:** explicit per tenant: `GET https://recruiting.paylocity.com/recruiting/jobs/All/{uuid}/{name}`.
+- **Response:** server-rendered HTML containing one complete `window.pageData = {"Jobs": [...]}` JSON object.
+- **Completeness:** single authoritative response; a valid empty `Jobs` list is zero open, while transport,
+  parse, or shape failures raise `FetchError`.
+- **Mapping:** `external_id = str(JobId)`, `title = JobTitle`, `location = LocationName` (structured fallback),
+  `updated_at = PublishedDate`, `apply_url = /Recruiting/jobs/Apply/{JobId}`.
+- Descriptions are lazy-fetched from `/Recruiting/jobs/Details/{JobId}` for in-scope survivors.
+
 ### Raw HTML — `ats_type: raw_html`  *(Layer 2 fallback, not Layer 1)*
 - Universal fallback: fetch the rendered careers page text and LLM-read it. Belongs to Layer 2; listed here for completeness.
 - For these, `external_id` is synthesized from a stable content signature (since there's no ATS id) — documented in the L2 spec when it's built.
@@ -75,8 +84,9 @@ greenhouse → https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=tr
 lever      → https://api.lever.co/v0/postings/{slug}?mode=json
 ashby      → https://api.ashbyhq.com/posting-api/job-board/{slug}
 workday    → use the hand-set `endpoint` column (per-company)
+paylocity  → use the hand-set `endpoint` column (per-company UUID/name path)
 ```
-The `endpoint` column in the seed CSV is the source of truth for Workday; for the other three it's derived and may be left blank (code constructs it).
+The `endpoint` column is authoritative for Workday and Paylocity; the original three are slug-derived.
 
 ## Politeness & health (policy, not etiquette — D & Memo 02 §8)
 - Identifiable `User-Agent`, conservative rate limiting, one fetch per endpoint per day total (D-005).

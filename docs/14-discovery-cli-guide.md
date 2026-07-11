@@ -85,17 +85,19 @@ accumulator: a live run exposed an upstream output-index crash there (D-075), an
 metering is more important than per-search progress lines. A failed wave is retried by the SDK twice,
 checkpointed, and the independent remaining work continues.
 
-### `vja-review` — approve / reject / list proposals
+### `vja-review` — approve / reject / list / correct proposals
 ```sh
-uv run vja-review list [--vertical <key>] [--status proposed|approved|active|retired]
+uv run vja-review list [--vertical <key>] [--status proposed|approved|active|retired] [--provider <name>]
 uv run vja-review approve <id> [<id> ...]
 uv run vja-review reject  <id> [<id> ...]
+uv run vja-review set-ats <id> --ats-type <type> [--slug <slug>] [--endpoint <url>]
 ```
 | command | effect |
 |---------|--------|
 | `list` | default `--status proposed`; `--status approved` = the **parked** queue |
 | `approve <ids>` | → `active` if the ATS is a supported Layer-1 fetcher (fetched next nightly); else → `approved` + **parked** with a printed notice |
 | `reject <ids>` | → `retired` (never deleted) |
+| `set-ats <id>` | validate ≥1 posting, then correct ATS fields without changing status |
 
 `approve`/`reject` are batch-friendly and exit non-zero if any id fails (not found, or not in a
 promotable state).
@@ -104,7 +106,7 @@ promotable state).
 *structurally* excluded from the nightly fetch, so they sit harmlessly until you resolve their ATS.
 `vja-review list --status approved` is how you find them.
 
-### Correcting a proposal's ATS + activating after a new fetcher (D-077 — ships with the Paylocity block)
+### Correcting a proposal's ATS + activating after a new fetcher (D-077)
 
 Two situations need a row *corrected*, and both go through `vja-review` — **never raw SQL against prod,
 and not via the seed CSV** (that bypasses the review gate and muddies `source=agent_discovered`
@@ -118,11 +120,12 @@ SWA/Thales Workday flip):
    stamps a *supported* ATS after a successful registry fetch, so the provider evidence
    (`"provider": "paylocity"`, slug, endpoint) sits in the proposal's **notes**.
 
-The tool for both is the `set-ats` subcommand (D-077; lands with the first new-fetcher block):
+The tool for both is the `set-ats` subcommand (D-077):
 
 ```sh
-uv run vja-review list --provider paylocity        # find rows by notes evidence + ats_type
-uv run vja-review set-ats <id> --ats-type paylocity --slug <slug> [--endpoint <url>]
+uv run vja-review list --provider paylocity        # proposed rows by notes evidence + ats_type
+uv run vja-review list --status approved --provider paylocity  # parked rows
+uv run vja-review set-ats <id> --ats-type paylocity --endpoint <tenant-list-url>
 uv run vja-review approve <id>
 ```
 
@@ -132,7 +135,8 @@ uv run vja-review approve <id>
 `approve` remains the only promotion gate. The new-fetcher sweep is exactly this composed sequence per
 row (volumes are small — 2–4 rows per fetcher — and each slug/endpoint deserves human eyes; there is
 deliberately no batch `activate` command). `approve` also promotes **parked (`approved`) rows** whose
-ATS has become fetchable (a D-077 fix — it previously refused anything not `proposed`).
+ATS has become fetchable (a D-077 fix — it previously refused anything not `proposed`). `set-ats` refuses
+active/retired rows, returns non-zero on validation failure or zero jobs, and leaves the row unchanged.
 
 ---
 

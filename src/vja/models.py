@@ -28,6 +28,7 @@ class AtsType(StrEnum):
     WORKABLE = "workable"
     ORACLE_HCM = "oracle_hcm"
     SMARTRECRUITERS = "smartrecruiters"
+    PAYLOCITY = "paylocity"
     JOBVITE = "jobvite"
     SUCCESSFACTORS = "successfactors"
     AVATURE = "avature"

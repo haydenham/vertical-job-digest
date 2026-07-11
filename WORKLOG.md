@@ -5,6 +5,33 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-11 — Paylocity fetcher + D-077 correction/activation tooling built
+
+**Fetcher:** added generic explicit-endpoint Paylocity support over the server-rendered
+`window.pageData.Jobs` payload (single-response false-closure guard; `JobId` identity; constructed direct apply
+URL; structured location/date) plus lazy public-detail extraction. Captured sanitized Veryon list/detail fixtures;
+the opt-in live smoke passed both list + detail against the current board. Registry, extraction routing, and
+discovery provider-host markers are wired. No seed employer was added: the four waiting rows remain discovery
+proposals until the post-deploy review runbook.
+
+**D-077:** regression-first fixed parked (`approved`) re-approval; `vja-review list --provider` finds note evidence
+or corrected types; `set-ats` accepts only supported ATSs, validates ≥1 live posting before an atomic ATS/verification
+write + audit note, preserves status, and refuses active/retired rows. Activation remains the explicit `approve`
+step. Tests pin success, zero/fetch failure no-write behavior, lifecycle guards, provider filtering, CLI composition,
+and audit metadata.
+
+**Schema correction run through Hayden:** no Alembic migration. Inspection proved ATS values are application-
+validated `VARCHAR(15)` (`native_enum=False`, `create_constraint=False`), not the CHECK-constrained enums the docs
+claimed; `paylocity` fits the existing column. Corrected `db/schema.py` + docs/04. Alembic no-drift check passes.
+
+**Verified:** full offline suite (**436 passed**, 17 opt-in deselected); Paylocity live smoke (1 passed); ruff
+format/check; mypy (48 source files); import-linter (1 kept / 0 broken); `uv lock --check`; CLI help;
+`git diff --check`. Docs: current rules/specs + D-076/D-077 roadmaps/runbook updated; no new ADR (implements accepted
+decisions; schema text was a factual correction). **Next:** Hayden reviews/commits; after deploy, correct + approve
+the waiting Paylocity proposals via docs/14, record the resulting live coverage, then build Phenom (United).
+
+---
+
 ## 2026-07-11 — Southwest + Thales onboarded through existing Workday fetcher (D-076 block 1)
 
 **Config-only coverage win:** live-verified the two Phenom-skinned Workday boards before changing data:
