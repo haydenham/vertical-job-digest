@@ -1300,3 +1300,17 @@ auto-approval, schedule enablement, schema change, or BambooHR fetcher. **Status
 `feat/gpt-terra-discovery`; live Terra dry-run remains Hayden-run. Supersedes D-070/D-073 only where they specify
 the discovery provider, Claude tool-loop mechanics, tool budgets, model rates, and checkpoint shape; their safety,
 validate-by-fetch, inert-proposal, and human-review rules remain. References D-070, D-071, D-073, D-017, D-069.
+
+### D-075 · Phase 10.x · Discovery Responses transport → complete calls, not high-level streaming · accepted · 2026-07-10
+The first live Terra aviation run completed wave 1, then OpenAI Python SDK 2.45.0 crashed inside its own
+`ResponseStreamState.handle_event`: an output-text event referenced an `output_index` absent from the SDK's
+accumulated snapshot, raising a raw `IndexError` before `vja.discover` received the event. The HTTP request had
+returned 200; application logging neither caused nor received the failing event. **Decision run through Hayden:**
+bypass the fragile high-level stream accumulator for discovery's hosted-web calls. Unstructured research waves use
+the complete `responses.create` path; structured ATS resolvers use complete `responses.parse`. This preserves the
+same prompts, tool/output caps, timeouts, SDK retries, structured validation, exact completed-response metering,
+and rolling checkpoints. The tradeoff is deliberate: retain wave/resolver start/finish + cost logs, but drop
+per-search progress events. Catching `IndexError` was rejected because the partially consumed request has no final
+usage object and would under-meter spend; a custom SSE accumulator was rejected as fragile SDK-adjacent code.
+**Status:** built with a regression test on `fix/discovery-stream-index-error`; no schema or invariant change.
+Supersedes D-074 only where it requires streamed web progress. References D-074, D-073, D-021.

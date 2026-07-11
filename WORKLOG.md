@@ -5,6 +5,29 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-10 — Discovery stream crash → complete Responses transport (D-075 → built)
+
+**Observed:** the first live Terra aviation run completed and checkpointed wave 1 (est. $0.2161), then
+crashed during wave 2 despite an HTTP 200. OpenAI Python SDK 2.45.0 raised `IndexError: list index out of
+range` inside its high-level Responses stream accumulator: an output-text event's `output_index` was absent
+from the SDK snapshot. The error happened before `_log_stream_event` received the event, so logging was not
+the cause; streaming had only been enabled to provide those per-search lines.
+
+**Decision run through Hayden:** prioritize reliable, exactly metered complete responses over per-search
+progress. Discovery research now uses `responses.create`; structured ATS resolution uses `responses.parse`.
+Wave/resolver bookends, post-request cost logs, tool/output caps, timeouts, SDK retries, checkpoints,
+validation, and the D-074 protocol are unchanged. Catch-and-continue was rejected because a broken partial
+stream has no final usage object and would under-meter spend; a custom SSE accumulator was unnecessary
+SDK-adjacent complexity.
+
+**Test-first fix:** `test_research_bypasses_sdk_stream_accumulator` failed against the old wrapper with the
+same raw `IndexError`, then passed after the transport change. **Verified:** discovery unit + integration slice
+(20 tests); full offline suite (**409 passed**, 16 opt-in deselected); ruff format/check; mypy (47 source files);
+import-linter (1 kept / 0 broken); `uv lock --check`; `git diff --check`; scoped diff review. Docs: D-075 +
+operator-guide logging contract; no INVARIANTS change because no current cross-cutting rule moved. **Next:**
+Hayden reviews/commits; rerun the aviation discovery command to finish the live cost/yield measurement. Weekly
+scheduling remains OFF.
+
 ## 2026-07-10 — Discovery → GPT-5.6 Terra + separately budgeted ATS resolution (D-074 → built)
 
 **Migrated only Layer-3 discovery from Anthropic to OpenAI Responses** on

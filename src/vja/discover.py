@@ -282,21 +282,12 @@ def _count_web_actions(output: Any) -> tuple[int, int]:
     return actions, searches
 
 
-def _log_stream_event(event: Any, label: str) -> None:
-    kind = str(getattr(event, "type", ""))
-    if "web_search_call" not in kind:
-        return
-    action = getattr(getattr(event, "item", None), "action", None)
-    action_name = getattr(action, "type", None) or kind.rsplit(".", 1)[-1]
-    logger.info("%s: web %s", label, action_name)
-
-
-def _stream_response(client: Any, *, label: str, **kwargs: Any) -> Any:
-    """Run one streamed Response and return its complete response object."""
-    with client.responses.stream(**kwargs) as stream:
-        for event in stream:
-            _log_stream_event(event, label)
-        return stream.get_final_response()
+def _request_response(client: Any, **kwargs: Any) -> Any:
+    """Run one complete Response without the SDK's fragile stream accumulator."""
+    text_format = kwargs.pop("text_format", None)
+    if text_format is not None:
+        return client.responses.parse(text_format=text_format, **kwargs)
+    return client.responses.create(**kwargs)
 
 
 def _company_names(report: str) -> set[str]:
@@ -335,9 +326,8 @@ def discover_candidates(
         label = f"research wave {wave_number}/{len(_WAVES)} ({wave_name})"
         logger.info("starting %s (<=%d web actions)", label, _WAVE_MAX_TOOL_CALLS)
         try:
-            response = _stream_response(
+            response = _request_response(
                 client,
-                label=label,
                 model=_MODEL,
                 instructions=_RESEARCH_INSTRUCTIONS,
                 input=prompt,
@@ -488,9 +478,8 @@ def resolve_candidate_ats(
     label = f"ATS resolver ({candidate.name})"
     logger.info("starting %s (<=%d web actions)", label, _ATS_MAX_TOOL_CALLS)
     try:
-        response = _stream_response(
+        response = _request_response(
             client,
-            label=label,
             model=_MODEL,
             instructions=_ATS_INSTRUCTIONS,
             input=prompt,

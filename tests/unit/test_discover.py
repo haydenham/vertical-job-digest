@@ -71,23 +71,6 @@ def _response(
     )
 
 
-class _Stream:
-    def __init__(self, response: Any) -> None:
-        self.response = response
-
-    def __enter__(self) -> _Stream:
-        return self
-
-    def __exit__(self, *_args: Any) -> None:
-        return None
-
-    def __iter__(self) -> Any:
-        return iter([types.SimpleNamespace(type="response.web_search_call.completed", item=None)])
-
-    def get_final_response(self) -> Any:
-        return self.response
-
-
 class _Responses:
     def __init__(
         self,
@@ -98,18 +81,21 @@ class _Responses:
         self.waves = list(waves)
         self.candidates = candidates
         self.resolutions = list(resolutions or [])
-        self.stream_calls: list[dict[str, Any]] = []
+        self.response_calls: list[dict[str, Any]] = []
         self.parse_calls: list[dict[str, Any]] = []
 
-    def stream(self, **kwargs: Any) -> _Stream:
-        self.stream_calls.append(kwargs)
-        if kwargs.get("text_format") is ATSResolution:
-            resolution = self.resolutions.pop(0)
-            return _Stream(_response(parsed=resolution, text=resolution.model_dump_json()))
-        return _Stream(self.waves.pop(0))
+    def create(self, **kwargs: Any) -> Any:
+        self.response_calls.append(kwargs)
+        return self.waves.pop(0)
+
+    def stream(self, **_kwargs: Any) -> Any:
+        raise IndexError("list index out of range")
 
     def parse(self, **kwargs: Any) -> Any:
         self.parse_calls.append(kwargs)
+        if kwargs.get("text_format") is ATSResolution:
+            resolution = self.resolutions.pop(0)
+            return _response(parsed=resolution, text=resolution.model_dump_json())
         return _response(parsed=_CandidateList(candidates=self.candidates), actions=())
 
 
@@ -168,15 +154,27 @@ def test_three_waves_are_bounded_structured_and_cross_excluded(tmp_path: Path) -
 
     assert len(result) == 5
     assert completed == 3 and failed == 0
-    assert len(client.responses.stream_calls) == 3
-    assert all(call["max_tool_calls"] == 5 for call in client.responses.stream_calls)
-    assert all(call["store"] is False for call in client.responses.stream_calls)
-    assert "alpha" in client.responses.stream_calls[1]["input"]
-    assert "bravo" in client.responses.stream_calls[2]["input"]
+    assert len(client.responses.response_calls) == 3
+    assert all(call["max_tool_calls"] == 5 for call in client.responses.response_calls)
+    assert all(call["store"] is False for call in client.responses.response_calls)
+    assert "alpha" in client.responses.response_calls[1]["input"]
+    assert "bravo" in client.responses.response_calls[2]["input"]
     assert client.responses.parse_calls[0]["text_format"] is _CandidateList
     assert meter.billable_searches == 3
     report = checkpoint.path.read_text()  # type: ignore[union-attr]
     assert "capital ecosystem" in report and "market adjacency" in report
+
+
+def test_research_bypasses_sdk_stream_accumulator() -> None:
+    """A client-side stream parser failure must not abort otherwise valid research."""
+    client = _Client(_three_waves(), [_candidate()])
+
+    candidates, _meter, completed, failed = discover_candidates(
+        client, "grid_power_software", set()
+    )
+
+    assert [candidate.name for candidate in candidates] == ["NewCo"]
+    assert completed == 3 and failed == 0
 
 
 def test_limit_caps_structuring_and_resolution_candidates() -> None:
@@ -195,7 +193,7 @@ def test_spend_ceiling_stops_starting_later_waves(monkeypatch: pytest.MonkeyPatc
         client, "grid_power_software", set()
     )
     assert completed == 1 and failed == 0
-    assert len(client.responses.stream_calls) == 1
+    assert len(client.responses.response_calls) == 1
     assert len(client.responses.parse_calls) == 1  # preserve the paid first wave
 
 
@@ -215,7 +213,7 @@ def test_resolver_uses_locked_budget_and_evidence() -> None:
         meter,
         _ReportCheckpoint(None),
     )
-    call = client.responses.stream_calls[0]
+    call = client.responses.parse_calls[0]
     assert call["max_tool_calls"] == 4
     assert call["max_output_tokens"] == 2_000
     assert call["reasoning"] == {"effort": "low"}
@@ -282,7 +280,8 @@ def test_resolver_skips_call_when_global_budget_is_exhausted(
         client, _candidate(), DiscoveryMeter(), _ReportCheckpoint(None)
     )
     assert resolution.outcome is ATSOutcome.UNRESOLVED_BUDGET_EXHAUSTED
-    assert client.responses.stream_calls == []
+    assert client.responses.response_calls == []
+    assert client.responses.parse_calls == []
 
 
 def test_validate_skips_existing_universe() -> None:

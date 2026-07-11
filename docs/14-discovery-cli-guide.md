@@ -79,9 +79,11 @@ Each candidate is validated by actually fetching it: a supported ATS that return
 `proposed` + `detected` (fetchable); anything unresolved → `proposed` + `unknown`/`layer2` (the guess
 is kept in the row's `notes` for manual triage). Duplicates of the existing universe are skipped.
 
-The research and ATS phases stream progress to stderr: wave/resolver bookends plus web
-search/open/find events and the running cost after each completed request. A failed wave is retried by
-the SDK twice, checkpointed, and the independent remaining work continues.
+The research and ATS phases log wave/resolver bookends plus the running cost after each completed
+request. They intentionally use complete Responses calls rather than the SDK's high-level stream
+accumulator: a live run exposed an upstream output-index crash there (D-075), and exact post-response
+metering is more important than per-search progress lines. A failed wave is retried by the SDK twice,
+checkpointed, and the independent remaining work continues.
 
 ### `vja-review` — approve / reject / list proposals
 ```sh

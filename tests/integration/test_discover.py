@@ -105,27 +105,15 @@ def _fake_client(candidates: list[CandidateEmployer]) -> Any:
             ),
         )
 
-    class _Stream:
-        def __init__(self, final: Any) -> None:
-            self.final = final
-
-        def __enter__(self) -> Any:
-            return self
-
-        def __exit__(self, *_args: Any) -> None:
-            return None
-
-        def __iter__(self) -> Any:
-            return iter(())
-
-        def get_final_response(self) -> Any:
-            return self.final
-
     class _Responses:
         def __init__(self) -> None:
             self.wave = 0
 
-        def stream(self, **kwargs: Any) -> Any:
+        def create(self, **_kwargs: Any) -> Any:
+            self.wave += 1
+            return response(text=f"Company: Wave{self.wave}\nEvidence: https://source")
+
+        def parse(self, **kwargs: Any) -> Any:
             if kwargs.get("text_format") is ATSResolution:
                 resolution = ATSResolution(
                     outcome=ATSOutcome.RESOLVED_UNSUPPORTED,
@@ -134,11 +122,7 @@ def _fake_client(candidates: list[CandidateEmployer]) -> Any:
                     canonical_url="https://mysteryco.bamboohr.com/careers",
                     evidence_urls=["https://mysteryco.bamboohr.com/careers"],
                 )
-                return _Stream(response(parsed=resolution))
-            self.wave += 1
-            return _Stream(response(text=f"Company: Wave{self.wave}\nEvidence: https://source"))
-
-        def parse(self, **kwargs: Any) -> Any:
+                return response(parsed=resolution)
             return response(parsed=_CandidateList(candidates=candidates))
 
     return types.SimpleNamespace(responses=_Responses())
