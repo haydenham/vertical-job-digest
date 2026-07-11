@@ -5,6 +5,22 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-11 — Southwest + Thales onboarded through existing Workday fetcher (D-076 block 1)
+
+**Config-only coverage win:** live-verified the two Phenom-skinned Workday boards before changing data:
+Southwest `swa:wd1:external` returned 47 open jobs; Thales `thales.wd3`/`Careers` returned 2,000 global jobs.
+Flipped both aviation seed rows from `custom/layer2` to `workday/verified` with explicit cxs endpoints — no
+fetcher code and no new decision. The curated-seed fetchable count moves 44→46; the discovery-expanded live
+baseline moves **64→66** once Hayden imports the seed into Neon.
+
+**Tests/docs:** seed-import expectations now pin 46 total / 13 aviation / 22 Workday; seed README, docs/07,
+docs/15, and CLAUDE roadmap updated. Verified: targeted seed-import tests (7); full offline suite (**409 passed**,
+16 opt-in deselected); ruff format/check; mypy (47 source files); import-linter (1 kept / 0 broken);
+`uv lock --check`; `git diff --check`. **Next:** Hayden reviews/commits, then runs `vja-import-employers`
+against Neon; next PR is Paylocity + D-077 review correction/activation tooling.
+
+---
+
 ## 2026-07-10 — Fetcher roadmap re-ranked by discovery demand (D-076; docs-only, beta-hardening Day-5 prep)
 
 **Planning session — deliverable is the plan, no fetcher code.** Built the demand-ranked "which ATS next" list

@@ -40,8 +40,9 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 - **+1 fetcher (Tier C: Radancy/TalentBrew built, D-052) → 33/54 (61%)** with 9 fetchers total — NextEra onboarded
   via the server-rendered `/search-jobs/results` HTML; NRG/National Grid parked until their search base verifies.
 - **The next builds are demand-ranked (D-076)** — the discovery agent is now a second demand signal alongside the
-  seed universe; see the discovery-demand ledger below. Order: Workday config onboards (SWA/Thales) → Paylocity →
-  Phenom (United) → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
+  seed universe; see the discovery-demand ledger below. **SWA/Thales Workday config onboards are done** (both
+  live-verified 2026-07-11), taking the discovery-expanded production baseline **64 → 66 fetchable**. Remaining
+  order: Paylocity → Phenom (United) → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
 - **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
   (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
   near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
@@ -96,11 +97,11 @@ Day-2 "coverage ledger" first edition, docs/15).*
    fetcher, **list-only + paginate-or-fail** on the table `aria-label` total + lazy `fetch_detail`).
    `external_id` = the `/job/{slug}/{id}` path (Workday parity — the id alone 404s). +1 fetchable
    (NextEra); NRG/National Grid/L3Harris parked `proposed` until their search base verifies.
-8. **Workday config onboards: Southwest + Thales** (D-076 — **first**, zero code) — their "Phenom
+8. **Workday config onboards: Southwest + Thales** (D-076 — **done**, zero code) — their "Phenom
    portals" are skins over Workday: SWA verified live via the existing `cxs` fetcher
-   (`swa:wd1:external`, 57 jobs at probe); Thales is `thales.wd3`/`Careers` (verify `cxs` at
-   onboarding). Seed CSV flip: `ats_type` custom→workday, add `ats_slug`/`endpoint`,
-   `verification` verified/detected.
+   (`swa:wd1:external`, 47 jobs at onboarding); Thales `thales.wd3`/`Careers` also verified live
+   (2,000 global jobs). Seed CSV flipped `custom/layer2 → workday/verified`; production coverage
+   baseline 64 → 66 fetchable.
 9. **Paylocity** (D-076 — first new fetcher; discovery demand #1, 4 waiting proposals) — the listing
    page `recruiting.paylocity.com/recruiting/jobs/All/{uuid}/{name}` is **server-rendered with a
    complete embedded `window.pageData` JSON** (`Jobs: [{JobId, JobTitle, LocationName, PublishedDate,
