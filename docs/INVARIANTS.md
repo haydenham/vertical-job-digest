@@ -228,11 +228,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Coverage / fetchers
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
-  SmartRecruiters + Oracle done**) → Tier-C platform fetchers (**Radancy done; Phenom next**) →
-  Layer-2 LLM-read for the custom tail + HN/niche. **Probe the multi-tenant platforms for a clean API
-  before the generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has
-  near-zero reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018,
-  D-048, D-049, D-050, D-051, D-052)
+  SmartRecruiters + Oracle done**) → Tier-C (**Radancy done**) → **demand-ranked next (D-076): Workday
+  config onboards (SWA/Thales — Phenom-skinned Workday) → Paylocity → Phenom (United) → BambooHR →
+  JazzHR probe/singletons** → Layer-2 LLM-read for the custom tail + HN/niche. The discovery-demand
+  ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
+  generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
+  reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
+  D-049, D-050, D-051, D-052, D-076)
 - **Workday `cxs` fetcher is list-only + paginate-or-fail;** `osv-` Workday hosts route to
   Layer 2; a tenant board exceeding Workday's ~4000 offset cap also routes to Layer 2
   (paginate-or-fail rejects the truncated page — RTX, D-046). (D-032, D-046)
@@ -299,6 +301,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   are **structurally unfetchable** — `active_fetchable_employers` filters on `status=active` AND a
   supported ATS — so `list --status approved` is the parked-queue flag, no runtime guard needed.
   (D-071)
+- **Proposal corrections go through `vja-review`, never raw SQL on prod and never the seed CSV** (CSV +
+  `vja-import-employers` is reserved for *curated seed* rows). `set-ats` (ships with the Paylocity
+  block) stamps `ats_type`/`ats_slug`/`endpoint` **only after a successful registry fetch** (≥1 posting
+  — the same D-070 gate the agent is held to) and never touches `status`; `approve` stays the only
+  promotion gate and must also promote **parked** rows whose ATS became fetchable. The new-fetcher
+  activation sweep is a composed runbook (`list --provider` → `set-ats` → `approve`, docs/14), not a
+  batch command. (D-077)
 - **The weekly discovery schedule is ready-but-OFF.** `vja-discover` stays a manual command until its
   live per-run cost is measured; the launchd template (`com.vja.discover.plist.template`, not
   auto-installed) + Cloud Scheduler runbook (CUTOVER §8b, not created) exist but are disabled. The

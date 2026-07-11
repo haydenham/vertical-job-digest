@@ -102,8 +102,37 @@ promotable state).
 
 **Parked (`approved`) employers** are real companies with no Layer-1 fetcher yet. They are
 *structurally* excluded from the nightly fetch, so they sit harmlessly until you resolve their ATS.
-To activate one later, fix its `ats_type`/`ats_slug` (curation — e.g. via the seed CSV or SQL) so it
-becomes fetchable, then it can go `active`. `vja-review list --status approved` is how you find them.
+`vja-review list --status approved` is how you find them.
+
+### Correcting a proposal's ATS + activating after a new fetcher (D-077 — ships with the Paylocity block)
+
+Two situations need a row *corrected*, and both go through `vja-review` — **never raw SQL against prod,
+and not via the seed CSV** (that bypasses the review gate and muddies `source=agent_discovered`
+provenance; the CSV + `vja-import-employers` path stays reserved for *curated seed* employers, e.g. the
+SWA/Thales Workday flip):
+
+1. **The agent misresolved a real ATS** (e.g. a company that is actually on Greenhouse landed
+   `unknown`/`layer2`).
+2. **A new fetcher just shipped** and the proposals that were waiting on it (e.g. Paylocity's
+   Veryon/Trax) can now be activated. Note the row's `ats_type` will still be `unknown` — D-074 only
+   stamps a *supported* ATS after a successful registry fetch, so the provider evidence
+   (`"provider": "paylocity"`, slug, endpoint) sits in the proposal's **notes**.
+
+The tool for both is the `set-ats` subcommand (D-077; lands with the first new-fetcher block):
+
+```sh
+uv run vja-review list --provider paylocity        # find rows by notes evidence + ats_type
+uv run vja-review set-ats <id> --ats-type paylocity --slug <slug> [--endpoint <url>]
+uv run vja-review approve <id>
+```
+
+`set-ats` **validates by actually fetching** before stamping anything (the registry fetcher must return
+≥1 posting — the same D-070 gate the agent itself is held to), then sets
+`ats_type`/`ats_slug`/`endpoint`/`verification=verified` and appends a note. It never touches `status`;
+`approve` remains the only promotion gate. The new-fetcher sweep is exactly this composed sequence per
+row (volumes are small — 2–4 rows per fetcher — and each slug/endpoint deserves human eyes; there is
+deliberately no batch `activate` command). `approve` also promotes **parked (`approved`) rows** whose
+ATS has become fetchable (a D-077 fix — it previously refused anything not `proposed`).
 
 ---
 

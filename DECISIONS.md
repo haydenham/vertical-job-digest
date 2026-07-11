@@ -1314,3 +1314,48 @@ per-search progress events. Catching `IndexError` was rejected because the parti
 usage object and would under-meter spend; a custom SSE accumulator was rejected as fragile SDK-adjacent code.
 **Status:** built with a regression test on `fix/discovery-stream-index-error`; no schema or invariant change.
 Supersedes D-074 only where it requires streamed web progress. References D-074, D-073, D-021.
+
+### D-076 · Beta hardening · Fetcher build order re-ranked by discovery demand; SWA/Thales are Workday-under-Phenom · accepted · 2026-07-10
+The recorded order said **Phenom next** (D-052, docs/15 Day 5). Two evidence sources re-rank it. (1) **Discovery
+demand:** per-candidate resolver JSON across the nine `data/discovery_reports/` files makes **Paylocity the #1
+unsupported provider** (4 real proposals — Veryon, Trax + 2 grid), then JazzHR (2) and BambooHR (2, incl.
+GridBeyond); 8 further candidates resolved to already-supported ATSs and need no work (they auto-activate at
+`vja-review approve`). (2) **Live probes:** Southwest + Thales — 2 of Phenom's 3 expected wins — are **Workday
+underneath their Phenom skins** (`swa:wd1:external` verified via the existing `cxs` fetcher, 57 jobs;
+`thales.wd3`/`Careers`), i.e. config-only onboards; **United is the only real Phenom need** (Taleo underneath, no
+clean API there). Feasibility probed live this session: Phenom `/widgets` refineSearch paginates on `totalHits`
+(United 155 jobs) with a `jobDetail` lazy-detail call; Paylocity's listing page embeds a complete
+`window.pageData` JSON (single response, `JobId` key, empty list-descriptions → lazy detail; the
+`/recruiting/v2/api/feed/jobs/{uuid}` endpoint 200s but returns 0 jobs — not the data path); BambooHR
+`/careers/list` is trivial single-response JSON. **Decisions run through Hayden:** build order = **Workday config
+onboards (SWA/Thales) → Paylocity → Phenom (United) → BambooHR → JazzHR probe/singletons → Layer-2 tail**; the
+demand ledger lives in `docs/07` (the Day-2 "coverage ledger" first edition — refresh as discovery runs
+accumulate) with docs/15 Day 5 rewritten to match, no new numbered doc; Getro / YC Work-at-a-Startup portfolio
+boards are **not** fetcher targets (aggregators — the employer's own ATS is canonical; revisit as non-employer
+`sources`, Phase 10). Cheap hardening rides along with the builds: extend `discover._PROVIDER_HOST_MARKERS`
+(paylocity/kula/gusto/rippling/trinet_hire/trakstar/pinpoint/phenom) so future runs type these providers
+deterministically instead of burning resolver actions. **Status:** docs-only this session (plan of record);
+implementation is the next sessions' blocks. Supersedes D-052's "Phenom next" ordering (its
+probe-platforms-before-LLM-read rule stands). References D-052, D-070, D-074, D-017, D-072.
+
+### D-077 · Beta hardening · Proposal-correction + new-fetcher activation protocol — `vja-review` tooling, never raw SQL · accepted · 2026-07-11
+Live discovery runs left two operator gaps with no legitimate write path. (1) **Misresolved proposals:** real
+companies on supported ATSs (e.g. Greenhouse) landed `unknown`/`layer2`; the only documented fix was "seed CSV
+or SQL" (docs/14) — i.e. raw SQL against prod Neon. (2) **New-fetcher activation:** when a fetcher ships (next:
+Paylocity, D-076), the proposals waiting on it can't be found by `ats_type` — D-074 deliberately never stamps an
+unsupported provider on the row, so the evidence (`"provider": "paylocity"`, slug, endpoint) sits in **notes** —
+and `vja-review list` can't filter on that. A third defect surfaced reading the code: **`approve` refuses
+non-`proposed` rows** (`src/vja/review.py`), contradicting its own docstring and D-071's "fixing a parked row's
+`ats_type` and re-approving promotes it" — parked (`approved`) rows are unpromotable. **Decisions run through
+Hayden:** corrections go through `vja-review` — never raw SQL on prod, and not CSV-graduation (it bypasses the
+review gate and muddies `source=agent_discovered` provenance; CSV + `vja-import-employers` stays the path for
+*curated seed* rows only, e.g. the SWA/Thales Workday flip). New **`set-ats <id> --ats-type --slug/--endpoint`**
+subcommand: **validates by actually fetching** (registry fetcher must return ≥1 posting — the same D-070 gate
+the agent is held to) before stamping `ats_type`/`ats_slug`/`endpoint`/`verification=verified` + an audit note;
+it never touches `status` — `approve` stays the only promotion gate. **`list --provider <x>`** matches notes
+evidence + `ats_type` to find a new fetcher's waiting rows. The sweep is a **composed runbook** (docs/14), not a
+batch `activate` command — volumes are 2–4 rows per fetcher and each slug/endpoint deserves human eyes. The
+**parked-re-approve bugfix rides along** (failing regression test first, D-021): `approve` must promote
+`approved` rows whose ATS has become fetchable. Misresolved rows stay inert until the tooling ships — **no
+interim SQL**. **Status:** protocol decided, docs-only this session; build rides with the Paylocity fetcher
+block (D-076 step 9). References D-071, D-074, D-070, D-076, D-021.
