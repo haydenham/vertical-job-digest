@@ -62,13 +62,14 @@ iCIMS/Workable/SmartRecruiters/Oracle/Radancy onboards:
 The Week-4 "vertical = config" add (D-002/D-004). Curated across all aviation sub-domains (airlines ·
 avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics · ATM/infrastructure ·
 eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass as grid:
-- **11 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
-  Ashby (1 — Beacon AI), Workday (5 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**),
+- **13 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
+  Ashby (1 — Beacon AI), Workday (7 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**, plus
+  **Southwest and Thales — D-076**),
   **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**.
 - **2 detected** (platform known, no fetchable endpoint yet): SuccessFactors (JetBlue), **L3Harris
   (Radancy parked — generic fetcher exists but its search base 301-redirects; onboard config-only
   once verified, D-052)**.
-- **23 layer2** (no clean API → LLM-read): Phenom portals (United, Southwest, Thales)
+- **21 layer2** (no clean API → LLM-read): the remaining Phenom portal (United)
   + custom/JS-rendered sites (the flight-data, ATM, and remaining OEM/airline tail). Includes
   Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046),
   **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`), **Joby** (no Jibe API; ATS unconfirmed —

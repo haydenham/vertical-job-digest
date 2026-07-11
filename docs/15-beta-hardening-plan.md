@@ -108,8 +108,9 @@ pillar** (Hayden's call — folded in rather than a separate day).
 Expand coverage, **demand-ranked** (D-076 — reordered from "Phenom next" after the discovery runs + live
 probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger" first edition). Order:
 
-1. **Workday config onboards: Southwest + Thales** — their "Phenom" portals are Workday underneath
-   (SWA `swa:wd1:external` verified live, 57 jobs; Thales `thales.wd3`/`Careers`). Config-only, zero code.
+1. **Workday config onboards: Southwest + Thales ✅** — both live-verified on 2026-07-11 through the
+   existing fetcher (SWA `swa:wd1:external`, 47 jobs; Thales `thales.wd3`/`Careers`, 2,000 global jobs).
+   Config-only, zero code; discovery-expanded production coverage 64 → 66 fetchable after the seed import.
 2. **Paylocity fetcher** — discovery demand #1 (4 waiting proposals: Veryon, Trax + 2 grid). Embedded
    `window.pageData` JSON, single-response guard + lazy detail — build notes in `docs/07` step 9.
    **The D-077 review-correction tooling rides with this block:** `vja-review set-ats` (validate-by-fetch,

@@ -147,9 +147,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   structureless remainder. Radancy = one generic **HTML-parse** fetcher (`beautifulsoup4`, the repo's first)
   over the server-rendered `{endpoint}/search-jobs/results` table (list-only + paginate-or-fail + lazy detail);
   `external_id` = the `/job/{slug}/{id}` path (Workday parity); +1 (NextEra) → **43→44** (NRG/National Grid/
-  L3Harris parked `proposed` until their search base verifies). **Next (re-ranked by discovery demand, D-076):
-  Workday config onboards (SWA/Thales — Phenom-skinned Workday) → Paylocity → Phenom (United) → BambooHR →
-  JazzHR probe/singletons**, then the Layer-2 LLM-read tail for what truly has no platform (demand ledger:
+  L3Harris parked `proposed` until their search base verifies). **SWA + Thales Workday config onboards ✅**
+  (D-076; live-verified 2026-07-11; discovery-expanded production coverage **64 → 66**). **Next:**
+  Paylocity → Phenom (United) → BambooHR →
+  JazzHR probe/singletons, then the Layer-2 LLM-read tail for what truly has no platform (demand ledger:
   `docs/07`).
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
