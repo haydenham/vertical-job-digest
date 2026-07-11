@@ -271,6 +271,23 @@ def test_resolver_accepts_applytojob_as_canonical_jazzhr_evidence() -> None:
     assert actual.outcome is ATSOutcome.RESOLVED_UNSUPPORTED
 
 
+@pytest.mark.parametrize(
+    ("provider", "url"),
+    [
+        ("paylocity", "https://recruiting.paylocity.com/recruiting/jobs/All/x/y"),
+        ("kula", "https://careers.kula.ai/company"),
+        ("gusto", "https://jobs.gusto.com/boards/company"),
+        ("rippling", "https://ats.rippling.com/company/jobs"),
+        ("trinet_hire", "https://app.trinethire.com/companies/company/jobs/embed"),
+        ("trakstar", "https://jobs.trakstar.com/company"),
+        ("pinpoint", "https://company.pinpointhq.com/jobs"),
+        ("phenom", "https://careers.phenompeople.com/jobs"),
+    ],
+)
+def test_provider_host_markers_accept_canonical_platform_hosts(provider: str, url: str) -> None:
+    assert discover._provider_url_matches(provider, url) is True
+
+
 def test_resolver_skips_call_when_global_budget_is_exhausted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -111,7 +111,8 @@ probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger"
 1. **Workday config onboards: Southwest + Thales ✅** — both live-verified on 2026-07-11 through the
    existing fetcher (SWA `swa:wd1:external`, 47 jobs; Thales `thales.wd3`/`Careers`, 2,000 global jobs).
    Config-only, zero code; discovery-expanded production coverage 64 → 66 fetchable after the seed import.
-2. **Paylocity fetcher** — discovery demand #1 (4 waiting proposals: Veryon, Trax + 2 grid). Embedded
+2. **Paylocity fetcher ✅ (activation pending deploy)** — discovery demand #1 (4 waiting proposals:
+   Veryon, Trax + 2 grid). Embedded
    `window.pageData` JSON, single-response guard + lazy detail — build notes in `docs/07` step 9.
    **The D-077 review-correction tooling rides with this block:** `vja-review set-ats` (validate-by-fetch,
    status untouched) + `list --provider` + the parked-re-approve bugfix (regression test first, D-021) —

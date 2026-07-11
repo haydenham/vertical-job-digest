@@ -3,9 +3,10 @@
 One `MetaData` holding all seven tables. Alembic autogenerates migrations from this,
 and `docs/08` integration tests build their DB from those migrations. Conventions:
 
-- Enums are stored as VARCHAR + CHECK on **both** dialects (`native_enum=False`),
-  keyed to the `.value`s of the `StrEnum`s in `vja.models` — no Postgres native-enum
-  migration pain, and the DB CHECK always matches the code enum.
+- Enums are stored as portable VARCHAR columns on **both** dialects (`native_enum=False`),
+  keyed to the `.value`s of the `StrEnum`s in `vja.models`. SQLAlchemy validates values at
+  the application boundary; the database has no native enum or CHECK to migrate when a
+  provider is added (the initial schema's longest ATS value fixes this column at VARCHAR(15)).
 - Timestamps we own are `UTCDateTime()` (UTC). Source-provided date strings
   (`postings.posted_at`) stay `Text` — ATS formats vary; don't fail on them.
 - JSON payloads use `sa.JSON` (portable across SQLite/Postgres).

@@ -31,17 +31,17 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
 | `key_cities` | Hayden | free text | US hubs; useful for the location pre-filter |
 | `role_tilt` | Hayden | free text | tech flavor / what kind of roles to expect |
-| `ats_type` | Claude | `greenhouse` \| `lever` \| `ashby` \| `workday` \| `icims` \| `workable` \| `oracle_hcm` \| `smartrecruiters` \| `jobvite` \| `successfactors` \| `avature` \| `ukg` \| `eightfold` \| `radancy` \| `custom` | which fetcher (or Layer 2) handles this employer |
+| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
 | `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). For Workday: `tenant:dc:site` (e.g. `aes:wd1:AES_US`). Empty for portal-detected/custom rows. |
 | `careers_url` | Claude | URL | the company's job board / careers page ("the job domain"). Required for `workday`/`raw_html`. |
-| `endpoint` | derived | URL | constructed in code from `ats_type` + `ats_slug` for GH/Lever/Ashby. Filled by hand for `workday`. |
+| `endpoint` | derived | URL | constructed for slug-derived ATSs; explicit for Workday, Paylocity, and other per-tenant platforms. |
 | `source` | default | `manual` \| `agent_discovered` | how the employer entered the universe. Seed rows are `manual`. |
 | `status` | default | `proposed` \| `approved` \| `active` \| `retired` | seed rows default to `active`. |
 | `verification` | Claude | `verified` \| `detected` \| `layer2` | confidence in the ATS resolution (see table above). |
 | `notes` | optional | free text | anything useful (parent company, ATS quirks, why included). |
 
 For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`.
-For Workday, `endpoint` holds the full `cxs` jobs URL. Portal-detected (iCIMS/Oracle/etc.) and custom rows carry `careers_url`.
+For Workday and Paylocity, `endpoint` holds the full per-tenant URL. Portal-detected and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)
 After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8

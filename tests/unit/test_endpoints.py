@@ -55,6 +55,11 @@ def test_workday_uses_explicit_endpoint() -> None:
     assert build_endpoint(_employer(AtsType.WORKDAY, endpoint=endpoint)) == endpoint
 
 
+def test_paylocity_uses_explicit_endpoint() -> None:
+    endpoint = "https://recruiting.paylocity.com/recruiting/jobs/All/uuid/company"
+    assert build_endpoint(_employer(AtsType.PAYLOCITY, endpoint=endpoint)) == endpoint
+
+
 def test_non_derivable_without_endpoint_raises() -> None:
     with pytest.raises(ValueError, match="no explicit endpoint"):
         build_endpoint(_employer(AtsType.WORKDAY, endpoint=None))

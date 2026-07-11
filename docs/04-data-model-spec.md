@@ -3,12 +3,12 @@
 *Build spec — concrete schema for Layer 1+. Supersedes the prose entity sketches in CLAUDE.md / Memo 02 where they differ.*
 
 SQLite dialect (week 1), written to migrate cleanly to Postgres. Conventions: integer surrogate `id` PKs,
-`*_at` columns are ISO-8601 UTC text in SQLite / `timestamptz` in Postgres, enums enforced by `CHECK` in SQLite /
-native enums or `CHECK` in Postgres. All times UTC.
+`*_at` columns are ISO-8601 UTC text in SQLite / `timestamptz` in Postgres. All times UTC.
 
 **Implementation (Block 1):** the schema is SQLAlchemy Core in `vja.db.schema`, managed by Alembic (D-025). Concrete
-type choices: enums are `VARCHAR`+`CHECK` on **both** dialects (`native_enum=False`, keyed to the `StrEnum` `.value`s
-in `vja.models`); owned `*_at` columns are `DateTime(timezone=True)`; source-provided date strings
+type choices: enums are portable `VARCHAR` on **both** dialects (`native_enum=False`, keyed to and validated against
+the `StrEnum` `.value`s in `vja.models` at the SQLAlchemy boundary; the initial migration created no DB CHECKs);
+owned `*_at` columns are `DateTime(timezone=True)`; source-provided date strings
 (`postings.posted_at`) stay text since ATS formats vary. The seed CSV is loaded by `vja.db.employers`.
 
 ## The two identity concepts (read this first)
@@ -38,7 +38,7 @@ The curated universe. One row per company. Mirrors `data/seed/employers_seed.csv
 | `category` | TEXT | e.g. Utility / IPP, Quant Fund |
 | `key_cities` | TEXT | US hubs (location pre-filter hint) |
 | `role_tilt` | TEXT | expected role flavor |
-| `ats_type` | TEXT NOT NULL | L1: `greenhouse` \| `lever` \| `ashby` \| `workday`; future fetchers: `icims` \| `workable` \| `oracle_hcm` \| `smartrecruiters` \| `jobvite` \| `successfactors` \| `avature` \| `ukg` \| `eightfold`; Layer 2: `radancy` \| `custom` \| `raw_html`; `unknown`. Mirrors the seed CSV + `docs/07`; enum source of truth is `vja.models.AtsType`. |
+| `ats_type` | TEXT NOT NULL | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, and `paylocity`; unsupported/future and Layer-2 values remain in `vja.models.AtsType`, the source of truth. Mirrors the seed CSV + `docs/07`. |
 | `ats_slug` | TEXT | company token for GH/Lever/Ashby; NULL otherwise |
 | `careers_url` | TEXT | for workday/raw_html (and human reference) |
 | `endpoint` | TEXT | constructed from type+slug for GH/Lever/Ashby; hand-set for workday |

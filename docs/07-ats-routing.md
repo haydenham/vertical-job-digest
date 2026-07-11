@@ -28,7 +28,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Eightfold** | 1 | JSON API | detected | **C** |
 | **Radancy/TalentBrew** | 3 | server-rendered `/search-jobs/results` HTML | 1 verified (built, D-052); 2 parked (endpoint not yet confirmed) | **C** |
 | **Phenom** | 0 grid (aviation portals; SWA/Thales turned out Workday-under, United is the real need) | JS shell + `/widgets/` JSON API (probed live, D-076) | planned | **C** |
-| **Paylocity** | 0 seed (4 discovery proposals) | embedded `window.pageData` JSON (probed live, D-076) | planned | **B** |
+| **Paylocity** | 0 seed (4 discovery proposals) | embedded `window.pageData` JSON | built (D-076/D-077); activation pending deploy | **B** |
 | **Custom** | 14 | no API | layer2 | **D** |
 
 ## What this means for the build
@@ -42,7 +42,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 - **The next builds are demand-ranked (D-076)** — the discovery agent is now a second demand signal alongside the
   seed universe; see the discovery-demand ledger below. **SWA/Thales Workday config onboards are done** (both
   live-verified 2026-07-11), taking the discovery-expanded production baseline **64 → 66 fetchable**. Remaining
-  order: Paylocity → Phenom (United) → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
+  order: **Paylocity built** → Phenom (United) → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
 - **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
   (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
   near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
@@ -61,7 +61,7 @@ Day-2 "coverage ledger" first edition, docs/15).*
 
 | ATS | candidates | status |
 |---|---|---|
-| **Paylocity** | **4** (Veryon, Trax + 2 grid) | **#1 unsupported — first new fetcher** (D-076) |
+| **Paylocity** | **4** (Veryon, Trax + 2 grid) | fetcher built; correct + activate via D-077 runbook after deploy |
 | already-supported (Lever 3, Ashby 2, Greenhouse 2, Workable 1) | 8 | no work — auto-activate at `vja-review approve` |
 | JazzHR | 2 | deterministic host mapping exists (`applytojob.com`); probe `{slug}.applytojob.com` for a feed before building |
 | BambooHR | 2 (incl. GridBeyond) | trivial clean JSON (probed) — build after Phenom |
@@ -102,7 +102,7 @@ Day-2 "coverage ledger" first edition, docs/15).*
    (`swa:wd1:external`, 47 jobs at onboarding); Thales `thales.wd3`/`Careers` also verified live
    (2,000 global jobs). Seed CSV flipped `custom/layer2 → workday/verified`; production coverage
    baseline 64 → 66 fetchable.
-9. **Paylocity** (D-076 — first new fetcher; discovery demand #1, 4 waiting proposals) — the listing
+9. **Paylocity** (D-076/D-077 — **built**; discovery demand #1, 4 waiting proposals) — the listing
    page `recruiting.paylocity.com/recruiting/jobs/All/{uuid}/{name}` is **server-rendered with a
    complete embedded `window.pageData` JSON** (`Jobs: [{JobId, JobTitle, LocationName, PublishedDate,
    IsRemote…}]`, no pagination markers) → **single-response false-closure guard** (Workable pattern,
@@ -110,7 +110,9 @@ Day-2 "coverage ledger" first edition, docs/15).*
    `/recruiting/jobs/Details/{JobId}/…` (an `extract._DETAIL_RESOLVERS` entry). Endpoint **explicit
    per-tenant** (the uuid/name path — Radancy-style endpoint-only encoding). Discovery host marker
    `recruiting.paylocity.com` already maps. (Note: `/recruiting/v2/api/feed/jobs/{uuid}` exists and
-   200s but returns 0 jobs — it is NOT the data path.)
+   200s but returns 0 jobs — it is NOT the data path.) Registry + lazy-detail routing are wired;
+   D-077 adds validate-before-write `vja-review set-ats`, provider filtering, and parked re-approval.
+   Production coverage remains 66 until waiting proposals are corrected and approved after deploy.
 10. **Phenom** (United — the one real Phenom need; Taleo underneath, no clean API there) —
     `POST {base}/widgets` with `ddoKey=refineSearch` is live (United 155 jobs at probe): paginate
     `from`/`size` against `totalHits` (**paginate-or-fail**, Workday parity); `external_id = jobId`;
