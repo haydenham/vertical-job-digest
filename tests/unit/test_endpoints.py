@@ -50,6 +50,26 @@ def test_bamboohr_url_is_derived_from_slug() -> None:
     assert url == "https://gridbeyond.bamboohr.com/careers/list"
 
 
+def test_pinpoint_url_is_derived_from_slug() -> None:
+    url = build_endpoint(_employer(AtsType.PINPOINT, slug="aireon"))
+    assert url == "https://aireon.pinpointhq.com/postings.json"
+
+
+def test_explicit_endpoint_overrides_derived_url_for_custom_domain() -> None:
+    endpoint = "https://careers.auroraer.com/postings.json"
+    employer = _employer(AtsType.PINPOINT, endpoint=endpoint)
+    assert build_endpoint(employer) == endpoint
+
+
+def test_redundant_endpoint_does_not_override_existing_derived_provider() -> None:
+    employer = _employer(
+        AtsType.GREENHOUSE,
+        slug="camusenergy",
+        endpoint="https://boards-api.greenhouse.io/v1/boards/camusenergy/jobs",
+    )
+    assert build_endpoint(employer).endswith("/jobs?content=true")
+
+
 def test_derived_ats_without_slug_raises() -> None:
     with pytest.raises(ValueError, match="no ats_slug"):
         build_endpoint(_employer(AtsType.GREENHOUSE, slug=None))

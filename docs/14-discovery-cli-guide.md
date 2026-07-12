@@ -138,6 +138,18 @@ deliberately no batch `activate` command). `approve` also promotes **parked (`ap
 ATS has become fetchable (a D-077 fix — it previously refused anything not `proposed`). `set-ats` refuses
 active/retired rows, returns non-zero on validation failure or zero jobs, and leaves the row unchanged.
 
+For the D-079 Pinpoint rollout, Aurora Energy Research is curated seed config; Aireon remains discovery
+proposal `#135`. After the Pinpoint code is deployed, Hayden runs the proposal path against prod:
+
+```sh
+uv run vja-review list --provider pinpoint
+uv run vja-review set-ats 135 --ats-type pinpoint --slug aireon
+uv run vja-review approve 135
+```
+
+The validation call must return at least one Aireon posting before the row changes; `approve` remains the
+separate human promotion gate.
+
 ---
 
 ## Recommended first-run walkthrough

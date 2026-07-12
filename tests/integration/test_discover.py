@@ -25,7 +25,14 @@ from vja.db.employers import (
 )
 from vja.db.engine import begin
 from vja.db.schema import employers
-from vja.discover import ATSOutcome, ATSResolution, CandidateEmployer, _CandidateList, run_discovery
+from vja.discover import (
+    ATSOutcome,
+    ATSResolution,
+    CandidateEmployer,
+    _CandidateList,
+    run_discovery,
+    validate_candidate,
+)
 from vja.models import AtsType, EmployerSource, EmployerStatus, Verification
 
 _VERTICAL = "grid_power_software"
@@ -35,6 +42,16 @@ _BAMBOO_URL = "https://mysteryco.bamboohr.com/careers/list"
 _BAMBOO_LIST = {
     "meta": {"totalCount": 1},
     "result": [{"id": "7", "jobOpeningName": "Grid Engineer"}],
+}
+_PINPOINT_URL = "https://aireon.pinpointhq.com/postings.json"
+_PINPOINT_LIST = {
+    "data": [
+        {
+            "id": "490307",
+            "title": "Software Engineer",
+            "url": "https://aireon.pinpointhq.com/en/postings/public-id",
+        }
+    ]
 }
 
 
@@ -93,6 +110,18 @@ def test_insert_proposed_employer_writes_and_is_idempotent(migrated_engine: Engi
     )
     assert again is None
     assert count_employers(migrated_engine, _VERTICAL) == 1
+
+
+@respx.mock
+def test_validate_candidate_recognizes_supported_pinpoint_board() -> None:
+    respx.get(_PINPOINT_URL).mock(return_value=httpx.Response(200, json=_PINPOINT_LIST))
+    candidate = CandidateEmployer(name="Aireon", ats_type_guess="pinpoint", ats_slug_guess="aireon")
+
+    result = validate_candidate(candidate, set())
+
+    assert result.outcome == "fetchable"
+    assert result.ats_type is AtsType.PINPOINT
+    assert result.posting_count == 1
 
 
 def _fake_client(candidates: list[CandidateEmployer]) -> Any:

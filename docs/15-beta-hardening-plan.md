@@ -129,8 +129,9 @@ probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger"
 5. **Post-audit re-rank (D-078, 2026-07-12):** a read-only audit of prod's 72 unfetched rows re-ranked
    what's next — (a) **no-code activations first**: six validated discovery rows via the D-077 runbook
    (Hayden runs; the audit chat has the exact commands) + the **Honeywell Oracle CSV onboard ✅** (landed
-   this session; activates at the next seed import against Neon); then (b) **Pinpoint** (clean
-   `/postings.json`; Aireon + Aurora, +2) → **Radancy variants** (L3Harris JSON / NRG / American Airlines,
+   this session; activates at the next seed import against Neon); then (b) **Pinpoint ✅** (D-079; clean
+   `/postings.json`; Aurora seed onboarded, Aireon pending post-deploy D-077 activation) →
+   **Radancy variants** (L3Harris JSON / NRG / American Airlines,
    up to +5) → **JazzHR** (+2) → **Jobvite** (+2) → **Taleo** (Bell + Textron Aviation, +2). Full ledger +
    per-fetcher build notes: `docs/07` demand ledger + steps 12–16. Projected coverage: 63 → ~72 no-code →
    ~83 with builds 1–4.

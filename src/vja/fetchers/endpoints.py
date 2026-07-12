@@ -14,7 +14,8 @@ from vja.models import AtsType, Employer
 # 2026-06-11; Workable's embed-widget API + SmartRecruiters' public postings API verified
 # live 2026-06-24 — Workable's `?details=true` is required for the inline description;
 # SmartRecruiters' limit/offset are added per-page by the fetcher, so the template is bare;
-# BambooHR's public careers API is slug-derived and single-response).
+# BambooHR and Pinpoint expose slug-derived public careers APIs; an explicit endpoint
+# remains authoritative for custom-domain boards such as Aurora Energy Research's Pinpoint site).
 _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.GREENHOUSE: "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     AtsType.LEVER: "https://api.lever.co/v0/postings/{slug}?mode=json",
@@ -22,6 +23,7 @@ _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.WORKABLE: "https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true",
     AtsType.SMARTRECRUITERS: "https://api.smartrecruiters.com/v1/companies/{slug}/postings",
     AtsType.BAMBOOHR: "https://{slug}.bamboohr.com/careers/list",
+    AtsType.PINPOINT: "https://{slug}.pinpointhq.com/postings.json",
 }
 
 
@@ -32,6 +34,12 @@ def build_endpoint(employer: Employer) -> str:
     from a runtime `FetchError` (the network/parse failures a fetcher raises). Both
     are loud; neither is swallowed.
     """
+    # Pinpoint alone has a verified provider-backed custom-domain contract. Keep the
+    # override scoped: older derived-provider seed rows carry redundant endpoints that
+    # intentionally omit required query options such as Greenhouse's `content=true`.
+    if employer.ats_type is AtsType.PINPOINT and employer.endpoint:
+        return employer.endpoint
+
     template = _DERIVED_TEMPLATES.get(employer.ats_type)
     if template is not None:
         if not employer.ats_slug:

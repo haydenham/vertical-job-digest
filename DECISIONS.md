@@ -1390,3 +1390,20 @@ Enverus `drillinginfo`, +2) → **5. Taleo** (one `textron.taleo.net` tenant cov
 SuccessFactors stays deferred). Projected: 63 → ~72 with no code (runbook + Honeywell), → ~83 with builds 1–4.
 **Status:** accepted; Honeywell CSV + docs land this session, builds are next sessions' blocks. References
 D-076, D-077, D-051, D-052, D-070, D-017.
+
+### D-079 · Phase 8: Pinpoint fetcher + explicit-endpoint override for provider custom domains · accepted · 2026-07-12
+D-078 ranked Pinpoint first and live probes confirmed one uniform unauthenticated contract on both the canonical
+Aireon tenant and Aurora Energy Research's custom domain: `GET {board}/postings.json` returns one rich
+`{"data": [...]}` response (2 and 87 jobs respectively at verification). **Decisions run through Hayden:** one
+generic rich-list fetcher; canonical tenants derive `https://{slug}.pinpointhq.com/postings.json`, while an
+an explicit Pinpoint endpoint overrides its derived template so provider-backed custom domains stay config-only
+without changing existing derived-provider endpoint behavior.
+The clean `data` array is authoritative (valid empty = zero open; malformed response/entry or duplicate id fails
+the whole fetch). `external_id` is the top-level posting `id`, not nested `job.id`; title is trimmed, apply URL is
+the supplied absolute `url`, location is `location.name`, and `updated_at=None` because the source exposes no
+posted/updated timestamp. The list already contains the complete split job content, so there is no lazy detail
+resolver; description/responsibilities/qualifications/benefits/compensation are joined only for stable content
+hashing while the untouched object remains `raw`. Aurora onboards through curated seed config; Aireon stays on
+the D-077 discovery-proposal activation path after deployment. `pinpoint` fits the existing application-validated
+`VARCHAR(15)`, so no migration. **Status:** built on the Pinpoint-only branch. References D-078, D-077, D-017,
+D-016, D-021.
