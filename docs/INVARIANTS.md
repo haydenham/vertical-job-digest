@@ -229,9 +229,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
   SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy + Phenom done**) →
-  **BambooHR done** → **demand-ranked next (D-076): JazzHR probe/singletons** → Layer-2 LLM-read for the
-  custom tail + HN/niche. The discovery-demand
-  ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
+  **BambooHR done** → **demand-ranked next (D-078, from the 2026-07-12 coverage audit): Pinpoint
+  (`{tenant}/postings.json`; Aireon + Aurora) → Radancy variants (L3Harris JSON / NRG / AA) →
+  JazzHR → Jobvite → Taleo singleton** → Layer-2 LLM-read for the custom tail + HN/niche. The
+  discovery-demand ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
   reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
   D-049, D-050, D-051, D-052, D-076)

@@ -5,6 +5,40 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-12 — Prod coverage audit (72 unfetched rows triaged) + Honeywell Oracle onboard + D-078 fetcher re-rank
+
+**Read-only audit of Neon** (Hayden-commissioned; deliverable = chat report + runbook, no repo audit doc):
+135 employers, **63 fetchable / 62 fetched** by run #18 (Hayden's remembered "71" not reproducible from
+`pipeline_runs`). All 72 unfetched rows probed live — registry-fetcher validation (the `set-ats` ≥1-posting
+gate) + careers-page signature detection. **Bucket 1 (no code, +8–9):** six discovery rows validate on
+supported ATSs (ASI 26 · GridBeyond bamboohr 2 · CivilGrid ashby 6 · Emerald AI ashby `emerald-ai` 7 ·
+AiDASH greenhouse `aidashinc` 12 · Aloft greenhouse `versaterm` 34 — parent-company board, Hayden's call);
+runbook commands are in the audit chat, Hayden executes (D-077 path). **Bucket 2:** new-fetcher demand
+re-ranked → **D-078** (Pinpoint → Radancy variants → JazzHR → Jobvite → Taleo; docs/07 ledger rewritten).
+**Bucket 3:** ~30 dead-end rows (email-only/bot-blocked/EU/dead) — retire slate in the chat runbook.
+
+**Landed this session (code/data):** Honeywell Aerospace seed-CSV flip `custom/layer2 → oracle_hcm/verified`
+(canonical host `ibqbjb.fa.ocs.oraclecloud.com` found via the page's `og:image`, siteNumber `CX_1`; 1,455
+postings live-validated; constructed apply `/job/{Id}` resolves 200). Curated-seed fetchable 47→48 (aviation
+14→15, Oracle 1→2); seed-import test expectations updated. Activates when Hayden runs
+`vja-import-employers` against Neon post-merge.
+
+**Corrections/finds worth remembering:** (1) **Jeppesen (Boeing) is duplicate coverage** — the Boeing board
+is already fetched (seed row `Boeing`); recommend CSV retire, Hayden's call. (2) **Con Edison's Oracle host
+found** (`ejcu.fa.us6.oraclecloud.com`/`CX_1033`) but fails paginate-or-fail at exactly 61 of 62, twice —
+bug-shakeout candidate, do not retire. (3) **Comply365/Vistair** validates on BambooHR (`vistairhr`, 11
+postings) but has **no DB row** — the BambooHR entry's runbook step below can't run for it until it's added
+(curated seed add or re-discovery). (4) Reliable Robotics / Ascend / Gridmatic boards are live but empty —
+re-run `set-ats` when they post. (5) **Record gap:** the post-deploy activation sweep (Veryon/Trax/United
+now `active` in prod) has no WORKLOG entry, and docs' coverage figure (66) had drifted from prod (63).
+
+**Verified:** seed-import tests (7 passed) + full offline suite + gates (see PR). Docs: D-078 appended;
+INVARIANTS build-order line replaced; docs/07 ledger 2nd edition + steps 12–17 + fixups rewritten; docs/15
+Day-5 item 5 rewritten; CLAUDE.md Phase-8/BH lines updated. **Next:** Hayden reviews/commits → runs the
+Bucket-1 runbook + seed import against Neon → Pinpoint fetcher build (D-078 #1).
+
+---
+
 ## 2026-07-12 — Generic BambooHR fetcher + lazy detail resolver (D-076 block 4)
 
 **Built:** one generic slug-derived `BambooHRFetcher` over the authoritative
