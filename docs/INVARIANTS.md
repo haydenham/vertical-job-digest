@@ -229,13 +229,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
   SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy + Phenom done**) →
-  **BambooHR done** → **demand-ranked next (D-078, from the 2026-07-12 coverage audit): Pinpoint
-  (`{tenant}/postings.json`; Aireon + Aurora) → Radancy variants (L3Harris JSON / NRG / AA) →
+  **BambooHR + Pinpoint done** → **demand-ranked next (D-078, from the 2026-07-12 coverage audit):
+  Radancy variants (L3Harris JSON / NRG / AA) →
   JazzHR → Jobvite → Taleo singleton** → Layer-2 LLM-read for the custom tail + HN/niche. The
   discovery-demand ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
   reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
-  D-049, D-050, D-051, D-052, D-076)
+  D-049, D-050, D-051, D-052, D-076, D-078, D-079)
 - **Workday `cxs` fetcher is list-only + paginate-or-fail;** `osv-` Workday hosts route to
   Layer 2; a tenant board exceeding Workday's ~4000 offset cap also routes to Layer 2
   (paginate-or-fail rejects the truncated page — RTX, D-046). (D-032, D-046)
@@ -279,6 +279,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   incomplete shapes fail closed); `external_id = id`; title is trimmed; public apply URL is constructed;
   structured `atsLocation` wins over `location`/remote fallbacks. Description is lazily resolved from
   `/careers/{id}/detail`, returning only `result.jobOpening` and never application `formFields`. (D-076)
+- **Pinpoint fetcher targets one rich `GET {board}/postings.json` response.** Canonical hosts derive
+  from `ats_slug`; an explicit endpoint overrides the derived template for provider-backed custom domains.
+  A valid `data` list is authoritative (empty = zero; malformed entry/envelope or duplicate id fails closed);
+  `external_id =` top-level posting `id`, with supplied apply URL, `location.name`, and no source date. The
+  complete split job content is inline and joined for stable content hashing, so no lazy detail resolver.
+  Aurora is curated seed config; Aireon activates through the D-077 proposal runbook after deploy. (D-079)
 - **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`**
   (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom + BambooHR) — fetched only for in-scope
   survivors (cost discipline); every other ATS carries the description in `raw_payload`. Adding a

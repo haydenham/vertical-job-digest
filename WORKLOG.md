@@ -5,6 +5,30 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-12 — Generic Pinpoint fetcher + Aurora onboard (D-079)
+
+**Live contract first:** verified the same public `GET {board}/postings.json` contract on canonical Aireon
+(2 current jobs) and Aurora Energy Research's provider-backed custom domain (87). Both return one rich
+`{"data": [...]}` response with stable top-level posting ids, absolute apply URLs, structured location, and
+the full split job content inline; neither exposes a posted/updated date or a pagination total. Decisions were
+run through Hayden before implementation: canonical slug derivation + explicit endpoint override for custom
+domains, single-response fail-closed semantics, top-level `id` identity, and no lazy detail resolver (D-079).
+
+**Built:** one generic `PinpointFetcher`; enum/endpoint registry/discovery validation wired. The clean `data`
+list is authoritative (valid empty closes cleanly; malformed envelope/entry, duplicate ids, HTTP/non-JSON fail
+loudly). Rich description/responsibilities/qualifications/benefits/compensation are joined for stable
+`content_hash` invalidation while the untouched posting stays `raw`. Captured a sanitized two-posting fixture;
+unit coverage pins mapping, custom-domain override, completeness/failure guards, identity, and content hashing.
+Aurora moved config-only from `custom/layer2` to `pinpoint/verified`, taking curated-seed fetchability 48→49
+(grid 33→34). No migration (`pinpoint` fits application-validated `VARCHAR(15)`).
+
+**Verified:** full offline suite (**505 passed**, 20 opt-in deselected); Aireon live smoke (**1 passed**);
+ruff format/check; mypy (51 source files); import-linter (1 kept / 0 broken); `uv lock --check`;
+`git diff --check`. Docs updated: CLAUDE, D-079, INVARIANTS, specs 04/05, routing 07, discovery runbook 14,
+beta plan 15, and seed README. **Next:** Hayden reviews/commits/opens the PR. After merge/deploy, run the
+D-077 prod path in docs/14 for Aireon proposal #135, then import the curated seed against Neon for Aurora;
+the next one-fetcher PR is the D-078 Radancy-variants extension.
+
 ## 2026-07-12 — Prod coverage audit (72 unfetched rows triaged) + Honeywell Oracle onboard + D-078 fetcher re-rank
 
 **Read-only audit of Neon** (Hayden-commissioned; deliverable = chat report + runbook, no repo audit doc):

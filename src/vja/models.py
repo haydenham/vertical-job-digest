@@ -31,6 +31,7 @@ class AtsType(StrEnum):
     PAYLOCITY = "paylocity"
     PHENOM = "phenom"
     BAMBOOHR = "bamboohr"
+    PINPOINT = "pinpoint"
     JOBVITE = "jobvite"
     SUCCESSFACTORS = "successfactors"
     AVATURE = "avature"

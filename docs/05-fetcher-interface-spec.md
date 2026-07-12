@@ -91,6 +91,19 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
 - **Detail:** `GET https://{slug}.bamboohr.com/careers/{id}/detail` is lazy. Return only
   `result.jobOpening`; never expose sibling `formFields` application metadata. List descriptions stay absent.
 
+### Pinpoint — `ats_type: pinpoint`
+- **List endpoint:** canonical boards derive as `GET https://{slug}.pinpointhq.com/postings.json`;
+  an explicit `endpoint` overrides the derived URL for provider-backed custom domains.
+- **Response:** one authoritative `{ "data": [...] }` JSON object with no pagination count. A valid empty
+  list is authoritative zero; malformed envelopes/entries, duplicate posting ids, transport failures, and
+  non-JSON responses fail the whole fetch.
+- **Mapping:** `external_id = str(id)` (the top-level posting id, not nested `job.id`), trimmed `title`,
+  `apply_url = url`, `location = location.name`, and `updated_at = None` (the source exposes no posted or
+  updated timestamp).
+- **Rich list:** full description/responsibilities/qualifications/benefits/compensation are inline, so there
+  is no lazy detail resolver. The untouched posting object is `raw`; its split semantic content fields are
+  joined for `description` so any meaningful job-content change invalidates `content_hash`.
+
 ### Raw HTML — `ats_type: raw_html`  *(Layer 2 fallback, not Layer 1)*
 - Universal fallback: fetch the rendered careers page text and LLM-read it. Belongs to Layer 2; listed here for completeness.
 - For these, `external_id` is synthesized from a stable content signature (since there's no ATS id) — documented in the L2 spec when it's built.
@@ -108,9 +121,11 @@ workday    → use the hand-set `endpoint` column (per-company)
 paylocity  → use the hand-set `endpoint` column (per-company UUID/name path)
 phenom     → use the hand-set tenant base + required `lang`/`country` query
 bamboohr   → https://{slug}.bamboohr.com/careers/list
+pinpoint   → https://{slug}.pinpointhq.com/postings.json (or explicit endpoint for a custom domain)
 ```
-The `endpoint` column is authoritative for Workday, Paylocity, and Phenom; BambooHR joins the
-slug-derived providers.
+Pinpoint alone permits an explicit `endpoint` to override its derived template for a verified custom-domain
+board. Other slug-derived providers keep deriving from the slug (some legacy seed endpoint values omit required
+query options); Workday, Paylocity, and Phenom require explicit endpoint configuration.
 
 ## Politeness & health (policy, not etiquette — D & Memo 02 §8)
 - Identifiable `User-Agent`, conservative rate limiting, one fetch per endpoint per day total (D-005).

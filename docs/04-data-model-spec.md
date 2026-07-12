@@ -38,8 +38,8 @@ The curated universe. One row per company. Mirrors `data/seed/employers_seed.csv
 | `category` | TEXT | e.g. Utility / IPP, Quant Fund |
 | `key_cities` | TEXT | US hubs (location pre-filter hint) |
 | `role_tilt` | TEXT | expected role flavor |
-| `ats_type` | TEXT NOT NULL | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`, and `bamboohr`; unsupported/future and Layer-2 values remain in `vja.models.AtsType`, the source of truth. Mirrors the seed CSV + `docs/07`. |
-| `ats_slug` | TEXT | company token for slug-derived providers (GH/Lever/Ashby/Workable/SmartRecruiters/BambooHR); Workday uses `tenant:dc:site`; NULL for endpoint-only providers |
+| `ats_type` | TEXT NOT NULL | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`, `bamboohr`, and `pinpoint`; unsupported/future and Layer-2 values remain in `vja.models.AtsType`, the source of truth. Mirrors the seed CSV + `docs/07`. |
+| `ats_slug` | TEXT | company token for slug-derived providers (GH/Lever/Ashby/Workable/SmartRecruiters/BambooHR/Pinpoint); Workday uses `tenant:dc:site`; NULL for endpoint-only or custom-domain providers |
 | `careers_url` | TEXT | for workday/raw_html (and human reference) |
 | `endpoint` | TEXT | constructed from type+slug for slug-derived providers; hand-set for Workday and other tenant-specific platforms |
 | `source` | TEXT NOT NULL DEFAULT `'manual'` | `manual` \| `agent_discovered` |

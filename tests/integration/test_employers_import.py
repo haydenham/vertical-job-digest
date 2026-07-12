@@ -90,15 +90,16 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     fetchable = active_fetchable_employers(migrated_engine)
 
     # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
-    # + 1 Oracle + 1 Radancy = 33. Aviation: 2 Greenhouse + 1 Lever + 1 Ashby + 5 Workday + 2 iCIMS
-    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle = 15. Total 48,
+    # + 1 Oracle + 1 Radancy + 1 Pinpoint = 34. Aviation: 2 Greenhouse + 1 Lever +
+    # 1 Ashby + 5 Workday + 2 iCIMS
+    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle = 15. Total 49,
     # of which 22 are Workday, 6 iCIMS/Jibe, 2 Workable, 1 SmartRecruiters (Vitol),
     # 2 Oracle ORC (Southern Company + Honeywell, canonical host found at the 2026-07-12 coverage
-    # audit), 1 Radancy (NextEra) — Phase 8. (Collins/RTX exceeds the ~4000
+    # audit), 1 Radancy (NextEra), and 1 Pinpoint (Aurora) — Phase 8. (Collins/RTX exceeds the ~4000
     # offset cap → Layer 2; iCIMS legacy-portal Alaska/Joby have no Jibe API and Oracle Con Edison
     # fails paginate-or-fail (61 of 62) → Layer 2; Delta/Avature is bot-challenged → Layer 2;
     # NRG/National Grid/L3Harris Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
-    assert len(fetchable) == 48
+    assert len(fetchable) == 49
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 22
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
@@ -106,9 +107,10 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ORACLE_HCM) == 2
     assert sum(1 for e in fetchable if e.ats_type == AtsType.RADANCY) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.PHENOM) == 1
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.PINPOINT) == 1
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     # Every fetchable row can build its endpoint: a slug (GH/Lever/Ashby/Workable/SR) OR an explicit
-    # endpoint (Workday/iCIMS/Oracle/Radancy — per-tenant, no slug). (D-052: Radancy endpoint-only.)
+    # endpoint (Workday/iCIMS/Oracle/Radancy/Pinpoint custom-domain — per-tenant, no slug).
     assert all(e.ats_slug or e.endpoint for e in fetchable)
 
 

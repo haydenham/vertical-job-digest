@@ -1,0 +1,54 @@
+{
+  "data": [
+    {
+      "id": "490307",
+      "title": "  Software Engineer I  ",
+      "url": "https://example.pinpointhq.com/en/postings/first-public-id",
+      "path": "/en/postings/first-public-id",
+      "description": "<p>Build aviation data products.</p>",
+      "key_responsibilities": "<ul><li>Ship reliable Python services.</li></ul>",
+      "skills_knowledge_expertise": "<ul><li>Python and SQL.</li></ul>",
+      "benefits": "<p>Medical and retirement.</p>",
+      "compensation": "$85,000-$105,000",
+      "compensation_minimum": 85000,
+      "compensation_maximum": 105000,
+      "compensation_currency": "USD",
+      "compensation_frequency": "yearly",
+      "compensation_visible": true,
+      "deadline_at": "2026-07-31T23:59:59-04:00",
+      "workplace_type": "hybrid",
+      "job": {
+        "id": "498199",
+        "requisition_id": "P2600018"
+      },
+      "location": {
+        "id": "84629",
+        "name": "McLean, Virginia"
+      }
+    },
+    {
+      "id": 495358,
+      "title": "Data Analyst",
+      "url": "https://example.pinpointhq.com/en/postings/second-public-id",
+      "description": "<p>Analyze operational data.</p>",
+      "key_responsibilities": "",
+      "skills_knowledge_expertise": "",
+      "benefits": "",
+      "compensation": null,
+      "compensation_minimum": null,
+      "compensation_maximum": null,
+      "compensation_currency": null,
+      "compensation_frequency": null,
+      "compensation_visible": false,
+      "workplace_type": "remote",
+      "job": {
+        "id": "503211",
+        "requisition_id": "P2600021"
+      },
+      "location": {
+        "id": "84630",
+        "name": "United States"
+      }
+    }
+  ]
+}

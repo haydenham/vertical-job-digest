@@ -152,8 +152,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (D-076; live-verified 2026-07-11; discovery-expanded production coverage **64 → 66**). **Paylocity ✅**
   (D-076/D-077) → **Phenom + United ✅** (D-076; config-driven) → **BambooHR ✅** → **Honeywell Oracle
   config onboard ✅** (D-078 coverage audit, 2026-07-12; canonical host found, 1,455 postings validated;
-  activates at the next seed import). **Next (D-078 re-rank):** no-code runbook activations (6 validated
-  discovery rows) → Pinpoint → Radancy variants (L3Harris JSON / NRG / AA) → JazzHR → Jobvite → Taleo,
+  activates at the next seed import). **Pinpoint ✅** (D-079; Aurora seed onboarded; Aireon pending D-077
+  activation). **Next (D-078 re-rank):** no-code runbook activations (6 validated discovery rows) →
+  Radancy variants (L3Harris JSON / NRG / AA) → JazzHR → Jobvite → Taleo,
   then the Layer-2 LLM-read tail for what truly has no platform (demand ledger: `docs/07`).
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
@@ -185,8 +186,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   UI rework · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
   (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
-  Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅, next order =
-  D-078**: runbook activations → Pinpoint → Radancy variants → JazzHR → Jobvite → Taleo). Runs with the
+  Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
+  (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo). Runs with the
   private beta users giving feedback.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search

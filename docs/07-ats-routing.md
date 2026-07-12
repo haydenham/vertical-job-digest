@@ -30,7 +30,8 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Phenom** | 0 grid / 1 aviation (United; SWA/Thales are Workday-under) | `/widgets` JSON API | built + United verified (D-076) | **C** |
 | **Paylocity** | 0 seed (4 discovery proposals) | embedded `window.pageData` JSON | built (D-076/D-077); activation pending deploy | **B** |
 | **BambooHR** | 0 seed (2 discovery proposals) | clean `/careers/list` JSON | built (D-076); activation pending deploy | **B** |
-| **Custom** | 14 | no API | layer2 | **D** |
+| **Pinpoint** | 1 grid / 1 aviation proposal | clean `/postings.json` JSON | built + Aurora verified (D-079); Aireon activation pending deploy | **B** |
+| **Custom** | 13 | no API | layer2 | **D** |
 
 ## What this means for the build
 
@@ -40,10 +41,13 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
   total. (Con Edison's Oracle host wasn't found → Layer 2; so 1 of the 2 grid Oracle tenants is fetchable, D-051.)
 - **+1 fetcher (Tier C: Radancy/TalentBrew built, D-052) → 33/54 (61%)** with 9 fetchers total — NextEra onboarded
   via the server-rendered `/search-jobs/results` HTML; NRG/National Grid parked until their search base verifies.
+- **+1 fetcher (Pinpoint built, D-079) → 34/54 (63%)** — Aurora onboarded through custom-domain config;
+  Aireon is an additional aviation proposal that activates through D-077 after deployment.
 - **The next builds are demand-ranked (D-076)** — the discovery agent is now a second demand signal alongside the
   seed universe; see the discovery-demand ledger below. **SWA/Thales Workday config onboards are done** (both
   live-verified 2026-07-11), taking the discovery-expanded production baseline **64 → 66 fetchable**. Remaining
-  order: **Paylocity + Phenom + BambooHR built** → JazzHR probe/singletons (defer auth-gated SuccessFactors).
+  order: **Paylocity + Phenom + BambooHR + Pinpoint built** → Radancy variants → JazzHR → Jobvite → Taleo
+  (defer auth-gated SuccessFactors).
 - **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
   (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
   near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
@@ -61,7 +65,7 @@ runs accumulate (this doubles as the Day-2 "coverage ledger", docs/15).*
 | ATS | candidates | status |
 |---|---|---|
 | **already-supported, validated live 2026-07-12** | 6 (ASI ashby · GridBeyond bamboohr · CivilGrid ashby · Emerald AI ashby `emerald-ai` · AiDASH greenhouse `aidashinc` · Aloft greenhouse `versaterm` = parent Versaterm, Hayden's call) | no code — D-077 `set-ats`+`approve` runbook (Hayden runs) |
-| **Pinpoint** | **2** (Aireon `aireon.pinpointhq.com` + Aurora Energy Research `careers.auroraer.com` custom domain) | **build next (D-078 #1)** — clean public JSON `GET {tenant}/postings.json`, single-response, BambooHR parity |
+| **Pinpoint** | **2** (Aireon `aireon.pinpointhq.com` + Aurora Energy Research `careers.auroraer.com` custom domain) | **built (D-079)** — Aurora in curated seed config; Aireon pending post-deploy D-077 `set-ats` + `approve` |
 | **Radancy variants** | up to **5** (L3Harris: `/en/search-jobs/results` returns JSON · NRG: table rows lack job link, "Results 1 – 10" aria · American Airlines + Bombardier: no `searchresults` table · National Grid: 403) | **D-078 #2** — extend the existing fetcher; L3Harris JSON easiest, AA is the flagship prize |
 | **JazzHR** | 2 (Utilidata `utilidata.applytojob.com` + Near Earth `jobs.nearearth.aero`) | **D-078 #3** — server-rendered HTML boards, probed 200 |
 | **Jobvite** | 2 (Uplight `uplight` + Enverus `drillinginfo`) | **D-078 #4** — server-rendered `jobs.jobvite.com/{slug}/search` |
@@ -136,9 +140,11 @@ runs accumulate (this doubles as the Day-2 "coverage ledger", docs/15).*
     `custom/layer2 → oracle_hcm/verified` 2026-07-12; activates at the next `vja-import-employers` run
     against Neon. (Con Edison's host was found the same day — `ejcu.fa.us6.oraclecloud.com`/`CX_1033` —
     but fails paginate-or-fail deterministically at 61 of 62; investigate before onboarding.)
-13. **Pinpoint** (D-078 #1) — clean public JSON `GET {tenant}/postings.json` (single response; probed live
-    on both tenants). Slug-derived host + custom-domain support (Aurora's `careers.auroraer.com` serves the
-    same JSON). +2: Aireon (proposed #135) + Aurora Energy Research (seed, currently `custom`).
+13. **Pinpoint ✅** (D-078 #1 / D-079) — clean public JSON `GET {tenant}/postings.json`, one rich
+    authoritative `data` list with no lazy detail. Canonical hosts derive from the slug; explicit endpoints
+    override for custom domains. Aurora Energy Research moved config-only from `custom/layer2` to
+    `pinpoint/verified` (+1 curated seed fetchable, 48→49); Aireon (proposal #135) adds the second win after
+    deployment through the D-077 `set-ats` + explicit `approve` runbook.
 14. **Radancy variants** (D-078 #2) — extend the D-052 fetcher for the three probed variants: L3Harris's
     `/en/search-jobs/results` **JSON** response (`{filters, results, hasJobs}` — likely easiest), NRG's
     table markup (rows carry no `/job/` link; aria "Results 1 – 10"), and the AA/Bombardier renderer (no
@@ -153,7 +159,9 @@ runs accumulate (this doubles as the Day-2 "coverage ledger", docs/15).*
     platform portals, so it now sits *after* the platform fetchers, not before).
 
 ## Endpoint encoding in the seed CSV
-- **Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR:** `ats_slug` = the slug; `endpoint` derived from it.
+- **Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR/Pinpoint:** `ats_slug` = the slug;
+  `endpoint` derived from it. An explicit endpoint overrides the template for a provider custom domain
+  (Aurora Pinpoint).
 - **Workday:** `ats_slug` = `tenant:dc:site` (e.g. `aes:wd1:AES_US`); `endpoint` = full `cxs` jobs URL.
   Fetch = `POST {endpoint}` with body `{"limit":20,"offset":0,"appliedFacets":{},"searchText":""}`, paginate by `offset`.
 - **Phenom:** explicit tenant base in `endpoint` with required query config, e.g.
@@ -169,8 +177,8 @@ runs accumulate (this doubles as the Day-2 "coverage ledger", docs/15).*
 - **GE Vernova / BP Trading / Fluence** — **resolved** (onboarded at Phase 4.2).
 - **Vortexa** — Workable, slug `vortexa` — **confirmed + built** (D-049; 5 open at probe).
 - **Honeywell** — **resolved** (step 12 above; onboarded 2026-07-12).
-- **Aurora** — not Teamtailor: **Pinpoint** (`careers.auroraer.com/postings.json` live) — activates with the
-  D-078 #1 build. **Enverus** — confirmed Jobvite (slug `drillinginfo`) — D-078 #4.
+- **Aurora** — **resolved**: Pinpoint custom-domain API, onboarded config-only in step 13 (D-079).
+  **Enverus** — confirmed Jobvite (slug `drillinginfo`) — D-078 #4.
 - **Castleton (CCI)** — Workday `osv-cci.wd1` re-confirmed 422 → stays Layer 2 (D-032); retire candidate.
 - **Con Edison** — Oracle host found (`ejcu.fa.us6.oraclecloud.com`, `CX_1033`) but deterministic
   paginate-or-fail failure at 61 of 62 — bug-shakeout candidate before onboarding; do **not** retire.
