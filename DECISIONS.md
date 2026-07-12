@@ -1359,3 +1359,34 @@ batch `activate` command — volumes are 2–4 rows per fetcher and each slug/en
 `approved` rows whose ATS has become fetchable. Misresolved rows stay inert until the tooling ships — **no
 interim SQL**. **Status:** protocol decided, docs-only this session; build rides with the Paylocity fetcher
 block (D-076 step 9). References D-071, D-074, D-070, D-076, D-021.
+
+### D-078 · Beta hardening · Coverage-audit findings + demand-ranked fetcher plan (Pinpoint first) · accepted · 2026-07-12
+A read-only audit of prod Neon (135 employers; 63 fetchable, 62 fetched by run #18) triaged all 72 unfetched
+rows with live probes (registry-fetcher validation — the `set-ats` gate — plus careers-page signature
+detection). **Findings:** (1) six discovery rows validate on *already-supported* ATSs today — ASI (ashby,
+26 postings, approve-only), GridBeyond (bamboohr `gridbeyond`, 2), CivilGrid (ashby `civilgrid`, 6), Emerald AI
+(ashby `emerald-ai`, 7), AiDASH (greenhouse `aidashinc`, 12), Aloft (greenhouse `versaterm`, 34 — but the board
+is parent Versaterm public-safety software; Hayden's call) — activated via the D-077 runbook, no code. (2)
+**Honeywell's canonical Oracle host was found** (`ibqbjb.fa.ocs.oraclecloud.com`, siteNumber `CX_1`, via the
+careers page's `og:image`; 1,455 postings validated; constructed apply URL resolves 200) → curated seed-CSV
+onboard **lands this session** (aviation fetchable 14→15, total 47→48). (3) **Con Edison's host was found too**
+(`ejcu.fa.us6.oraclecloud.com`, `CX_1033`) but fails paginate-or-fail deterministically at **61 of 62** — a
+bug-shakeout candidate; do not retire. (4) **Jeppesen (Boeing) is duplicate coverage** — the Boeing Workday
+board it points at is *already fetched* (seed row `Boeing`, `boeing:wd1:EXTERNAL_CAREERS`); recommend CSV
+`status=retired` (the Navitaire/Amadeus case), decision Hayden's. (5) Comply365/Vistair validates on BambooHR
+(`vistairhr`, 11 postings) but was never persisted to the DB — candidate curated seed add. (6) ~30 rows are
+genuine dead ends (email-only application, bot-blocked, EU-only, careers-404) — retire slate stays a
+Hayden-executed runbook (chat, per his call: no repo audit doc). **Decision — next fetchers, re-ranked by this
+audit's demand evidence** (supersedes D-076's tail ordering; Paylocity/Phenom/BambooHR are done): **1. Pinpoint**
+(clean public JSON `GET {tenant}/postings.json`, single-response, BambooHR-parity build; +2 immediately: Aireon
+`aireon.pinpointhq.com` + Aurora Energy Research `careers.auroraer.com` — a Pinpoint custom domain, both
+live-verified) → **2. Radancy variants** (extend the existing fetcher: L3Harris `/en/search-jobs/results`
+returns clean JSON `{filters,results,hasJobs}`; NRG's table rows carry no job link + "Results 1 – 10" aria
+format; American Airlines + Bombardier render no `searchresults` table; National Grid 403s — up to +5, AA is a
+flagship) → **3. JazzHR** (server-rendered HTML boards at `{slug}.applytojob.com` + custom domains; Utilidata +
+Near Earth Autonomy, +2) → **4. Jobvite** (server-rendered `jobs.jobvite.com/{slug}/search`; Uplight `uplight` +
+Enverus `drillinginfo`, +2) → **5. Taleo** (one `textron.taleo.net` tenant covers Bell + Textron Aviation, +2)
+→ singleton tail unchanged (Eightfold/UKG/Avature/TriNet/Rippling/Gusto/Kula/Personio opportunistic;
+SuccessFactors stays deferred). Projected: 63 → ~72 with no code (runbook + Honeywell), → ~83 with builds 1–4.
+**Status:** accepted; Honeywell CSV + docs land this session, builds are next sessions' blocks. References
+D-076, D-077, D-051, D-052, D-070, D-017.

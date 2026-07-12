@@ -64,21 +64,24 @@ iCIMS/Workable/SmartRecruiters/Oracle/Radancy onboards:
 The Week-4 "vertical = config" add (D-002/D-004). Curated across all aviation sub-domains (airlines ·
 avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics · ATM/infrastructure ·
 eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass as grid:
-- **14 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
+- **15 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
   Ashby (1 — Beacon AI), Workday (7 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**, plus
   **Southwest and Thales — D-076**),
-  **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**, **Phenom (1 — United, D-076)**.
+  **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**, **Phenom (1 — United, D-076)**, **Oracle ORC (1 —
+  Honeywell, D-078: canonical host `ibqbjb.fa.ocs.oraclecloud.com` + `CX_1` found at the 2026-07-12
+  coverage audit; 1,455 open at validation)**.
 - **2 detected** (platform known, no fetchable endpoint yet): SuccessFactors (JetBlue), **L3Harris
   (Radancy parked — generic fetcher exists but its search base 301-redirects; onboard config-only
   once verified, D-052)**.
-- **20 layer2** (no clean API → LLM-read): custom/JS-rendered sites in the flight-data, ATM, and
+- **19 layer2** (no clean API → LLM-read): custom/JS-rendered sites in the flight-data, ATM, and
   remaining OEM/airline tail. Includes
   Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046),
-  **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`), **Joby** (no Jibe API; ATS unconfirmed —
-  re-probe), **Honeywell** (Oracle ORC, but its vanity domain proxies the REST API 302→404 — curate
-  canonical host+siteNumber to onboard), and **Delta** (Avature: per-job JSON-LD but a 202 bot-challenge
-  blocks server-side list fetch). Note: the Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer
-  Aviation is custom/Layer 2.
+  **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs` — re-confirmed at the 2026-07-12 audit),
+  **Joby** (iCIMS legacy portal confirmed at the audit — no Jibe API), **Jeppesen (Boeing)** (duplicate
+  coverage — its roles live on the already-fetched `Boeing` Workday board; retire candidate, D-078), and
+  **Delta** (Avature: per-job JSON-LD but a 202 bot-challenge blocks server-side list fetch). Note: the
+  Greenhouse `archer` board is a **name collision** (a veterinary clinic) — Archer Aviation is
+  custom/Layer 2.
 
 The big aerospace Workday boards are whole-company (Collins/RTX 4161, Airbus 2000, Boeing 1168, mostly
 non-US/senior); the Stage-A scope gate + Stage-B US/level pre-filter cut this to the early-career US
