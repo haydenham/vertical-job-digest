@@ -31,6 +31,11 @@ from vja.models import AtsType, EmployerSource, EmployerStatus, Verification
 _VERTICAL = "grid_power_software"
 _GH_URL = "https://boards-api.greenhouse.io/v1/boards/newco/jobs?content=true"
 _GH_JOB = {"id": 1, "title": "Software Engineer", "absolute_url": "https://x/1", "content": "..."}
+_BAMBOO_URL = "https://mysteryco.bamboohr.com/careers/list"
+_BAMBOO_LIST = {
+    "meta": {"totalCount": 1},
+    "result": [{"id": "7", "jobOpeningName": "Grid Engineer"}],
+}
 
 
 @pytest.fixture(autouse=True)
@@ -139,13 +144,14 @@ def _candidates() -> list[CandidateEmployer]:
 @respx.mock
 def test_run_discovery_persists_proposals(migrated_engine: Engine) -> None:
     respx.get(_GH_URL).mock(return_value=httpx.Response(200, json={"jobs": [_GH_JOB]}))
+    respx.get(_BAMBOO_URL).mock(return_value=httpx.Response(200, json=_BAMBOO_LIST))
     _seed_manual(migrated_engine, "Camus Energy")  # the dup
 
     summary = run_discovery(migrated_engine, _VERTICAL, client=_fake_client(_candidates()))
 
     assert summary.candidates == 3
-    assert summary.proposed_fetchable == 1
-    assert summary.proposed_unresolved == 1
+    assert summary.proposed_fetchable == 2
+    assert summary.proposed_unresolved == 0
     assert summary.skipped_dup == 1
     assert summary.est_cost_usd > 0  # Terra tokens are metered across waves + structuring/resolver
 
@@ -156,7 +162,7 @@ def test_run_discovery_persists_proposals(migrated_engine: Engine) -> None:
             .order_by(employers.c.name)
         ).all()
     assert [(r.name, r.ats_type, r.verification) for r in proposed] == [
-        ("MysteryCo", AtsType.UNKNOWN.value, Verification.LAYER2.value),
+        ("MysteryCo", AtsType.BAMBOOHR.value, Verification.DETECTED.value),
         ("NewCo", AtsType.GREENHOUSE.value, Verification.DETECTED.value),
     ]
 
@@ -164,13 +170,14 @@ def test_run_discovery_persists_proposals(migrated_engine: Engine) -> None:
 @respx.mock
 def test_run_discovery_dry_run_writes_nothing(migrated_engine: Engine) -> None:
     respx.get(_GH_URL).mock(return_value=httpx.Response(200, json={"jobs": [_GH_JOB]}))
+    respx.get(_BAMBOO_URL).mock(return_value=httpx.Response(200, json=_BAMBOO_LIST))
 
     summary = run_discovery(
         migrated_engine, _VERTICAL, dry_run=True, client=_fake_client(_candidates()[:2])
     )
 
     assert summary.dry_run is True
-    assert summary.proposed_fetchable == 1 and summary.proposed_unresolved == 1
+    assert summary.proposed_fetchable == 2 and summary.proposed_unresolved == 0
     with migrated_engine.connect() as conn:
         total = conn.execute(select(func.count()).select_from(employers)).scalar_one()
     assert total == 0  # nothing persisted

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "totalCount": 2
+  },
+  "result": [
+    {
+      "id": "125",
+      "jobOpeningName": "Business Development Manager ",
+      "departmentLabel": "Sales US",
+      "employmentStatusLabel": "Full-Time",
+      "location": {
+        "city": null,
+        "state": null
+      },
+      "atsLocation": {
+        "country": "United States",
+        "state": "Texas",
+        "province": null,
+        "city": "Austin"
+      },
+      "isRemote": null,
+      "locationType": "1"
+    },
+    {
+      "id": "126",
+      "jobOpeningName": "Contractor - Senior Electrical Engineer",
+      "departmentLabel": "Deployment",
+      "employmentStatusLabel": "Contractor",
+      "location": {
+        "city": null,
+        "state": null
+      },
+      "atsLocation": {
+        "country": "Ireland",
+        "state": null,
+        "province": "Leinster",
+        "city": "Dublin"
+      },
+      "isRemote": null,
+      "locationType": "1"
+    }
+  ]
+}

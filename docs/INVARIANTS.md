@@ -229,7 +229,7 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
   SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy + Phenom done**) →
-  **demand-ranked next (D-076): BambooHR → JazzHR probe/singletons** → Layer-2 LLM-read for the
+  **BambooHR done** → **demand-ranked next (D-076): JazzHR probe/singletons** → Layer-2 LLM-read for the
   custom tail + HN/niche. The discovery-demand
   ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
@@ -273,8 +273,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `lang`/`country` query config; `refineSearch` paginates by `from`/`size` and must exactly reach stable
   `totalHits`; `external_id = jobId`; inline apply/location/date; `jobDetail` accepts that stable id and lazily
   returns the full job. No tenant values live in code. (D-076)
+- **BambooHR fetcher targets slug-derived `GET https://{slug}.bamboohr.com/careers/list`.** The
+  `meta.totalCount`-anchored response is single and authoritative (valid zero closes cleanly; malformed or
+  incomplete shapes fail closed); `external_id = id`; title is trimmed; public apply URL is constructed;
+  structured `atsLocation` wins over `location`/remote fallbacks. Description is lazily resolved from
+  `/careers/{id}/detail`, returning only `result.jobOpening` and never application `formFields`. (D-076)
 - **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`**
-  (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom) — fetched only for in-scope
+  (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom + BambooHR) — fetched only for in-scope
   survivors (cost discipline); every other ATS carries the description in `raw_payload`. Adding a
   list-only ATS is a one-line map entry, no per-company branching. (D-050, D-051, D-052, D-076)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the

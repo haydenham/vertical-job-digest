@@ -6,7 +6,8 @@ schema-validated result. Runs only on open postings with `extracted_at IS NULL` 
 Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once, then pennies a
 night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
 
-Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy —
+Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy,
+Paylocity, Phenom, BambooHR —
 their list endpoints omit the job description) fetch it lazily, per in-scope survivor, via their
 `fetch_detail` (routed by `_DETAIL_RESOLVERS`); every other ATS carries the description in
 `raw_payload`.
@@ -36,6 +37,7 @@ from vja.db.postings import (
     postings_needing_extraction,
     save_extraction,
 )
+from vja.fetchers.bamboohr import BambooHRFetcher
 from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.paylocity import PaylocityFetcher
 from vja.fetchers.phenom import PhenomFetcher
@@ -90,6 +92,7 @@ _DETAIL_RESOLVERS: dict[AtsType, DetailResolver] = {
     AtsType.RADANCY: RadancyFetcher().fetch_detail,
     AtsType.PAYLOCITY: PaylocityFetcher().fetch_detail,
     AtsType.PHENOM: PhenomFetcher().fetch_detail,
+    AtsType.BAMBOOHR: BambooHRFetcher().fetch_detail,
 }
 
 

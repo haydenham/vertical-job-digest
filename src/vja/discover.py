@@ -129,8 +129,8 @@ search, (4) one fallback search. A provider is resolved only with a canonical UR
 company slug or a complete endpoint. Model confidence without URL evidence is unresolved.
 
 Known examples include Greenhouse, Lever, Ashby, Workday, iCIMS/Jibe, Workable, SmartRecruiters,
-Oracle HCM, and Radancy. Identify unsupported providers such as BambooHR too: accurate unsupported
-resolution is useful even though it remains parked. Return the strict schema and no prose."""
+Oracle HCM, Radancy, and BambooHR. Identify unsupported providers accurately too: their proposals
+remain parked until a fetcher exists. Return the strict schema and no prose."""
 
 
 class CandidateEmployer(BaseModel):

@@ -10,8 +10,10 @@ It is the input to the Layer 1 ATS spine. Nothing vertical-specific lives in cod
    `ats_type` + `ats_slug` where possible; otherwise fills a best-guess `ats_type` + `careers_url`.
    Every row carries a `verification` value (see below) so confidence is explicit.
 3. **Hayden verifies** the `suspect` and `unverified` rows.
-4. **Ground truth:** the Layer 1 fetcher loads each endpoint. A 404/empty response means the
-   `ats_type`/`ats_slug` is wrong — fix and re-run. Verification is ultimately mechanical, not manual.
+4. **Ground truth:** the Layer 1 fetcher loads each endpoint. A 404 or malformed response means the
+   `ats_type`/`ats_slug` is wrong — fix and re-run. A structurally valid empty board is authoritative
+   zero openings, though D-077 proposal activation still requires at least one validated job.
+   Verification is ultimately mechanical, not manual.
 
 ## `verification` column — what each value means
 | value | meaning | action needed |
@@ -31,7 +33,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
 | `key_cities` | Hayden | free text | US hubs; useful for the location pre-filter |
 | `role_tilt` | Hayden | free text | tech flavor / what kind of roles to expect |
-| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
+| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`, `bamboohr`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
 | `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). For Workday: `tenant:dc:site` (e.g. `aes:wd1:AES_US`). Empty for portal-detected/custom rows. |
 | `careers_url` | Claude | URL | the company's job board / careers page ("the job domain"). Required for `workday`/`raw_html`. |
 | `endpoint` | derived | URL | constructed for slug-derived ATSs; explicit for Workday, Paylocity, and other per-tenant platforms. |
@@ -40,7 +42,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `verification` | Claude | `verified` \| `detected` \| `layer2` | confidence in the ATS resolution (see table above). |
 | `notes` | optional | free text | anything useful (parent company, ATS quirks, why included). |
 
-For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`.
+For Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`.
 For Workday, Paylocity, and Phenom, `endpoint` holds the per-tenant URL/config. Portal-detected and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)

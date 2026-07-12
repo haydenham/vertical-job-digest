@@ -80,6 +80,17 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
 - **Detail:** the same endpoint with `ddoKey=jobDetail` and `jobSeqNo=<jobId>` returns the full job object
   lazily for in-scope survivors. The public API accepts the stable `jobId` directly.
 
+### BambooHR — `ats_type: bamboohr`
+- **List endpoint:** `GET https://{slug}.bamboohr.com/careers/list`.
+- **Response:** one authoritative `{ "meta": {"totalCount": N}, "result": [...] }` JSON object. The
+  count must equal the result length; a valid count/result of zero is authoritative zero openings.
+- **Mapping:** `external_id = str(id)`, `title = jobOpeningName.strip()`, `apply_url` = the public
+  `https://{slug}.bamboohr.com/careers/{id}` page, `updated_at = None`.
+- **Location:** prefer `atsLocation` city + state-or-province + country; fall back to `location`, then
+  `Remote` when `isRemote` is true and no structured location exists.
+- **Detail:** `GET https://{slug}.bamboohr.com/careers/{id}/detail` is lazy. Return only
+  `result.jobOpening`; never expose sibling `formFields` application metadata. List descriptions stay absent.
+
 ### Raw HTML — `ats_type: raw_html`  *(Layer 2 fallback, not Layer 1)*
 - Universal fallback: fetch the rendered careers page text and LLM-read it. Belongs to Layer 2; listed here for completeness.
 - For these, `external_id` is synthesized from a stable content signature (since there's no ATS id) — documented in the L2 spec when it's built.
@@ -96,8 +107,10 @@ ashby      → https://api.ashbyhq.com/posting-api/job-board/{slug}
 workday    → use the hand-set `endpoint` column (per-company)
 paylocity  → use the hand-set `endpoint` column (per-company UUID/name path)
 phenom     → use the hand-set tenant base + required `lang`/`country` query
+bamboohr   → https://{slug}.bamboohr.com/careers/list
 ```
-The `endpoint` column is authoritative for Workday, Paylocity, and Phenom; the original three are slug-derived.
+The `endpoint` column is authoritative for Workday, Paylocity, and Phenom; BambooHR joins the
+slug-derived providers.
 
 ## Politeness & health (policy, not etiquette — D & Memo 02 §8)
 - Identifiable `User-Agent`, conservative rate limiting, one fetch per endpoint per day total (D-005).

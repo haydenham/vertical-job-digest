@@ -3,13 +3,14 @@
 Lets the pipeline turn an `Employer` row into "the right fetcher" without any
 vertical- or company-specific branching (D-004). The Layer-1 deterministic ATSs are
 wired here (Tier A + Workday + iCIMS/Jibe + Workable + SmartRecruiters + Oracle HCM +
-Radancy/TalentBrew + Paylocity + Phenom); remaining platforms and the Layer-2 LLM-read
+Radancy/TalentBrew + Paylocity + Phenom + BambooHR); remaining platforms and the Layer-2 LLM-read
 tail are handled by later blocks.
 """
 
 from __future__ import annotations
 
 from vja.fetchers.ashby import AshbyFetcher
+from vja.fetchers.bamboohr import BambooHRFetcher
 from vja.fetchers.base import Fetcher
 from vja.fetchers.greenhouse import GreenhouseFetcher
 from vja.fetchers.icims import IcimsFetcher
@@ -35,6 +36,7 @@ _FETCHERS: dict[AtsType, Fetcher] = {
     AtsType.RADANCY: RadancyFetcher(),
     AtsType.PAYLOCITY: PaylocityFetcher(),
     AtsType.PHENOM: PhenomFetcher(),
+    AtsType.BAMBOOHR: BambooHRFetcher(),
 }
 
 #: ATS types with a Layer-1 fetcher available (used to pre-filter fetchable employers).

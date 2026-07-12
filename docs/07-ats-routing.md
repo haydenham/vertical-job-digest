@@ -29,6 +29,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **Radancy/TalentBrew** | 3 | server-rendered `/search-jobs/results` HTML | 1 verified (built, D-052); 2 parked (endpoint not yet confirmed) | **C** |
 | **Phenom** | 0 grid / 1 aviation (United; SWA/Thales are Workday-under) | `/widgets` JSON API | built + United verified (D-076) | **C** |
 | **Paylocity** | 0 seed (4 discovery proposals) | embedded `window.pageData` JSON | built (D-076/D-077); activation pending deploy | **B** |
+| **BambooHR** | 0 seed (2 discovery proposals) | clean `/careers/list` JSON | built (D-076); activation pending deploy | **B** |
 | **Custom** | 14 | no API | layer2 | **D** |
 
 ## What this means for the build
@@ -42,7 +43,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 - **The next builds are demand-ranked (D-076)** — the discovery agent is now a second demand signal alongside the
   seed universe; see the discovery-demand ledger below. **SWA/Thales Workday config onboards are done** (both
   live-verified 2026-07-11), taking the discovery-expanded production baseline **64 → 66 fetchable**. Remaining
-  order: **Paylocity + Phenom built** → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
+  order: **Paylocity + Phenom + BambooHR built** → JazzHR probe/singletons (defer auth-gated SuccessFactors).
 - **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
   (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
   near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
@@ -64,7 +65,7 @@ Day-2 "coverage ledger" first edition, docs/15).*
 | **Paylocity** | **4** (Veryon, Trax + 2 grid) | fetcher built; correct + activate via D-077 runbook after deploy |
 | already-supported (Lever 3, Ashby 2, Greenhouse 2, Workable 1) | 8 | no work — auto-activate at `vja-review approve` |
 | JazzHR | 2 | deterministic host mapping exists (`applytojob.com`); probe `{slug}.applytojob.com` for a feed before building |
-| BambooHR | 2 (incl. GridBeyond) | trivial clean JSON (probed) — build after Phenom |
+| BambooHR | 2 (GridBeyond + Comply365) | fetcher built; correct + activate via D-077 runbook after deploy |
 | Kula / Rippling / Gusto / TriNet Hire / Trakstar / Pinpoint | 1 each | singleton tail — opportunistic |
 | Getro / YC Work-at-a-Startup | (portfolio boards) | **not employer ATSs** — parked; revisit as non-employer `sources` (Phase 10) |
 | careers-page-only / unknown | many | genuinely Layer 2 |
@@ -119,10 +120,14 @@ Day-2 "coverage ledger" first edition, docs/15).*
     inline `applyUrl` + `postedDate` + location; full description via `ddoKey=jobDetail` (lazy
     `fetch_detail`, confirmed to accept `jobId` directly). Endpoint is the explicit tenant base with
     required `lang`/`country` query values; no tenant values live in code. United onboarded config-only.
-11. **BambooHR** — `GET {slug}.bamboohr.com/careers/list` clean single-response JSON (GridBeyond live
-    at probe, 2 openings); slug-derived endpoint (`endpoints.py` `_DERIVED_TEMPLATES`);
-    single-response guard; `external_id = id`; detail at `/careers/{id}/detail`. Unlocks the parked
-    GridBeyond proposal + the startup-heavy discovery tail.
+11. **BambooHR ✅** — `GET {slug}.bamboohr.com/careers/list` clean single-response JSON (GridBeyond
+    live-verified at build, 2 openings); slug-derived endpoint (`endpoints.py` `_DERIVED_TEMPLATES`);
+    `meta.totalCount`-anchored single-response guard; `external_id = id`; trimmed title; structured
+    `atsLocation` with legacy/remote fallbacks; constructed public apply URL. Description stays out of
+    the list pass and resolves lazily at `/careers/{id}/detail`; only `result.jobOpening` enters extraction,
+    never application `formFields`. Registry + lazy-detail routing are wired. GridBeyond (`gridbeyond`) and
+    Comply365 (`vistairhr`) remain discovery proposals until the deployed D-077 validate/approve sweep;
+    there is no seed change and no direct production mutation in this PR.
 12. **JazzHR probe → Tier C singletons** (Jobvite/SuccessFactors/Avature/UKG/Eightfold +
     Kula/Rippling/Gusto/TriNet/Trakstar/Pinpoint) — probe `{slug}.applytojob.com` for a feed before
     deciding JazzHR; build the rest opportunistically (defer auth-gated SuccessFactors).
@@ -131,7 +136,7 @@ Day-2 "coverage ledger" first edition, docs/15).*
     platform portals, so it now sits *after* the platform fetchers, not before).
 
 ## Endpoint encoding in the seed CSV
-- **Greenhouse/Lever/Ashby/Workable/SmartRecruiters:** `ats_slug` = the slug; `endpoint` derived from it.
+- **Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR:** `ats_slug` = the slug; `endpoint` derived from it.
 - **Workday:** `ats_slug` = `tenant:dc:site` (e.g. `aes:wd1:AES_US`); `endpoint` = full `cxs` jobs URL.
   Fetch = `POST {endpoint}` with body `{"limit":20,"offset":0,"appliedFacets":{},"searchText":""}`, paginate by `offset`.
 - **Phenom:** explicit tenant base in `endpoint` with required query config, e.g.

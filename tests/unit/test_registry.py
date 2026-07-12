@@ -3,6 +3,7 @@
 import pytest
 
 from vja.fetchers.ashby import AshbyFetcher
+from vja.fetchers.bamboohr import BambooHRFetcher
 from vja.fetchers.greenhouse import GreenhouseFetcher
 from vja.fetchers.icims import IcimsFetcher
 from vja.fetchers.lever import LeverFetcher
@@ -29,6 +30,7 @@ def test_each_layer1_ats_maps_to_its_fetcher() -> None:
     assert isinstance(get_fetcher(AtsType.RADANCY), RadancyFetcher)
     assert isinstance(get_fetcher(AtsType.PAYLOCITY), PaylocityFetcher)
     assert isinstance(get_fetcher(AtsType.PHENOM), PhenomFetcher)
+    assert isinstance(get_fetcher(AtsType.BAMBOOHR), BambooHRFetcher)
 
 
 def test_returned_fetcher_reports_matching_ats_type() -> None:
