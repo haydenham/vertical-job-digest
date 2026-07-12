@@ -58,7 +58,8 @@ earns its enable decision.
 `$` ceiling 2→4; the old per-request `max_uses`==cumulative-cap coupling ended the run after one blocked turn —
 see WORKLOG) the loop did **real oblique sourcing**: 5 candidates off the Energy Impact Partners portfolio
 (GridBeyond, GridX, Emerald AI, CivilGrid, eSmart Systems), all landing `proposed`/`layer2` (GridBeyond's ATS
-confirmed **BambooHR** — not yet a supported fetcher; the other four JS-rendered/unresolved). **New binding
+confirmed **BambooHR** — the fetcher is now built, with activation pending deployment + D-077 review;
+the other four are JS-rendered/unresolved). **New binding
 constraint (feeds Day 4):** the run stopped on an **external web-tool rate limit (429s), not our `$`/tool caps** —
 so discovery *yield* is now gated by the Anthropic `web_search`/`web_fetch` rate limit, not our budget. It
 completed only ~1 of ~3 planned source waves. Before flipping the weekly schedule ON, decide whether that limit
@@ -120,8 +121,11 @@ probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger"
    agent misresolved (real Greenhouse companies parked `unknown`). Runbook: docs/14.
 3. **Phenom fetcher ✅** — United (flagship aviation employer; Taleo underneath): `/widgets`
    refineSearch, paginate-or-fail on `totalHits` + `jobDetail` lazy detail; United live-verified and onboarded.
-4. **BambooHR fetcher** — trivial single-response JSON; unlocks the parked GridBeyond proposal + the
-   startup-heavy discovery tail (`docs/07` step 11).
+4. **BambooHR fetcher ✅ (activation pending deploy)** — slug-derived single-response JSON with
+   `meta.totalCount` completeness, structured location fallbacks, constructed public apply URLs, and lazy
+   detail returning only `result.jobOpening`. GridBeyond (`gridbeyond`) + Comply365 (`vistairhr`) remain
+   discovery proposals until each passes the post-deploy D-077 `set-ats` validation and explicit approval
+   (`docs/07` step 11); no seed rows were added.
 5. **JazzHR probe → singletons** as time allows (`docs/07` step 12).
 
 Cheap hardening that rides along regardless: extend `discover._PROVIDER_HOST_MARKERS` with

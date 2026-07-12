@@ -76,6 +76,7 @@ def test_enum_values_are_the_exact_db_strings() -> None:
     # `.value` is the exact string the DB persists (StrEnum member == its value).
     assert AtsType.GREENHOUSE.value == "greenhouse"
     assert AtsType.ORACLE_HCM.value == "oracle_hcm"
+    assert AtsType.BAMBOOHR.value == "bamboohr"
     assert Level.NEW_GRAD.value == "new_grad"
     assert RemoteType.REMOTE.value == "remote"
     assert Verdict.STRONG_YES.value == "strong_yes"

@@ -1,0 +1,26 @@
+{
+  "meta": {},
+  "result": {
+    "jobOpening": {
+      "jobOpeningShareUrl": "https://example.bamboohr.com/careers/125",
+      "jobOpeningName": "Business Development Manager ",
+      "jobOpeningStatus": "Open",
+      "description": "<p>Build flexible energy products for customers.</p>",
+      "datePosted": "2026-06-08",
+      "location": {
+        "city": null,
+        "state": null
+      },
+      "atsLocation": {
+        "country": "United States",
+        "state": "Texas",
+        "city": "Austin"
+      }
+    },
+    "formFields": {
+      "firstName": {
+        "required": true
+      }
+    }
+  }
+}

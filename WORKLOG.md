@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-12 — Generic BambooHR fetcher + lazy detail resolver (D-076 block 4)
+
+**Built:** one generic slug-derived `BambooHRFetcher` over the authoritative
+`https://{slug}.bamboohr.com/careers/list` JSON response. `meta.totalCount` must exactly match the
+single `result` list (valid zero is authoritative; malformed/incomplete/duplicate data fails closed);
+`external_id = id`; titles are trimmed; public apply URLs are constructed; structured `atsLocation`
+wins over legacy `location` and remote fallbacks. The list pass keeps descriptions absent. Lazy
+`/careers/{id}/detail` resolution returns only `result.jobOpening`, never sibling application
+`formFields`. `AtsType`, endpoint derivation, registry, extraction routing, and discovery validation
+are wired with no company/vertical branches.
+
+**Tests/evidence:** captured sanitized GridBeyond list/detail fixtures; covered normal + empty boards,
+location/province/remote fallbacks, malformed envelopes/count mismatch, missing/empty IDs and titles,
+duplicate IDs, HTTP/non-JSON failures, strict detail validation, endpoint derivation, registry wiring,
+lazy extraction routing, and discovery validate-by-fetch behavior. The opt-in GridBeyond live list/detail
+smoke passed (2 current openings at fixture/live-contract capture).
+
+**Verified:** full offline suite (**484 passed**, 19 opt-in deselected); BambooHR live smoke (**1 passed**);
+ruff format/check; mypy (50 source files); import-linter (1 kept / 0 broken); `uv lock --check`;
+`git diff --check`; human-read scoped diff. Docs updated: CLAUDE, INVARIANTS, specs 04/05, routing 07,
+beta plan 15, and seed README. No Alembic migration (`bamboohr` fits application-validated `VARCHAR(15)`),
+no seed CSV change, and no new ADR (implements D-076/D-077).
+
+**Next:** Hayden reviews/commits/opens the PR. Production coverage is unchanged by this branch. After merge
+and deployment, verify the current production fetchable count, then use the D-077 runbook per proposal:
+GridBeyond (`gridbeyond`) and Comply365 (`vistairhr`) each run through `list --provider bamboohr` →
+`set-ats` (must return at least one job) → explicit `approve`; leave any zero-opening board parked.
+
+---
+
 ## 2026-07-11 — Generic Phenom fetcher + United onboarded (D-076 block 3)
 
 **Live contract first:** United's public page exposes `widgetApiEndpoint=https://careers.united.com/widgets`,

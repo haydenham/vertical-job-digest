@@ -30,6 +30,7 @@ class AtsType(StrEnum):
     SMARTRECRUITERS = "smartrecruiters"
     PAYLOCITY = "paylocity"
     PHENOM = "phenom"
+    BAMBOOHR = "bamboohr"
     JOBVITE = "jobvite"
     SUCCESSFACTORS = "successfactors"
     AVATURE = "avature"

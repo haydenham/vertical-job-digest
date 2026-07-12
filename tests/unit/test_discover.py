@@ -248,7 +248,7 @@ def test_resolver_derives_support_from_registry_not_model_label() -> None:
     _candidate_result, actual = resolve_candidate_ats(
         client, _candidate(), DiscoveryMeter(), _ReportCheckpoint(None)
     )
-    assert actual.outcome is ATSOutcome.RESOLVED_UNSUPPORTED
+    assert actual.outcome is ATSOutcome.RESOLVED_SUPPORTED
 
 
 def test_resolver_accepts_applytojob_as_canonical_jazzhr_evidence() -> None:
@@ -282,6 +282,7 @@ def test_resolver_accepts_applytojob_as_canonical_jazzhr_evidence() -> None:
         ("trakstar", "https://jobs.trakstar.com/company"),
         ("pinpoint", "https://company.pinpointhq.com/jobs"),
         ("phenom", "https://careers.phenompeople.com/jobs"),
+        ("bamboohr", "https://newco.bamboohr.com/careers"),
     ],
 )
 def test_provider_host_markers_accept_canonical_platform_hosts(provider: str, url: str) -> None:
@@ -307,11 +308,27 @@ def test_validate_skips_existing_universe() -> None:
 
 
 def test_validate_unsupported_ats_is_unresolved_layer2() -> None:
-    result = validate_candidate(_candidate(ats_type_guess="bamboohr"), set())
+    result = validate_candidate(_candidate(ats_type_guess="jazzhr"), set())
     assert result.outcome == "unresolved"
     assert result.ats_type is AtsType.UNKNOWN
     assert result.verification is Verification.LAYER2
-    assert "bamboohr" in (result.detail or "")
+    assert "jazzhr" in (result.detail or "")
+
+
+@respx.mock
+def test_validate_bamboohr_when_real_fetch_returns_postings() -> None:
+    payload = {
+        "meta": {"totalCount": 1},
+        "result": [{"id": "1", "jobOpeningName": "Engineer"}],
+    }
+    route = respx.get("https://newco.bamboohr.com/careers/list").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    result = validate_candidate(_candidate(ats_type_guess="bamboohr"), set())
+    assert route.called
+    assert result.outcome == "fetchable"
+    assert result.ats_type is AtsType.BAMBOOHR
+    assert result.verification is Verification.DETECTED
 
 
 @respx.mock

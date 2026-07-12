@@ -13,13 +13,15 @@ from vja.models import AtsType, Employer
 # ATSs whose endpoint is derived from the slug alone (GH/Lever/Ashby verified live
 # 2026-06-11; Workable's embed-widget API + SmartRecruiters' public postings API verified
 # live 2026-06-24 — Workable's `?details=true` is required for the inline description;
-# SmartRecruiters' limit/offset are added per-page by the fetcher, so the template is bare).
+# SmartRecruiters' limit/offset are added per-page by the fetcher, so the template is bare;
+# BambooHR's public careers API is slug-derived and single-response).
 _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.GREENHOUSE: "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     AtsType.LEVER: "https://api.lever.co/v0/postings/{slug}?mode=json",
     AtsType.ASHBY: "https://api.ashbyhq.com/posting-api/job-board/{slug}",
     AtsType.WORKABLE: "https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true",
     AtsType.SMARTRECRUITERS: "https://api.smartrecruiters.com/v1/companies/{slug}/postings",
+    AtsType.BAMBOOHR: "https://{slug}.bamboohr.com/careers/list",
 }
 
 

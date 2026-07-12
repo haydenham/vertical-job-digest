@@ -140,7 +140,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   +1 (Vitol) → **41→42**. **Oracle HCM/ORC ✅** (D-051) — via the Candidate-Experience REST API
   (explicit per-tenant endpoint; list-only + lazy detail); +1 (Southern Company) → **42→43** (Honeywell +
   Con Edison hosts not found → Layer 2, onboard config-only when curated). The list-only ATSs' lazy detail
-  is now routed by a per-ATS `extract._DETAIL_RESOLVERS` map (Workday/SmartRecruiters/Oracle/Radancy).
+  is now routed by a per-ATS `extract._DETAIL_RESOLVERS` map
+  (Workday/SmartRecruiters/Oracle/Radancy/Paylocity/Phenom/BambooHR).
   **Radancy/TalentBrew ✅** (D-052) — a Step-0 probe found the `custom`/`layer2` tail is mostly JS/bot-blocked,
   so the literal "LLM-read-the-page" step has near-zero reach; **decision: probe the multi-tenant platforms
   (Phenom, Radancy) for a clean API first** (the iCIMS lesson), deferring the generic LLM-read to the genuinely
@@ -149,7 +150,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   `external_id` = the `/job/{slug}/{id}` path (Workday parity); +1 (NextEra) → **43→44** (NRG/National Grid/
   L3Harris parked `proposed` until their search base verifies). **SWA + Thales Workday config onboards ✅**
   (D-076; live-verified 2026-07-11; discovery-expanded production coverage **64 → 66**). **Next:**
-  **Paylocity ✅** (D-076/D-077) → **Phenom + United ✅** (D-076; config-driven) → BambooHR →
+  **Paylocity ✅** (D-076/D-077) → **Phenom + United ✅** (D-076; config-driven) → **BambooHR ✅** →
   JazzHR probe/singletons, then the Layer-2 LLM-read tail for what truly has no platform (demand ledger:
   `docs/07`).
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
@@ -182,7 +183,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   UI rework · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
   (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
-  Phenom/United ✅ → BambooHR). Runs with the private beta users
+  Phenom/United ✅ → BambooHR ✅). Runs with the private beta users
   giving feedback.
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search

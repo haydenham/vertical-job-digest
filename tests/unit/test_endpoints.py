@@ -45,6 +45,11 @@ def test_smartrecruiters_url_is_derived_from_slug() -> None:
     assert url == "https://api.smartrecruiters.com/v1/companies/Vitol/postings"
 
 
+def test_bamboohr_url_is_derived_from_slug() -> None:
+    url = build_endpoint(_employer(AtsType.BAMBOOHR, slug="gridbeyond"))
+    assert url == "https://gridbeyond.bamboohr.com/careers/list"
+
+
 def test_derived_ats_without_slug_raises() -> None:
     with pytest.raises(ValueError, match="no ats_slug"):
         build_endpoint(_employer(AtsType.GREENHOUSE, slug=None))

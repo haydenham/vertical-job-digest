@@ -135,6 +135,7 @@ def test_source_text_fetches_detail_for_workday() -> None:
         AtsType.RADANCY,
         AtsType.PAYLOCITY,
         AtsType.PHENOM,
+        AtsType.BAMBOOHR,
     ],
 )
 def test_source_text_fetches_detail_for_list_only_ats(ats: AtsType) -> None:
