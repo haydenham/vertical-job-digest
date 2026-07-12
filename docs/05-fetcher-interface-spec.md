@@ -70,6 +70,16 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
   `updated_at = PublishedDate`, `apply_url = /Recruiting/jobs/Apply/{JobId}`.
 - Descriptions are lazy-fetched from `/Recruiting/jobs/Details/{JobId}` for in-scope survivors.
 
+### Phenom — `ats_type: phenom`
+- **Endpoint config:** explicit tenant base plus query options, e.g.
+  `https://careers.example.com?lang=en_us&country=us`; both values are required and enter request bodies.
+- **List:** `POST {base}/widgets` with `ddoKey=refineSearch`, paginated by `from`/`size` against `totalHits`.
+  A short result, changing total, malformed envelope, or page failure raises `FetchError`.
+- **Mapping:** `external_id = jobId`, `title`, `apply_url = applyUrl`, `location`,
+  `updated_at = postedDate`; list descriptions are absent.
+- **Detail:** the same endpoint with `ddoKey=jobDetail` and `jobSeqNo=<jobId>` returns the full job object
+  lazily for in-scope survivors. The public API accepts the stable `jobId` directly.
+
 ### Raw HTML — `ats_type: raw_html`  *(Layer 2 fallback, not Layer 1)*
 - Universal fallback: fetch the rendered careers page text and LLM-read it. Belongs to Layer 2; listed here for completeness.
 - For these, `external_id` is synthesized from a stable content signature (since there's no ATS id) — documented in the L2 spec when it's built.
@@ -85,8 +95,9 @@ lever      → https://api.lever.co/v0/postings/{slug}?mode=json
 ashby      → https://api.ashbyhq.com/posting-api/job-board/{slug}
 workday    → use the hand-set `endpoint` column (per-company)
 paylocity  → use the hand-set `endpoint` column (per-company UUID/name path)
+phenom     → use the hand-set tenant base + required `lang`/`country` query
 ```
-The `endpoint` column is authoritative for Workday and Paylocity; the original three are slug-derived.
+The `endpoint` column is authoritative for Workday, Paylocity, and Phenom; the original three are slug-derived.
 
 ## Politeness & health (policy, not etiquette — D & Memo 02 §8)
 - Identifiable `User-Agent`, conservative rate limiting, one fetch per endpoint per day total (D-005).

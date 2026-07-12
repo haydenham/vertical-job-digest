@@ -27,7 +27,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 | **UKG/UltiPro** | 1 | recruiting API | detected | **C** |
 | **Eightfold** | 1 | JSON API | detected | **C** |
 | **Radancy/TalentBrew** | 3 | server-rendered `/search-jobs/results` HTML | 1 verified (built, D-052); 2 parked (endpoint not yet confirmed) | **C** |
-| **Phenom** | 0 grid (aviation portals; SWA/Thales turned out Workday-under, United is the real need) | JS shell + `/widgets/` JSON API (probed live, D-076) | planned | **C** |
+| **Phenom** | 0 grid / 1 aviation (United; SWA/Thales are Workday-under) | `/widgets` JSON API | built + United verified (D-076) | **C** |
 | **Paylocity** | 0 seed (4 discovery proposals) | embedded `window.pageData` JSON | built (D-076/D-077); activation pending deploy | **B** |
 | **Custom** | 14 | no API | layer2 | **D** |
 
@@ -42,7 +42,7 @@ returned jobs/valid API), `detected` (platform known, endpoint not yet live-conf
 - **The next builds are demand-ranked (D-076)** — the discovery agent is now a second demand signal alongside the
   seed universe; see the discovery-demand ledger below. **SWA/Thales Workday config onboards are done** (both
   live-verified 2026-07-11), taking the discovery-expanded production baseline **64 → 66 fetchable**. Remaining
-  order: **Paylocity built** → Phenom (United) → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
+  order: **Paylocity + Phenom built** → BambooHR → JazzHR probe/singletons (defer auth-gated SuccessFactors).
 - **Tier D → Layer 2 LLM-read**, exactly as the architecture intends — but it's now the *genuinely-custom* remainder
   (the platform-probe pass D-052 pulled Radancy/Phenom out of Tier D into platform fetchers; the literal LLM-read had
   near-zero reach on those JS portals). No per-company scrapers — the LLM-read fallback handles the rest generically.
@@ -112,12 +112,13 @@ Day-2 "coverage ledger" first edition, docs/15).*
    `recruiting.paylocity.com` already maps. (Note: `/recruiting/v2/api/feed/jobs/{uuid}` exists and
    200s but returns 0 jobs — it is NOT the data path.) Registry + lazy-detail routing are wired;
    D-077 adds validate-before-write `vja-review set-ats`, provider filtering, and parked re-approval.
-   Production coverage remains 66 until waiting proposals are corrected and approved after deploy.
-10. **Phenom** (United — the one real Phenom need; Taleo underneath, no clean API there) —
-    `POST {base}/widgets` with `ddoKey=refineSearch` is live (United 155 jobs at probe): paginate
+   Production coverage rises only as waiting proposals are corrected and approved after deploy.
+10. **Phenom ✅** (United — the one real Phenom need; Taleo underneath) —
+    `POST {base}/widgets` with `ddoKey=refineSearch` is live (United 147 jobs at build): paginate
     `from`/`size` against `totalHits` (**paginate-or-fail**, Workday parity); `external_id = jobId`;
     inline `applyUrl` + `postedDate` + location; full description via `ddoKey=jobDetail` (lazy
-    `fetch_detail`). Endpoint explicit per-tenant base; body carries per-tenant `lang`/`country`.
+    `fetch_detail`, confirmed to accept `jobId` directly). Endpoint is the explicit tenant base with
+    required `lang`/`country` query values; no tenant values live in code. United onboarded config-only.
 11. **BambooHR** — `GET {slug}.bamboohr.com/careers/list` clean single-response JSON (GridBeyond live
     at probe, 2 openings); slug-derived endpoint (`endpoints.py` `_DERIVED_TEMPLATES`);
     single-response guard; `external_id = id`; detail at `/careers/{id}/detail`. Unlocks the parked
@@ -133,6 +134,8 @@ Day-2 "coverage ledger" first edition, docs/15).*
 - **Greenhouse/Lever/Ashby/Workable/SmartRecruiters:** `ats_slug` = the slug; `endpoint` derived from it.
 - **Workday:** `ats_slug` = `tenant:dc:site` (e.g. `aes:wd1:AES_US`); `endpoint` = full `cxs` jobs URL.
   Fetch = `POST {endpoint}` with body `{"limit":20,"offset":0,"appliedFacets":{},"searchText":""}`, paginate by `offset`.
+- **Phenom:** explicit tenant base in `endpoint` with required query config, e.g.
+  `https://careers.united.com?lang=en_us&country=us`; the fetcher strips the query and posts to `/widgets`.
 - **iCIMS/Oracle/Radancy (explicit per-tenant):** `endpoint` holds the per-tenant base (iCIMS Jibe
   `/api/jobs`; Oracle the CE `recruitingCEJobRequisitions` URL incl. `siteNumber`; Radancy the
   search base, e.g. `https://jobs.nexteraenergy.com`, to which the fetcher appends `/search-jobs/results`);

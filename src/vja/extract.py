@@ -38,6 +38,7 @@ from vja.db.postings import (
 )
 from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.paylocity import PaylocityFetcher
+from vja.fetchers.phenom import PhenomFetcher
 from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
@@ -88,6 +89,7 @@ _DETAIL_RESOLVERS: dict[AtsType, DetailResolver] = {
     AtsType.ORACLE_HCM: OracleFetcher().fetch_detail,
     AtsType.RADANCY: RadancyFetcher().fetch_detail,
     AtsType.PAYLOCITY: PaylocityFetcher().fetch_detail,
+    AtsType.PHENOM: PhenomFetcher().fetch_detail,
 }
 
 
