@@ -1,0 +1,18 @@
+{
+  "jobDetail": {
+    "status": 200,
+    "hits": 1,
+    "totalHits": 1,
+    "data": {
+      "job": {
+        "jobId": "ORD00003607",
+        "jobSeqNo": "UAIUADUSORD00003607EXTERNALENUSTALEO",
+        "title": "Supervisor - Catering Operations & Logistics",
+        "description": "<p>Lead a dynamic team overseeing catering kitchen operations and logistics.</p>",
+        "qualifications": "<p>Leadership experience and food-safety knowledge required.</p>",
+        "applyUrl": "https://ual-pro.taleo.net/careersection/10400/jobdetail.ftl?job=ORD00003607",
+        "location": "Chicago, Illinois, United States"
+      }
+    }
+  }
+}

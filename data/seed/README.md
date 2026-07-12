@@ -31,7 +31,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
 | `key_cities` | Hayden | free text | US hubs; useful for the location pre-filter |
 | `role_tilt` | Hayden | free text | tech flavor / what kind of roles to expect |
-| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
+| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
 | `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). For Workday: `tenant:dc:site` (e.g. `aes:wd1:AES_US`). Empty for portal-detected/custom rows. |
 | `careers_url` | Claude | URL | the company's job board / careers page ("the job domain"). Required for `workday`/`raw_html`. |
 | `endpoint` | derived | URL | constructed for slug-derived ATSs; explicit for Workday, Paylocity, and other per-tenant platforms. |
@@ -41,7 +41,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `notes` | optional | free text | anything useful (parent company, ATS quirks, why included). |
 
 For Greenhouse/Lever/Ashby/Workable the fetcher **constructs** the endpoint from `ats_type` + `ats_slug`.
-For Workday and Paylocity, `endpoint` holds the full per-tenant URL. Portal-detected and custom rows carry `careers_url`.
+For Workday, Paylocity, and Phenom, `endpoint` holds the per-tenant URL/config. Portal-detected and custom rows carry `careers_url`.
 
 ## Current seed status (grid/power vertical, 54 employers)
 After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8
@@ -62,15 +62,15 @@ iCIMS/Workable/SmartRecruiters/Oracle/Radancy onboards:
 The Week-4 "vertical = config" add (D-002/D-004). Curated across all aviation sub-domains (airlines ·
 avionics · OEM/manufacturers · GDS/airline-IT · flight-data/analytics · ATM/infrastructure ·
 eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass as grid:
-- **13 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
+- **14 verified** (live endpoint, fetchable today): Greenhouse (2 — OAG, FLYR), Lever (1 — Shield AI),
   Ashby (1 — Beacon AI), Workday (7 — Boeing, Airbus, Wisk Aero, **Sabre, Amadeus — Phase 8**, plus
   **Southwest and Thales — D-076**),
-  **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**.
+  **iCIMS/Jibe (2 — Garmin, SITA — Phase 8)**, **Phenom (1 — United, D-076)**.
 - **2 detected** (platform known, no fetchable endpoint yet): SuccessFactors (JetBlue), **L3Harris
   (Radancy parked — generic fetcher exists but its search base 301-redirects; onboard config-only
   once verified, D-052)**.
-- **21 layer2** (no clean API → LLM-read): the remaining Phenom portal (United)
-  + custom/JS-rendered sites (the flight-data, ATM, and remaining OEM/airline tail). Includes
+- **20 layer2** (no clean API → LLM-read): custom/JS-rendered sites in the flight-data, ATM, and
+  remaining OEM/airline tail. Includes
   Collins/RTX (whole-conglomerate Workday board exceeds the ~4000 offset cap → Layer 2, D-046),
   **Alaska** (iCIMS *legacy* portal, no clean Jibe `/api/jobs`), **Joby** (no Jibe API; ATS unconfirmed —
   re-probe), **Honeywell** (Oracle ORC, but its vanity domain proxies the REST API 302→404 — curate

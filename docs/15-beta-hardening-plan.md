@@ -118,8 +118,8 @@ probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger"
    status untouched) + `list --provider` + the parked-re-approve bugfix (regression test first, D-021) —
    needed the moment this fetcher lands to activate its waiting proposals *and* to fix the proposals the
    agent misresolved (real Greenhouse companies parked `unknown`). Runbook: docs/14.
-3. **Phenom fetcher** — United (flagship aviation employer; Taleo underneath, no clean API there):
-   `/widgets` refineSearch, paginate-or-fail on `totalHits` + `jobDetail` lazy detail (`docs/07` step 10).
+3. **Phenom fetcher ✅** — United (flagship aviation employer; Taleo underneath): `/widgets`
+   refineSearch, paginate-or-fail on `totalHits` + `jobDetail` lazy detail; United live-verified and onboarded.
 4. **BambooHR fetcher** — trivial single-response JSON; unlocks the parked GridBeyond proposal + the
    startup-heavy discovery tail (`docs/07` step 11).
 5. **JazzHR probe → singletons** as time allows (`docs/07` step 12).

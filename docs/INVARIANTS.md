@@ -228,9 +228,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Coverage / fetchers
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
-  SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy done**) → **demand-ranked next (D-076):
-  Phenom (United) → BambooHR →
-  JazzHR probe/singletons** → Layer-2 LLM-read for the custom tail + HN/niche. The discovery-demand
+  SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy + Phenom done**) →
+  **demand-ranked next (D-076): BambooHR → JazzHR probe/singletons** → Layer-2 LLM-read for the
+  custom tail + HN/niche. The discovery-demand
   ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
   reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
@@ -269,10 +269,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   set.** Explicit per-tenant UUID/name endpoint; single-response false-closure guard; `external_id = JobId`;
   `apply_url` constructed as `/Recruiting/jobs/Apply/{JobId}`; description lazily fetched from the public detail
   page. The empty v2 feed is not a data path. (D-076)
-- **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`** (Workday +
-  SmartRecruiters + Oracle + Radancy + Paylocity) — fetched only for in-scope survivors (cost discipline); every other ATS carries
-  the description in `raw_payload`. Adding a list-only ATS is a one-line map entry, no per-company branching. (D-050,
-  D-051, D-052)
+- **Phenom fetcher targets the public `POST {tenant}/widgets` API.** Explicit tenant base with required
+  `lang`/`country` query config; `refineSearch` paginates by `from`/`size` and must exactly reach stable
+  `totalHits`; `external_id = jobId`; inline apply/location/date; `jobDetail` accepts that stable id and lazily
+  returns the full job. No tenant values live in code. (D-076)
+- **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`**
+  (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom) — fetched only for in-scope
+  survivors (cost discipline); every other ATS carries the description in `raw_payload`. Adding a
+  list-only ATS is a one-line map entry, no per-company branching. (D-050, D-051, D-052, D-076)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
   Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)
 

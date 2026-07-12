@@ -1,0 +1,33 @@
+{
+  "refineSearch": {
+    "status": 200,
+    "hits": 2,
+    "totalHits": 147,
+    "data": {
+      "jobs": [
+        {
+          "jobId": "ORD00003607",
+          "jobSeqNo": "UAIUADUSORD00003607EXTERNALENUSTALEO",
+          "title": "Supervisor - Catering Operations & Logistics",
+          "applyUrl": "https://ual-pro.taleo.net/careersection/10400/jobdetail.ftl?job=ORD00003607",
+          "location": "Chicago, Illinois, United States",
+          "cityStateCountry": "Chicago, Illinois, United States",
+          "postedDate": "2026-07-09T21:39:30.000+0000",
+          "category": "Corporate",
+          "descriptionTeaser": "Lead catering operations and logistics."
+        },
+        {
+          "jobId": "GGN00002241",
+          "jobSeqNo": "UAIUADUSGGN00002241EXTERNALENUSTALEO",
+          "title": "Senior Developer - Information Technology",
+          "applyUrl": "https://ual-pro.taleo.net/careersection/10400/jobdetail.ftl?job=GGN00002241",
+          "location": "Gurugram, Haryana, India",
+          "cityStateCountry": "Gurugram, Haryana, India",
+          "postedDate": "2026-06-23T10:24:51.000+0000",
+          "category": "Digital Technology",
+          "descriptionTeaser": "Guide software projects from inception to delivery."
+        }
+      ]
+    }
+  }
+}

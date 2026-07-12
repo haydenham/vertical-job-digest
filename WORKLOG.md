@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-11 — Generic Phenom fetcher + United onboarded (D-076 block 3)
+
+**Live contract first:** United's public page exposes `widgetApiEndpoint=https://careers.united.com/widgets`,
+`locale=en_us`, and `country=us`. Verified minimal generic `refineSearch` and `jobDetail` POST bodies; current
+list total = 147. Crucially, `jobDetail.jobSeqNo` accepts the stable list `jobId` directly, preserving D-076's
+identity contract and the existing `(employer, external_id)` lazy-detail interface.
+
+**Built:** one generic `PhenomFetcher`: explicit tenant base with required `lang`/`country` query config;
+`refineSearch` pagination by `from`/`size`; stable-`totalHits` paginate-or-fail guard; `jobId` mapping with inline
+apply/location/date; lazy full `jobDetail`. Registry + extraction routing wired. United moved config-only from
+`custom/layer2` to `phenom/verified`; curated-seed fetchable coverage 46→47 (aviation 13→14). No tenant values or
+vertical/company branches entered code.
+
+**Tests:** captured sanitized United list/detail fixtures; pagination assembly, empty board, short fetch, changing
+total, malformed envelopes, HTTP/non-JSON failures, required query config, required mapping fields, and stable-id
+detail lookup. Opt-in United live smoke passed both full list + detail. No Alembic migration: `phenom` fits the
+existing application-validated `VARCHAR(15)`; no-drift check passes.
+
+**Verified:** full offline suite (**455 passed**, 18 opt-in deselected); Phenom live smoke (1 passed); ruff
+format/check; mypy (49 source files); import-linter (1 kept / 0 broken); `uv lock --check`; `git diff --check`;
+human-read scoped diff. Docs: data model/fetcher specs, INVARIANTS, docs/07 + docs/15 roadmaps, seed README, and
+CLAUDE updated. No new ADR (implements D-076 and the accepted endpoint-query plan). **Next:** Hayden
+reviews/commits; after deploy, import the seed into Neon to activate United (+1 live), then BambooHR.
+
+---
+
 ## 2026-07-11 — Paylocity fetcher + D-077 correction/activation tooling built
 
 **Fetcher:** added generic explicit-endpoint Paylocity support over the server-rendered

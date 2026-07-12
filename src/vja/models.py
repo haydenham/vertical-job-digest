@@ -29,6 +29,7 @@ class AtsType(StrEnum):
     ORACLE_HCM = "oracle_hcm"
     SMARTRECRUITERS = "smartrecruiters"
     PAYLOCITY = "paylocity"
+    PHENOM = "phenom"
     JOBVITE = "jobvite"
     SUCCESSFACTORS = "successfactors"
     AVATURE = "avature"

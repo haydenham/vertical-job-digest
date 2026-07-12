@@ -128,7 +128,14 @@ def test_source_text_fetches_detail_for_workday() -> None:
 
 
 @pytest.mark.parametrize(
-    "ats", [AtsType.SMARTRECRUITERS, AtsType.ORACLE_HCM, AtsType.RADANCY, AtsType.PAYLOCITY]
+    "ats",
+    [
+        AtsType.SMARTRECRUITERS,
+        AtsType.ORACLE_HCM,
+        AtsType.RADANCY,
+        AtsType.PAYLOCITY,
+        AtsType.PHENOM,
+    ],
 )
 def test_source_text_fetches_detail_for_list_only_ats(ats: AtsType) -> None:
     # The list-only Tier-B/C ATSs (D-050/D-051/D-052) route to their lazy detail like Workday.
