@@ -215,8 +215,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   long tail. Getting IP-banned is a self-inflicted coverage hole.
 - Per-fetcher health checks with loud alerts; every pipeline run writes a
   summary record. A digest that fails to send is itself an alert.
-- API keys in env config, never in the repo. DB never publicly exposed. A git-ignored `.env` is
-  auto-loaded (python-dotenv); provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`,
+- API keys in env config, never in the repo. DB never publicly exposed. Application CLIs auto-load
+  a git-ignored `.env` (python-dotenv); **Alembic does not**, so migrations require an explicit
+  `VJA_DATABASE_URL` export (D-083). Provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
   (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
   **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's

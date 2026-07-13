@@ -83,6 +83,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   swap and later tables are born-on-Postgres-verified. **Every engine sets `pool_pre_ping=True`; the hosted
   PG path also sets `pool_recycle=1800`** so Neon's serverless autosuspend can't hand out a dead connection
   (`src/vja/db/engine.py`). (D-025, D-054, D-062)
+- **A production API revision cannot become ready with a known-behind schema.** The container sets
+  `VJA_ALEMBIC_INI=/app/alembic.ini`; FastAPI lifespan compares Neon's `alembic_version` with the
+  packaged migration head and fails startup when the DB revision is known and older. An unknown
+  revision is allowed with a warning so an older image can cold-start after an additive migration
+  during rollback. This is a backstop only: Neon migrations remain manual and pre-merge. (D-083,
+  D-068)
 - **Migrations run with SQLite foreign keys OFF** (`migrations/env.py`, set at connect; the app's runtime
   engine keeps them ON). A batch table-rebuild (SQLite's only way to add a FK to an existing table) drops +
   recreates the table, which trips any *referencing* table (`matches → profiles`) on a populated DB unless
@@ -103,7 +109,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **The dashboard is a Vite/React/TS SPA in `frontend/`** (user-facing brand **Rolefeed**; the codebase
   stays `vja`) consuming `GET /api/postings`. **`react-router-dom` routes**, all guarded off `useAuth()`
   (D-065): `/` (smart root: logged-out → `Landing`, no-profile → `/onboarding`, has-profile → `/dashboard`),
-  `/login`, `/onboarding` (pick vertical + upload), `/dashboard` (their vertical), `/upload` (résumé update,
+  `/login` (logged-out only; an existing session routes onward), `/onboarding` (pick vertical +
+  upload), `/dashboard` (their vertical), `/upload` (résumé update,
   vertical locked); `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
   is credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
@@ -112,12 +119,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
   mount gated on a real `index.html`, D-059/D-060). **One vertical per user (D-064):** the SPA routes each user
   to *their own* vertical via **`GET /api/me`** (`{user, profile|null}`), never a cross-user picker; the
-  dashboard never renders logged-out (killing the old 401-as-error leak). `GET /api/verticals` remains **only**
+  dashboard never renders logged-out (killing the old 401-as-error leak). **Only a 401 means
+  logged-out:** a non-401 `/api/me` failure renders a retryable account-load error, never Landing.
+  `GET /api/verticals` remains **only**
   the onboarding picker's source and is now **config-driven** (`available_verticals()`, joinable even with zero
   profiles — the B-4 fix), not active-profile-driven. **Prod ships as one multi-stage image** (`Dockerfile`; SPA
   built in a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**:
   `vja-api` (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042,
-  D-058, D-059, D-060, D-064, D-065)
+  D-058, D-059, D-060, D-064, D-065, D-083)
 - **Résumé upload is the SPA's only write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
   `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
@@ -209,8 +218,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **No auto-apply.** The tool surfaces and reasons; it never submits applications. (core)
 - **Politeness is policy:** rate limits, sane user agent, respect robots.txt on the long
   tail. Getting IP-banned is a self-inflicted coverage hole. (core)
-- **API keys in env only, never in the repo; DB never publicly exposed.** A git-ignored
-  `.env` is auto-loaded. (core)
+- **API keys in env only, never in the repo; DB never publicly exposed.** Application CLIs
+  auto-load a git-ignored `.env`; **Alembic does not** and defaults to local SQLite unless
+  `VJA_DATABASE_URL` is explicitly exported. Production migrations must export the Secret Manager
+  Neon URL before running. (core, D-083)
 
 ## Testing & workflow
 
@@ -228,8 +239,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   **keyless Workload Identity Federation** (no SA key in the repo; `GCP_WIF_PROVIDER`/`GCP_DEPLOY_SA` are repo
   *variables*), then execs **`ship.sh --force`** — one code path, so the guards-preserved prod config never
   drifts into YAML. CD sets `ROLLBACK_ON_SMOKE_FAIL=1` (auto-roll traffic to the prior revision on a failed
-  smoke). **Migrations stay manual:** CD deploys code only — run `alembic upgrade head` on Neon *before* merging
-  a schema-changing PR. `ship.sh` is still the manual break-glass. (D-068, D-066, D-025)
+  smoke). **Migrations stay manual:** CD deploys code only — explicitly export Neon's
+  `VJA_DATABASE_URL`, then run `alembic current` → `alembic upgrade head` → `alembic current`
+  *before* merging a schema-changing PR. The D-083 startup guard prevents a known-behind schema
+  from taking traffic but does not migrate it. `ship.sh` is still the manual break-glass. (D-068,
+  D-066, D-025, D-083)
 - **Frontend gate = eslint + `tsc --noEmit` + vitest** (Vitest + React Testing Library), run
   in the inner loop and path-filtered (pre-commit hook + a CI `frontend` job). The dashboard's
   own behavior is pinned here; the B1 API contract stays pinned by the Python API tests. (D-042)

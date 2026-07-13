@@ -71,11 +71,11 @@ export interface Me {
 }
 
 // `POST /api/profiles` success body (mirrors `ProfileCreated` in `app.py`). The backfill it
-// triggers runs in the background — there's no status to poll (D-057), hence the optimistic UX.
+// triggers runs in the background; `/api/me.profile.backfill_status` reports its progress (D-082).
 export interface ProfileCreated {
   profile_id: number;
   vertical: string;
-  resume_version: number;
+  resume_version: string;
 }
 
 // Carries the HTTP status so callers (the upload form) can branch on 401/413/422/429.

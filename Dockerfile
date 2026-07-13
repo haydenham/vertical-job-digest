@@ -48,7 +48,8 @@ COPY data/seed ./data/seed
 
 # The built SPA, served same-origin by FastAPI via the explicit dist path.
 COPY --from=web /web/frontend/dist ./frontend/dist
-ENV VJA_FRONTEND_DIST=/app/frontend/dist
+ENV VJA_FRONTEND_DIST=/app/frontend/dist \
+    VJA_ALEMBIC_INI=/app/alembic.ini
 # The non-editable install moves vja into site-packages, so the code's repo-relative default for the
 # vertical configs (`parents[2]`) misses; point it at the copied config dir (nightly Layer-2 reads it).
 ENV VJA_VERTICALS_DIR=/app/config/verticals

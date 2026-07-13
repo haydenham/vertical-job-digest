@@ -79,6 +79,10 @@ and `vja-digest [--vertical V]` (build→verify→render→send). Config comes f
 | `VJA_DIGEST_FROM` | sender; defaults to the Resend sandbox `onboarding@resend.dev` (set a verified domain to send anywhere) |
 | `VJA_DATABASE_URL` | DB URL; defaults to local SQLite `sqlite:///data/vja.db` |
 
+Application commands load `.env`; Alembic intentionally does not. For migrations, export
+`VJA_DATABASE_URL` explicitly (production sequence: `deploy/gcp/README.md`) or a bare
+`uv run alembic upgrade head` will target the default local SQLite database.
+
 An empty digest (nothing new or closed) sends no email by design (D-028).
 
 ## Build sequence (phases)

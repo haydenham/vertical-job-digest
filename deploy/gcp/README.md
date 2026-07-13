@@ -275,9 +275,21 @@ credential to hide. The Secret Manager mounts are unchanged; `ship.sh` still ref
   build, roll the service + `vja-nightly`, and smoke green (`/api/health` ok + anon 401). Then a real merge
   to `main` proves the push path.
 - **Schema-changing PRs — migrate first.** CD deploys **code only**; migrations stay manual (D-025/D-068).
-  If a PR changes the schema, run `alembic upgrade head` against Neon **before merging**, or the auto-deploy
-  ships code ahead of its schema. (A one-click `workflow_dispatch` migration workflow is a possible future
-  convenience — not built here.)
+  Alembic does **not** load `.env`; a bare command targets the default local SQLite DB. Use the
+  explicit production sequence **before merging** (D-083):
+
+  ```bash
+  export VJA_DATABASE_URL="$(gcloud secrets versions access latest \
+    --secret VJA_DATABASE_URL --project role-feed-prod)"
+  uv run alembic current
+  uv run alembic upgrade head
+  uv run alembic current
+  unset VJA_DATABASE_URL
+  ```
+
+  The production image's startup guard refuses readiness when Neon is at a known older revision,
+  leaving the prior Cloud Run revision serving; it does not replace the manual migration. (A
+  one-click `workflow_dispatch` migration workflow remains a possible future convenience.)
 - **Rollback:** the deploy auto-rolls back on a failed smoke; for a bad revision that *passed* smoke, the
   rollback command is printed in the job log (`gcloud run services update-traffic rolefeed …`), or run
   `ship.sh` locally.
