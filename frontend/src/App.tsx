@@ -58,24 +58,25 @@ export default function App() {
     <div className="app">
       <header className="header">
         <Link to="/" className="wordmark">
-          <span className="prompt">$</span> rolefeed<span className="cursor">▮</span>
+          <span className="mark" aria-hidden="true" />
+          Rolefeed
         </Link>
         <nav className="nav">
           {loading ? null : user ? (
             <>
               {profile && (
                 <Link to="/upload" className="nav-link">
-                  update résumé
+                  Update résumé
                 </Link>
               )}
               <span className="nav-user">{user.email}</span>
               <button type="button" className="nav-link as-button" onClick={() => void logout()}>
-                sign out
+                Sign out
               </button>
             </>
           ) : (
             <Link to="/login" className="nav-link">
-              sign in
+              Sign in
             </Link>
           )}
         </nav>

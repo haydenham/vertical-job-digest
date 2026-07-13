@@ -1431,3 +1431,20 @@ navigation (offered, not selected), backend-assisted sorting. **Why:** the beta 
 broader invites, and copying a leader converts taste questions into execution questions; the separate
 foundation PR keeps the token swap reviewable and lets PRs 1–3 land on merged tokens. **Amends D-072's
 "one day" sizing for this item.** References D-072, D-042, D-064, D-065, D-067, D-068, D-021.
+
+### D-081 · UI rework PR 0 · Design language v2 tokens: Indigo · Inter (candidate A) · accepted · 2026-07-12
+The D-080 sign-off ran as designed: three candidate token sets were rendered **on the live dashboard with real
+data** (runtime style injection over the built SPA, Playwright + system Chrome against the local DB) and
+presented as a screenshot comparison next to the v1 baseline — A "Indigo · Inter" (the full Linear move),
+B "Amber · Geist" (brand-continuity accent), C "Violet · Space Grotesk" (keep type, move accent). **Hayden
+picked A.** The v2 language ("premium dark product", DESIGN.md rewritten): blue-tinted near-black ground
+(`#08090c`/`#0f1014`/`#16171d`), muted indigo accent `#6e79d6` (tint `#191b2e`/`#a5adf0`), softened success
+`#4cc38a`, borders `#24252d`; **Inter** carries all UI text (body letter-spacing −0.1px), **JetBrains Mono is
+reserved for true data** (scores, dates, tags, company cells, paths) — never buttons/nav/labels/prose; soft
+`--shadow-raised` on raised containers (borders stay primary); radius 10px + 6px chips. **Terminal motifs
+retired** in code, not just prose: the `$` prompt + blinking ▮ wordmark → a 9px indigo mark + "Rolefeed" in
+Inter 600; `//comment` notice prefixes and the `~/vertical` path chrome dropped (vertical renders as a tint
+chip); the footer's decorative `↵ open` hint (rows only respond to click) → honest "Click a row to expand".
+Google-Fonts import swaps Space Grotesk for Inter. Frontend-only; all 45 vitest + eslint + tsc green; v1's
+tokens survive nowhere (theme.css fully rewritten). **Why record the pick:** D-080 left accent + font open
+pending screenshots; this closes it so PRs 1–3 build on a decided, merged token set. References D-080, D-042.

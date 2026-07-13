@@ -85,7 +85,7 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         />
       </label>
 
-      {error && <div className="notice error">// {error}</div>}
+      {error && <div className="notice error">{error}</div>}
 
       <button className="btn btn-primary" type="submit" disabled={submitting || file === null}>
         {submitting ? "uploading…" : "upload résumé"}
