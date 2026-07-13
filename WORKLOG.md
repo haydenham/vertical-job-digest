@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — UI rework PR 2: login + onboarding polish built
+
+**PR 1 confirmed merged (#75) before starting; branch `feat/ui-auth`.** Decisions ran through Hayden
+first: **centered** auth-card layout (/login, /onboarding, /upload) · login card = mark + heading +
+**3 benefit lines** + Google CTA · vertical display copy = a frontend **slug→{name, blurb} map**
+(`verticalCopy.ts`, reusing the landing's vertical copy; `/api/verticals` returns slugs only and the
+API is frozen this block) with a prettified-slug fallback so a new vertical renders without a
+frontend release · **robotics pre-added** as `robotics_software`.
+
+**Landed (frontend-only):** `Login.tsx` → auth card, **stale "browse without signing in" copy
+deleted** (false since D-067) and pinned gone by a test. `Upload.tsx` → vertical choice as
+descriptive radio-cards (visually-hidden native radios), drag-and-drop résumé dropzone (native DnD,
+no new deps; selected-file state in mono), and guard-status error styling (friendly lead + server
+detail; 409/413/422/429); update mode shows the locked vertical as a static card (display name +
+mono slug). Two-mode logic, guards, and the D-057 success flow untouched (`App.tsx` not in the
+diff). `theme.css` gains a scoped auth-page block; the dead 9.4 select/file-input rules removed.
+
+**Verified:** eslint + `tsc -b --noEmit` + vitest **57/57** green (new: `verticalCopy` unit test,
+card-pick submit, dropzone drop, 409 lead); headless-Chrome before/after shots at 1440 + 720 against
+the served build on a scratch sqlite DB (sessions minted with a **throwaway** secret — the prod
+`VJA_SESSION_SECRET` was never read) — file-selected + mocked-409 states driven live; no horizontal
+overflow, no unexpected console errors. Docs: docs/16 PR-2 section ticked (no new ADR — D-080
+governs; no INVARIANTS change). **Next:** Hayden reviews/commits/opens the PR (shots on the artifact
+page); then PR 3 (dashboard rework) closes the block.
+
 ## 2026-07-13 — UI rework PR 1: Linear-style marketing landing built
 
 **PR 0 confirmed merged (#74) before starting; branch `feat/ui-landing`.** Copy decisions ran through
