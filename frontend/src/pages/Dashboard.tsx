@@ -71,13 +71,13 @@ export function Dashboard({ vertical }: { vertical: string }) {
       <div className="subbar">
         <Controls state={controls} onChange={setControls} />
         <span className="meta">
-          <span className="accent">~/{vertical}</span>
-          {data && ` · ${data.count} open`}
+          <span className="accent">{vertical}</span>
+          {data && `${data.count} open`}
         </span>
       </div>
 
       {error ? (
-        <div className="notice error">// {error}</div>
+        <div className="notice error">{error}</div>
       ) : loading ? (
         <div className="notice">loading…</div>
       ) : data && data.postings.length > 0 ? (
@@ -89,12 +89,10 @@ export function Dashboard({ vertical }: { vertical: string }) {
           matches update as they’re computed — full results after tonight’s run
         </div>
       ) : (
-        <div className="notice">// no postings match these filters</div>
+        <div className="notice">No postings match these filters</div>
       )}
 
-      <footer className="footer">
-        <span className="kbd">↵ open</span> to expand a row · read-only · updates nightly
-      </footer>
+      <footer className="footer">Click a row to expand · read-only · updates nightly</footer>
     </>
   );
 }

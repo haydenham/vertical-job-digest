@@ -5,6 +5,27 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-12 — UI rework PR 0: design language v2 landed (Indigo · Inter; D-081)
+
+**The D-080 screenshot sign-off ran first:** built the SPA, served it from the API against the **local**
+sqlite DB (`.env` points at Neon — every command carried a `VJA_DATABASE_URL` override), minted a signed
+session cookie with the server's own secret, and drove headless Chrome (playwright-core + system Chrome) to
+render three candidate token sets **on the live dashboard with real data** via runtime style injection:
+A Indigo·Inter / B Amber·Geist / C Violet·Space Grotesk, beside the v1 baseline. Published as a comparison
+artifact; **Hayden picked A**.
+
+**Landed (frontend-only):** `DESIGN.md` rewritten to v2 "premium dark product" (blue-tinted near-black,
+indigo `#6e79d6`, Inter for UI with JetBrains Mono reserved for true data, soft `--shadow-raised`, radius
+10/6, terminal motifs → don'ts). `theme.css` fully rewritten to the v2 tokens/type roles. Motifs retired in
+code: `App.tsx` wordmark `$ rolefeed▮` → indigo mark + "Rolefeed" (Inter 600) + sentence-case nav;
+`Dashboard.tsx` `//` notice prefixes dropped, `~/vertical` → tint chip, footer's decorative `↵ open` hint
+(rows only respond to click) → "Click a row to expand"; `Upload.tsx` error prefix dropped.
+
+**Verified:** eslint + `tsc -b --noEmit` + vitest **45/45** green; rebuilt and re-screenshotted
+dashboard/landing/login/upload on v2 — coherent, no console errors. Docs: D-081, docs/16 PR-0 section
+ticked. **Next:** Hayden reviews/commits/opens the PR-0 PR (before/after shots on the artifact page);
+then PR 1 (Linear-style marketing landing) on the merged tokens.
+
 ## 2026-07-12 — UI rework scoped: Linear reference, design language v2, 4-PR block (D-080, docs/16)
 
 **Planning-only session** for the docs/15 Day-1 item; every decision run through Hayden via questionnaire.

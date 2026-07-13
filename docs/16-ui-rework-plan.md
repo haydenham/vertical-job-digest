@@ -39,26 +39,23 @@ invent). Scope decisions were run through Hayden 2026-07-12 (D-080).
 
 ---
 
-## PR 0 — Design-language foundation
+## PR 0 — Design-language foundation ✅ (built 2026-07-12; D-081)
 
-- [ ] **Rewrite `DESIGN.md`** → v2 "premium dark product" language. Draft direction
-  (Linear-derived):
-  - *Palette:* keep the near-black base but soften — tuned surface steps, lower-contrast
-    borders, text set for long reading. **Accent up for replacement** (orange vs. a
-    Linear-style muted indigo/violet vs. other): present 2–3 candidate token sets as
-    screenshots on the real dashboard; Hayden picks before anything lands.
-  - *Depth:* borders stay primary, but soft shadow/glow on raised surfaces is allowed, plus one
-    restrained hero glow/gradient on the landing (a deliberate relaxation of v1's don'ts).
-  - *Type:* UI face up for replacement (Inter/Geist-class candidates); mono retreats to **true
-    data only** (scores, timestamps, tags); a real marketing type scale for the landing. Font
-    pick gets the same screenshot sign-off as the accent.
-  - *Motifs:* retire the `$` prompt, blinking ▮ cursor, and `//comment` error strings; a clean
-    wordmark treatment replaces the terminal styling.
-- [ ] **Rework `frontend/src/theme.css`** tokens + base styles to v2; restyle the `App.tsx`
-  shell/header. Every existing page must still render coherently on the new tokens (minor
-  class fixes allowed; no page rebuilds here — those are PRs 1–3).
-- **DoD:** gates green · before/after screenshots · DESIGN.md v2 committed · Hayden signed off
-  accent + font from the screenshot comparison.
+- [x] **Accent + font sign-off:** three candidates (A Indigo·Inter / B Amber·Geist /
+  C Violet·Space Grotesk) rendered on the live dashboard with real data and screenshot-compared
+  against baseline — **Hayden picked A: indigo `#6e79d6` · Inter**, JetBrains Mono retained for
+  data (D-081).
+- [x] **`DESIGN.md` rewritten** → v2 "premium dark product": blue-tinted near-black ground,
+  muted indigo accent, Inter UI + mono-for-true-data-only, soft `--shadow-raised` on raised
+  containers, radius 10/6; the retired terminal motifs moved to the don'ts. The landing-hero
+  glow allowance and marketing type scale carry forward to PR 1.
+- [x] **`frontend/src/theme.css` reworked** to the v2 tokens + type roles; shell restyled
+  (`App.tsx`: indigo mark + "Rolefeed" wordmark replaces `$`+▮; sentence-case nav) and motifs
+  retired in `Dashboard.tsx`/`Upload.tsx` (`//` prefixes dropped, `~/vertical` → tint chip,
+  footer's decorative `↵ open` hint → honest "Click a row to expand"). Every page renders
+  coherently on v2.
+- **DoD met:** eslint + tsc + vitest green (45/45) · candidate + after screenshots on the
+  comparison artifact · DESIGN.md v2 in the diff.
 
 ## PR 1 — Landing page (Linear-style marketing)
 
