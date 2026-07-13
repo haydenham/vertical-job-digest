@@ -108,4 +108,53 @@ describe("Dashboard", () => {
     await act(() => vi.advanceTimersByTimeAsync(150_000)); // exhaust the bounded poll
     expect(screen.getByText(/full results after tonight/i)).toBeInTheDocument();
   });
+
+  it("filter-as-you-type narrows rows client-side and shows X of N — no refetch", async () => {
+    const two = response({
+      count: 2,
+      postings: [
+        response().postings[0],
+        { ...response().postings[0], posting_id: 2, company: "FlightAware", title: "Ops Analyst" },
+      ],
+    });
+    mockPostings.mockResolvedValue(two);
+    renderDashboard();
+    await screen.findByText("Grid Engineer");
+    const calls = mockPostings.mock.calls.length;
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter postings" }), "flight");
+    expect(screen.getByText("Ops Analyst")).toBeInTheDocument();
+    expect(screen.queryByText("Grid Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    expect(mockPostings.mock.calls.length).toBe(calls);
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter postings" }), "zzz");
+    expect(screen.getByText(/no postings match “flightzzz”/i)).toBeInTheDocument();
+  });
+
+  it("row click opens the side panel; Esc closes it", async () => {
+    mockPostings.mockResolvedValue(
+      response({
+        postings: [
+          {
+            ...response().postings[0],
+            rationale: "Strong on dispatch optimization.",
+            fits: ["power markets"],
+            gaps: ["no SCADA"],
+          },
+        ],
+      }),
+    );
+    renderDashboard();
+    await screen.findByText("Grid Engineer");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("GridCo").closest(".row")!);
+    const panel = await screen.findByRole("dialog", { name: "Grid Engineer" });
+    expect(panel).toBeInTheDocument();
+    expect(screen.getByText("power markets")).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

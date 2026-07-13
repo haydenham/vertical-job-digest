@@ -3,7 +3,9 @@ import { useLocation } from "react-router-dom";
 
 import { fetchPostings, type PostingsResponse } from "../api";
 import { Controls, type ControlState } from "../components/Controls";
+import { PostingPanel } from "../components/PostingPanel";
 import { PostingsTable } from "../components/PostingsTable";
+import { DEFAULT_SORT, filterPostings, sortPostings, type SortState } from "../postingsView";
 
 const INITIAL: ControlState = {
   window: "all",
@@ -31,6 +33,12 @@ export function Dashboard({ vertical }: { vertical: string }) {
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [pollTimedOut, setPollTimedOut] = useState(false);
+
+  // Client-side presentation state (PR 3, D-080): the API returns the full filtered set
+  // server-sorted by freshness, so filter/sort never refetch.
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // Refetch on vertical / toggle change, and on each poll tick (reloadKey bump).
   useEffect(() => {
@@ -66,13 +74,27 @@ export function Dashboard({ vertical }: { vertical: string }) {
   const emptyMatchedAfterOnboard =
     justOnboarded && controls.view === "matched" && data !== null && data.count === 0;
 
+  const visible = data ? sortPostings(filterPostings(data.postings, query), sort) : [];
+  const filtering = query.trim() !== "";
+  // Selection survives refetches only while the posting is still present — a poll/toggle that
+  // drops it closes the panel naturally via this lookup.
+  const selected = data?.postings.find((p) => p.posting_id === selectedId) ?? null;
+
   return (
     <>
       <div className="subbar">
         <Controls state={controls} onChange={setControls} />
+        <input
+          type="search"
+          className="filter-input"
+          placeholder="Filter by company, title, location…"
+          aria-label="Filter postings"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <span className="meta">
           <span className="accent">{vertical}</span>
-          {data && `${data.count} open`}
+          {data && (filtering ? `${visible.length} of ${data.count}` : `${data.count} open`)}
         </span>
       </div>
 
@@ -80,8 +102,16 @@ export function Dashboard({ vertical }: { vertical: string }) {
         <div className="notice error">{error}</div>
       ) : loading ? (
         <div className="notice">loading…</div>
+      ) : visible.length > 0 ? (
+        <PostingsTable
+          postings={visible}
+          sort={sort}
+          onSort={setSort}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
       ) : data && data.postings.length > 0 ? (
-        <PostingsTable postings={data.postings} />
+        <div className="notice">No postings match “{query.trim()}”</div>
       ) : awaitingMatches ? (
         <div className="notice">finding your matches… (this updates as they’re computed)</div>
       ) : emptyMatchedAfterOnboard ? (
@@ -92,7 +122,9 @@ export function Dashboard({ vertical }: { vertical: string }) {
         <div className="notice">No postings match these filters</div>
       )}
 
-      <footer className="footer">Click a row to expand · read-only · updates nightly</footer>
+      {selected && <PostingPanel p={selected} onClose={() => setSelectedId(null)} />}
+
+      <footer className="footer">Click a row for details · read-only · updates nightly</footer>
     </>
   );
 }

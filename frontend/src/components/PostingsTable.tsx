@@ -1,84 +1,92 @@
-import { useState } from "react";
-
 import type { PostingRow } from "../api";
+import { NATURAL_DIR, activityIso, type SortKey, type SortState } from "../postingsView";
 import { MatchCell } from "./Verdict";
 
-// Activity date = the ATS posted/updated date if known, else when we first saw it (mirrors the
-// API's COALESCE(source_updated_at, first_seen_at) — D-024/D-030). Shown as a short UTC date.
+// Activity date shown as a short UTC-ish date (see postingsView.activityIso — D-024/D-030).
 function activityDate(p: PostingRow): string {
-  const iso = p.source_updated_at ?? p.first_seen_at;
-  return new Date(iso).toLocaleDateString("en-CA"); // YYYY-MM-DD
+  return new Date(activityIso(p)).toLocaleDateString("en-CA"); // YYYY-MM-DD
 }
 
-function DetailPanel({ p }: { p: PostingRow }) {
+const COLUMNS: { key: SortKey; label: string; right?: boolean }[] = [
+  { key: "company", label: "company" },
+  { key: "title", label: "title" },
+  { key: "location", label: "location" },
+  { key: "activity", label: "activity" },
+  { key: "score", label: "match", right: true },
+];
+
+function Row({
+  p,
+  selected,
+  onSelect,
+}: {
+  p: PostingRow;
+  selected: boolean;
+  onSelect: (id: number) => void;
+}) {
+  const rejected = p.verdict === "no";
+  const spine = p.verdict ? ` v-${p.verdict}` : "";
   return (
-    <div className="detail">
-      {p.rationale && <div className="rationale">{p.rationale}</div>}
-      {(p.fits?.length || p.gaps?.length) && (
-        <div className="fits-gaps">
-          <div className="fits">
-            <span className="label">fits</span>
-            <ul>{(p.fits ?? []).map((f, i) => <li key={i}>{f}</li>)}</ul>
-          </div>
-          <div className="gaps">
-            <span className="label">gaps</span>
-            <ul>{(p.gaps ?? []).map((g, i) => <li key={i}>{g}</li>)}</ul>
-          </div>
-        </div>
-      )}
-      {p.apply_url && (
-        <a className="apply" href={p.apply_url} target="_blank" rel="noreferrer">
-          apply ↗
-        </a>
-      )}
+    <div
+      className={`row${spine}${selected ? " selected" : ""}${rejected ? " rejected" : ""}`}
+      onClick={() => onSelect(p.posting_id)}
+      role="button"
+      aria-expanded={selected}
+    >
+      <span className="cell-company">{p.company}</span>
+      <span className="cell-title">
+        {p.apply_url ? (
+          <a href={p.apply_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+            {p.title ?? "(untitled)"}
+          </a>
+        ) : (
+          (p.title ?? "(untitled)")
+        )}
+        {p.rationale && <span className="cell-snippet">{p.rationale}</span>}
+      </span>
+      <span className="cell-location">{p.location ?? "—"}</span>
+      <span className="cell-date">{activityDate(p)}</span>
+      <MatchCell verdict={p.verdict} score={p.score} />
     </div>
   );
 }
 
-function Row({ p }: { p: PostingRow }) {
-  const [open, setOpen] = useState(false);
-  const rejected = p.verdict === "no";
-  return (
-    <>
-      <div
-        className={`row${open ? " expanded" : ""}${rejected ? " rejected" : ""}`}
-        onClick={() => setOpen((v) => !v)}
-        role="button"
-        aria-expanded={open}
-      >
-        <span className="cell-company">{p.company}</span>
-        <span className="cell-title">
-          {p.apply_url ? (
-            <a href={p.apply_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-              {p.title ?? "(untitled)"}
-            </a>
-          ) : (
-            (p.title ?? "(untitled)")
-          )}
-        </span>
-        <span className="cell-location">{p.location ?? "—"}</span>
-        <span className="cell-date">{activityDate(p)}</span>
-        <MatchCell verdict={p.verdict} score={p.score} />
-      </div>
-      {open && <DetailPanel p={p} />}
-    </>
-  );
-}
-
-export function PostingsTable({ postings }: { postings: PostingRow[] }) {
+// Controlled table (PR 3, D-080): sort + selection live in the Dashboard; rows carry the match
+// verdict at row level (spine + snippet) and a click opens the side panel, not an inline expand.
+export function PostingsTable({
+  postings,
+  sort,
+  onSort,
+  selectedId,
+  onSelect,
+}: {
+  postings: PostingRow[];
+  sort: SortState;
+  onSort: (next: SortState) => void;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  function headClick(key: SortKey) {
+    onSort(sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: NATURAL_DIR[key] });
+  }
   return (
     <div className="table">
       <div className="row head">
-        <span className="label">company</span>
-        <span className="label">title</span>
-        <span className="label">location</span>
-        <span className="label">activity</span>
-        <span className="label" style={{ textAlign: "right" }}>
-          match
-        </span>
+        {COLUMNS.map((c) => (
+          <span key={c.key} aria-sort={sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
+            <button
+              type="button"
+              className={`sort-btn${c.right ? " sort-right" : ""}${sort.key === c.key ? " active" : ""}`}
+              onClick={() => headClick(c.key)}
+            >
+              {c.label}
+              {sort.key === c.key && <span className="sort-arrow">{sort.dir === "asc" ? "▲" : "▼"}</span>}
+            </button>
+          </span>
+        ))}
       </div>
       {postings.map((p) => (
-        <Row key={p.posting_id} p={p} />
+        <Row key={p.posting_id} p={p} selected={p.posting_id === selectedId} onSelect={onSelect} />
       ))}
     </div>
   );

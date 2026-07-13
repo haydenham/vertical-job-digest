@@ -104,21 +104,37 @@ vertical still renders · **robotics pre-added** under slug `robotics_software` 
   horizontal overflow; interactive states — file-selected, 409 — driven in a real headless
   Chrome against the live API) · Login/Upload suites updated + new `verticalCopy` unit test.
 
-## PR 3 — Dashboard rework
+## PR 3 — Dashboard rework ✅ (built 2026-07-13)
 
-- [ ] **Row redesign:** verdict + score + a truncated one-line rationale snippet visible **in
-  the row** (today all match info is behind a click); title prominent; verdict-colored spine.
-- [ ] **Side-panel detail** (Linear-style): row click opens a right-hand panel — full
-  rationale, fits/gaps, location/date meta, apply CTA; Esc/click-away closes. Replaces the
-  inline row expansion.
-- [ ] **Sortable columns:** company / title / location / activity date / match score with
-  direction toggle, client-side; default stays freshness-desc (today's server order).
-- [ ] **Text search/filter:** filter-as-you-type over company/title/location, client-side.
-- [ ] Controls/subbar restyle on v2 tokens; redesigned loading/empty/error states.
-- Untouched behavior: window/view → API param mapping (`postingsPath`), the D-057 backfill
-  poll, D-064/D-065 routing.
-- **DoD:** gates green · vitest covers sorting, filtering, panel open/close, row-snippet
-  rendering · screenshots.
+*Layout decisions locked by Hayden 2026-07-13 (recorded here + WORKLOG, no new ADR — D-080
+governs): rationale snippet = **two-line row** (columns on line 1, truncated muted snippet under
+the title — not a sixth column) · detail = **overlay panel** (Linear peek floating over the
+right of the table; table never reflows — not a docked split).*
+
+- [x] **Row redesign:** verdict + score + a truncated one-line rationale snippet visible **in
+  the row**; title prominent; verdict-colored spine (`.row.v-{verdict}`: strong_yes/yes green,
+  maybe indigo-tint, no dim; unassessed transparent).
+- [x] **Side-panel detail** (Linear-style): row click opens `PostingPanel` (`role="dialog"`) —
+  title/company head, meta card (match/location/activity), full rationale, fits/gaps, apply
+  CTA, ✕; Esc/click-away closes; clicking another row switches the panel in place. Replaces the
+  inline row expansion (`DetailPanel` deleted). Selection keys on `posting_id`, so a poll or
+  toggle that drops the posting closes the panel naturally.
+- [x] **Sortable columns:** company / title / location / activity / match score; first click =
+  the column's natural direction (text asc, date/score desc), second flips; nulls sink last in
+  both directions; default stays freshness-desc (= the server order). Pure helpers in
+  `postingsView.ts` (`sortPostings`/`filterPostings`), unit-tested.
+- [x] **Text search/filter:** filter-as-you-type over company/title/location in the subbar;
+  count meta shows `X of N` while filtering; filter-empty state names the query.
+- [x] Controls/subbar restyle on v2 tokens (search input); notices get card treatment; footer
+  copy → "Click a row for details". Bonus (within table CSS, not a mobile pass): narrow
+  viewports now scroll the table horizontally (`minmax(280px,1fr)` title + `overflow-x: auto`)
+  instead of crushing the title column — the pre-existing 720px overlap is gone.
+- Untouched behavior held: window/view → API param mapping (`postingsPath`), the D-057 backfill
+  poll, D-064/D-065 routing — all pinned by the unmodified existing tests.
+- **DoD met:** gates green (eslint + tsc + vitest **73/73**; was 57 — new `postingsView`,
+  `PostingPanel` suites + reworked table/dashboard coverage) · before/after screenshots at
+  1440 + 720 (panel open, filter active, sorted, cleaned view; landing shared-class regression
+  checked; no horizontal page overflow, no new console errors).
 
 ---
 

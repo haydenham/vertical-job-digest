@@ -184,7 +184,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   auto-rollback; migrations stay manual), replacing the manual Phase-A `ship.sh` (which stays the break-glass).
 - **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072).** The pre-broad-invite week: six one-day items —
   UI rework (**scoped, D-080** → `docs/16`: Linear reference, design-language v2, a 4-PR block —
-  foundation → landing → auth pages → dashboard; frontend-only, building next) · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
+  foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs built** — PR 3
+  dashboard pending merge) · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
   (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
