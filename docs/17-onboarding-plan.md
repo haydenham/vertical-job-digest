@@ -27,8 +27,9 @@ complaint — see D-082 for the decision record. Scope decisions were run throug
 - **Tutorial = first-run welcome slides** (multi-step dialog reusing the `PostingPanel`
   pattern), seen-flag in `localStorage`, re-openable via a "?" nav button. Not a coach-marks
   tour.
-- **3 PRs**: bug-fix tier → progress signal → tutorial + toggle clarity. PR 1 has no design
-  sign-off dependencies; PRs 2 and 3 are independent of each other.
+- **3 PRs**: bug-fix tier → progress signal → tutorial + toggle clarity. PRs 1 and 2 are
+  merged (#78/#79); the D-083 production follow-up is merged (#80). PR 3 is the remaining
+  onboarding block.
 
 **Constraints that hold throughout:**
 
@@ -42,37 +43,37 @@ complaint — see D-082 for the decision record. Scope decisions were run throug
 
 ---
 
-## PR 1 — upload/onboarding bug-fix tier (branch `fix/onboarding-upload`)
+## PR 1 — upload/onboarding bug-fix tier ✅ (merged #78, 2026-07-13)
 
 *The "stuck on upload page" cluster. Frontend-only except one backend regression test — no
 migration, no API change.*
 
-- [ ] **Visible upload progress:** a busy notice with spinner ("Uploading and starting your
+- [x] **Visible upload progress:** a busy notice with spinner ("Uploading and starting your
   matches…") while the POST runs — not just a button-label swap (`Upload.tsx`).
-- [ ] **Upload timeout + friendly transport errors:** `AbortController` timeout (~30s) on
+- [x] **Upload timeout + friendly transport errors:** `AbortController` timeout (~30s) on
   `uploadResume` (`api.ts`); abort and network failures get friendly leads in the form error
   (no more raw `TypeError: Failed to fetch`).
-- [ ] **Post-upload robustness (the commit-point rule):** after a 202 the upload can no longer
+- [x] **Post-upload robustness (the commit-point rule):** after a 202 the upload can no longer
   present as failed. The `/api/me` re-probe retries bounded (~4 attempts, backoff) until the
   profile lands, then navigates; the probe is **silent** (no global `loading` flip, so the form
   no longer blanks to "loading…" mid-submit — the literal stuck-page report). If the probe
   never confirms, a calm "résumé uploaded — open your dashboard" state replaces it (full-page
   nav re-probes auth). Kills the spurious-error and bounce-back-to-onboarding races
   (`Upload.tsx:69-82`, `AuthProvider.tsx`; `refresh()` now returns the fetched `Me`).
-- [ ] **Back navigation on `/upload`** (update mode): "← Back to dashboard" link — previously
+- [x] **Back navigation on `/upload`** (update mode): "← Back to dashboard" link — previously
   the only exit without submitting was the logo.
-- [ ] **Reupload honesty copy (cheap half):** update-mode blurb → recent roles re-match within
+- [x] **Reupload honesty copy (cheap half):** update-mode blurb → recent roles re-match within
   minutes; full refreshed results after tonight's run. (The live progress display is PR 2.)
-- [ ] **Dashboard poll no longer blanks:** keep previous data while a refetch/poll tick is in
+- [x] **Dashboard poll no longer blanks:** keep previous data while a refetch/poll tick is in
   flight; the bare "loading…" notice only renders before first data (`Dashboard.tsx`).
-- [ ] **Backend regression test (unpinned path):** POST `/api/profiles` twice through the API —
+- [x] **Backend regression test (unpinned path):** POST `/api/profiles` twice through the API —
   changed bytes → 202 + new `resume_version` + new active profile + backfill re-triggered;
   same bytes → idempotent; (second-vertical 409 already pinned).
-- **DoD:** frontend + backend gates green · RTL tests for retry-probe/timeout/back-link/
-  keep-data · fresh-flow walkthrough in headless Chrome (signup → upload → dashboard; reupload
-  → back-nav) with before/after screenshots in the PR body.
+- **DoD met:** frontend + backend gates green (frontend 83/83; backend 506) · RTL tests for
+  retry-probe/timeout/back-link/keep-data · fresh-flow walkthrough in headless Chrome
+  (signup → upload → dashboard; reupload → back-nav) with before/after screenshots.
 
-## PR 2 — matching-progress signal (backend + frontend) ✅ (built 2026-07-13, branch `feat/backfill-status`)
+## PR 2 — matching-progress signal (backend + frontend) ✅ (merged #79, 2026-07-13)
 
 *Two refinements from the plan sketch, recorded here (D-082 governs, no new ADR): (a) the **started
 stamp moved to the upload endpoint** (before `background.add_task`) — the 202 returns before the
@@ -116,23 +117,50 @@ non-401 failure to logged-out, making the successful Google login appear to redi
 
 **Production recovery completed 2026-07-13:** explicitly exported the Secret Manager Neon
 `VJA_DATABASE_URL`, upgraded to `a06b99424c4c`, and restored `/api/me`. Follow-up branch
-`fix/onboarding-auth-failure` adds the D-083 production startup guard (known-behind schema → new
+`fix/onboarding-auth-failure` added the D-083 production startup guard (known-behind schema → new
 revision never becomes ready; unknown newer revision allowed for rollback), separates auth-probe
 errors from 401 with a retry state, guards `/login` for existing sessions, and corrects the
-frontend upload response's `resume_version` from number to string. This hotfix lands before PR 3.
+frontend upload response's `resume_version` from number to string. **Merged as PR #80; PR 3 is
+unblocked.**
 
 ## PR 3 — welcome-slides tutorial + toggle clarity
 
 - [ ] **First-run dialog** on the dashboard (reuses the `PostingPanel` dialog pattern:
-  `role="dialog"`, Esc/click-away): 3–4 slides — what Rolefeed does (nightly diff + digest) ·
-  Matched vs All-cleaned views · recency windows + row click/detail panel · updating your
-  résumé (and what to expect when you do). Shown once per browser (`localStorage`
-  `rolefeed.tour.seen`); a "?" nav button reopens it anytime.
-- [ ] **Toggle clarity** (`Controls.tsx`): `title` tooltips on every window/view toggle; label
-  copy tweaks (e.g. "matched" → "Matched for you", "all cleaned" → "All in-scope") — **exact
-  copy is a Hayden sign-off at PR-3 execution**.
+  `role="dialog"`, Esc/click-away). Approved four-slide copy (D-085):
+  1. **Your Rolefeed, updated nightly** — curated employers, nightly changes, verified links,
+     and the morning digest.
+  2. **Matched for you** — recommendations for the current résumé, including honest fits and
+     gaps.
+  3. **Explore every in-scope role** — explain All in-scope and the recency windows.
+  4. **Open details and keep your résumé current** — row details/apply, recent-role re-match,
+     and full completion through the nightly.
+  Shown once per browser (`localStorage` `rolefeed.tour.seen`); a "?" nav button reopens it.
+  Controls = **Skip · Back · Next · Start exploring**.
+- [ ] **Toggle clarity** (`Controls.tsx`): display labels = **Matched for you / All in-scope**
+  and **New today / 1 week / 2 weeks / All open**; every toggle gets a concise `title`
+  explaining its exact D-030/D-045 semantics.
+- [ ] **Put the table-use hint where it is visible:** move
+  "Click a row for details · read-only · updates nightly" from the footer to immediately above
+  the table/results area.
+- [ ] **Human vertical display:** render the dashboard's internal `aviation_software` slug as
+  **Aviation Technology** through `verticalCopy()`; the config/API/DB slug remains unchanged.
 - [ ] RTL tests: first-run show / dismiss / persist / reopen via "?".
 - **DoD:** frontend gate green · slide-by-slide screenshot pass at 1440/720.
+
+## Accepted follow-ups after PR 3 (D-085)
+
+- **Landing-page copy pass (separate UI PR):** stop the three thesis cards, How it works, and
+  Why I built this from repeating the same claim. Cards = user benefits; How it works = actual
+  pipeline mechanics; founder story = Hayden's recruiting problem and product thesis. Broaden
+  outward language from *software roles* to *technology roles* so analyst/data roles fit the
+  promise. Internal vertical slugs stay stable.
+- **Résumé-reupload abuse guard (separate backend/security PR):** first upload stays allowed;
+  identical-content reuploads return success without scheduling another backfill; a changed
+  résumé is limited to one reupload per user per rolling 24 hours, server-enforced with 429 +
+  `Retry-After`.
+- **LLM-cost Block 2:** diagnose the observed posting new/closed identity churn before building
+  Anthropic Message Batches. If steady-state extraction remains material after the correctness
+  fix, batch extraction first; matching is already highly cache-efficient.
 
 ---
 
