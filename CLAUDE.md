@@ -183,9 +183,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **Phase 9.6 — full CI/CD ✅ (D-068).** Merge-to-`main` auto-deploys to Cloud Run (keyless WIF, smoke +
   auto-rollback; migrations stay manual), replacing the manual Phase-A `ship.sh` (which stays the break-glass).
 - **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072).** The pre-broad-invite week: six one-day items —
-  UI rework (**scoped, D-080** → `docs/16`: Linear reference, design-language v2, a 4-PR block —
-  foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs built** — PR 3
-  dashboard pending merge) · discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
+  UI rework (**✅ done, D-080** → `docs/16`: Linear reference, design-language v2, a 4-PR block —
+  foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs merged #74–77, live in
+  prod**) · **onboarding overhaul (scoped D-082 → `docs/17`: a 3-PR block — upload-flow bug fixes →
+  backfill-status signal → welcome-slides tutorial; the fresh-account leg of the bug shakeout)** ·
+  discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
   (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
@@ -259,7 +261,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/12-cloud-deploy-plan.md` — Phase 9.5 plan of record (sub-blocks 9.5a–d + locked decisions). Read it + `docs/11` + the WORKLOG top entry to continue 9.5 after a chat reset.
 - `docs/14-discovery-cli-guide.md` — operator guide for the Layer-3 discovery workflow: `vja-discover` + `vja-review` commands, which DB they write (local vs Neon/prod), cost, and the first-run walkthrough (D-070/D-071).
 - `docs/15-beta-hardening-plan.md` — the active beta-hardening week: six one-day items (UI · discovery run · bugs · scaling incl. LLM spend · fetchers), DoD per day, and what's parked. Scope of record: D-072. Read after `WORKLOG.md` top to continue the week.
-- `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. Read to continue the rework after a chat reset.
+- `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
+- `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

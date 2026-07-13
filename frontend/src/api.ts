@@ -144,6 +144,10 @@ export async function logout(): Promise<void> {
 
 // ---- résumé upload (the first write path, D-057) ----
 
+// A hung upload must not leave the form on "Uploading…" forever — abort and let the user retry
+// (a same-vertical retry is an idempotent update server-side, so aborting is always safe).
+export const UPLOAD_TIMEOUT_MS = 30_000;
+
 // `POST /api/profiles` (multipart): upload a résumé → create/update this user's profile → the
 // server kicks off the signup backfill in the background and returns 202. Maps the server's
 // guard responses to a typed `ApiError` (401 no session · 413 too large · 422 unreadable résumé ·
@@ -152,11 +156,19 @@ export async function uploadResume(vertical: string, file: File): Promise<Profil
   const form = new FormData();
   form.set("vertical", vertical);
   form.set("file", file);
-  const resp = await fetch(`${API_BASE}/api/profiles`, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  let resp: Response;
+  try {
+    resp = await fetch(`${API_BASE}/api/profiles`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!resp.ok) {
     throw new ApiError(resp.status, await errorDetail(resp));
   }

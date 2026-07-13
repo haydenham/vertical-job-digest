@@ -97,6 +97,20 @@ describe("Dashboard", () => {
     expect(screen.getByText("Grid Engineer")).toBeInTheDocument();
   });
 
+  it("a poll tick keeps the current view — no blanking to 'loading…' (D-082)", async () => {
+    vi.useFakeTimers();
+    mockPostings.mockResolvedValueOnce(empty()); // first paint: still empty
+    mockPostings.mockImplementation(() => new Promise(() => {})); // next tick: fetch stays in flight
+    renderDashboard({ justOnboarded: true });
+
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // poll tick → refetch pending
+    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
+    expect(screen.queryByText("loading…")).not.toBeInTheDocument();
+  });
+
   it("falls back to 'after tonight's run' when the poll times out", async () => {
     vi.useFakeTimers();
     mockPostings.mockResolvedValue(empty()); // never lands

@@ -1448,3 +1448,33 @@ chip); the footer's decorative `↵ open` hint (rows only respond to click) → 
 Google-Fonts import swaps Space Grotesk for Inter. Frontend-only; all 45 vitest + eslint + tsc green; v1's
 tokens survive nowhere (theme.css fully rewritten). **Why record the pick:** D-080 left accent + font open
 pending screenshots; this closes it so PRs 1–3 build on a decided, merged token set. References D-080, D-042.
+
+### D-082 · Beta hardening · Onboarding overhaul: upload-flow fixes, backfill-status signal, welcome-slides tutorial · accepted · 2026-07-13
+The first real private-beta user hit onboarding friction end-to-end (outdated résumé → confusing reupload,
+"stuck on the upload page", ambiguous dashboard toggles), and exploration confirmed a concrete root cause for
+every complaint: the upload submit's only feedback is a button label and the post-202 `/api/me` refresh flips
+the global `loading` flag (the whole route blanks to "loading…" mid-submit) with no timeout and two failure
+races (a spurious error after a successful upload; a profile-visibility race that bounces the user back to
+`/onboarding`); an edited résumé's new `resume_version` orphans every prior match so the matched view goes
+near-empty until the nightly; nothing tells the client whether the backfill is running; `/upload` has no back
+navigation; the toggles have zero explanation; and no tutorial affordance exists. **Decisions (all Hayden's,
+via questionnaire): (a) build a real backend backfill-status signal** — `run_backfill` stamps
+`backfill_started_at`/`backfill_completed_at` on the profile (new columns, additive migration; a new résumé
+version is a new profile row so status is naturally per-version), `/api/me` exposes a derived
+`backfill_status: running|done|null`, and the dashboard's poll keys off it (survives refresh, works on
+reupload; a stale "running" older than ~10 min reads as done). **This supersedes D-057's "no backend
+push/status endpoint" clause**; the bounded client-side poll survives as the consumer. **(b) Reupload
+semantics affirmed** = instant 5-day/100 backfill + the already-uncapped nightly re-match, surfaced honestly
+in the UI ("recent roles re-match within minutes; full refreshed results after tonight's run") — an immediate
+full re-match was rejected (~$3/event at ~314 in-scope open postings vs the $5 daily ceiling, user-triggered
+burst surface). Old-version matches stay DB-only audit rows; the dashboard join on the active
+`resume_version` means old and new verdicts never mix. **(c) First-run tutorial = welcome slides** (multi-step
+dialog on the `PostingPanel` pattern; 3–4 slides: nightly diff + digest · matched vs cleaned · recency windows
++ detail panel · résumé updates), seen-flag in `localStorage`, re-openable via a "?" nav button — coach-marks
+tour rejected as heavier build for beta. **Shape: 3 PRs** (plan of record `docs/17-onboarding-plan.md`):
+PR 1 upload/onboarding bug-fix tier (frontend + one backend regression test pinning the previously unpinned
+API-level reupload path; includes the commit-point rule — after a 202 the upload can never present as failed —
+plus upload timeout, silent bounded `/api/me` retry, `/upload` back nav, keep-data-while-polling) → PR 2 the
+status signal (migration + stamps + `/api/me` + banner; INVARIANTS' D-057 poll line rewritten when it lands) →
+PR 3 tutorial + toggle tooltips/labels (copy = Hayden sign-off at execution). Groups with the docs/15 Day-3
+bug shakeout as its fresh-account leg. References D-057, D-064, D-065, D-021, D-068. **Amends D-057.**

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { ApiError, fetchVerticals, uploadResume } from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -12,6 +12,11 @@ import { verticalCopy } from "../verticalCopy";
 //     the résumé changes.
 // On success it refreshes `/api/me` (so a freshly-created profile lands before routing) then sends
 // the user to their dashboard with `justOnboarded` so the matched view polls the backfill (D-065).
+//
+// The 202 is the commit point (D-082): once the server accepts the résumé, nothing that happens
+// after may present as an upload failure — the `/api/me` re-probe is silent (no global `loading`
+// flip, so the form stays mounted) and retries bounded before falling back to a calm
+// "uploaded — open your dashboard" state.
 
 // Friendly leads for the write path's guard statuses (D-057; 409 = second vertical, D-064). The
 // server detail still renders after the lead; unmapped statuses fall back to the detail alone.
@@ -31,8 +36,25 @@ function toFormError(err: unknown): FormError {
   if (err instanceof ApiError) {
     return { lead: ERROR_LEADS[err.status] ?? null, detail: err.message };
   }
+  // Transport failures reach the user in words, not as a raw `TypeError: Failed to fetch`.
+  if (err instanceof DOMException && err.name === "AbortError") {
+    return { lead: "The upload timed out.", detail: "Check your connection and try again." };
+  }
+  if (err instanceof TypeError) {
+    return { lead: "Couldn't reach the server.", detail: "Check your connection and try again." };
+  }
   return { lead: null, detail: String(err) };
 }
+
+// idle → uploading (POST in flight) → finalizing (202 landed, re-probing /api/me) → navigate;
+// "stalled" is the bounded-retry fallback: uploaded for sure, but the fresh profile never came
+// back — offer a full-page hop to the dashboard (which re-probes auth from scratch).
+type Phase = "idle" | "uploading" | "finalizing" | "stalled";
+
+// Retry pacing for the post-202 profile probe (first attempt immediate).
+const FINALIZE_DELAYS_MS = [0, 700, 1500, 3000];
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function fileSize(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`;
@@ -45,7 +67,7 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
   const [picked, setPicked] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<FormError | null>(null);
 
   const isOnboarding = lockedVertical === undefined;
@@ -68,27 +90,47 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (file === null || vertical === "") return;
-    setSubmitting(true);
+    if (file === null || vertical === "" || phase !== "idle") return;
+    setPhase("uploading");
     setError(null);
     try {
       await uploadResume(vertical, file);
-      await refresh(); // pick up the new/updated profile before the dashboard routes on it
-      navigate("/dashboard", { state: { justOnboarded: true } });
     } catch (err: unknown) {
       setError(toFormError(err));
-      setSubmitting(false);
+      setPhase("idle");
+      return;
     }
+    // Commit point: the profile exists server-side. Pick it up (silently — the form must stay
+    // mounted) before the dashboard routes on it; transient probe failures just mean try again.
+    setPhase("finalizing");
+    for (const delay of FINALIZE_DELAYS_MS) {
+      if (delay > 0) await sleep(delay);
+      try {
+        const me = await refresh({ silent: true });
+        if (me?.profile) {
+          navigate("/dashboard", { state: { justOnboarded: true } });
+          return;
+        }
+      } catch {
+        // transient /api/me failure — retry on the next tick
+      }
+    }
+    setPhase("stalled");
   }
 
   return (
     <div className="auth-page">
       <form className="panel auth-card upload-card" onSubmit={onSubmit}>
+        {!isOnboarding && (
+          <Link to="/dashboard" className="back-link">
+            ← Back to dashboard
+          </Link>
+        )}
         <h1 className="auth-title">{isOnboarding ? "Set up your feed" : "Update your résumé"}</h1>
         <p className="auth-blurb">
           {isOnboarding
             ? "Pick your vertical and upload a résumé — we’ll match new roles to it nightly."
-            : "Upload a new résumé; matching re-runs against it."}
+            : "Upload a new résumé — recent roles re-match within minutes, and your full refreshed results land after tonight’s run."}
         </p>
 
         {isOnboarding ? (
@@ -165,8 +207,42 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
           </div>
         )}
 
-        <button className="btn btn-primary" type="submit" disabled={submitting || file === null}>
-          {submitting ? "Uploading…" : "Upload résumé"}
+        {phase === "uploading" && (
+          <div className="notice busy" role="status">
+            <span className="spinner" aria-hidden="true" />
+            Uploading and starting your matches…
+          </div>
+        )}
+        {phase === "finalizing" && (
+          <div className="notice busy" role="status">
+            <span className="spinner" aria-hidden="true" />
+            Uploaded — loading your dashboard…
+          </div>
+        )}
+        {phase === "stalled" && (
+          <div className="notice form-error" role="status">
+            Your résumé is uploaded.{" "}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => window.location.assign("/dashboard")}
+            >
+              Open your dashboard
+            </button>{" "}
+            to continue.
+          </div>
+        )}
+
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={phase !== "idle" || file === null}
+        >
+          {phase === "uploading"
+            ? "Uploading…"
+            : phase === "idle"
+              ? "Upload résumé"
+              : "Uploaded"}
         </button>
       </form>
     </div>

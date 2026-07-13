@@ -5,6 +5,43 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — Onboarding overhaul scoped (D-082, docs/17) + PR 1 (upload-flow fixes) built
+
+**Trigger:** the first real private-beta user hit onboarding friction (outdated résumé → confusing
+reupload, "stuck on the upload page", ambiguous toggles) — the fresh-signup path had never been
+walked. Exploration found a root cause for every complaint: the submit's only feedback was the
+button label; the post-202 `/api/me` refresh flips global `loading` (the whole route blanks to
+"loading…" mid-submit — the literal stuck report) with no timeout and two races (spurious error
+after a successful upload; profile-visibility race bouncing back to `/onboarding`); an edited
+résumé's new `resume_version` orphans all prior matches (matched view near-empty till the nightly);
+no backfill status exists client-side; `/upload` had no back nav; no tutorial affordance. **Scoped
+with Hayden (D-082, plan docs/17, 3 PRs):** PR 1 bug-fix tier → PR 2 backend backfill-status signal
+(profile stamps + `/api/me`, supersedes D-057's no-status clause; INVARIANTS updates when it lands)
+→ PR 3 welcome-slides tutorial + toggle clarity. Reupload affirmed = instant 5-day backfill +
+nightly heals (full re-match at upload rejected: ~$3/event vs the $5 ceiling). Groups with the
+docs/15 Day-3 shakeout.
+
+**PR 1 landed (branch `fix/onboarding-upload`, frontend + one backend test):** upload busy notice
++ spinner; 30s `AbortController` timeout; friendly timeout/network error copy (no raw
+`TypeError`); the **commit-point rule** — after 202 the upload never presents as failed:
+`refresh()` now returns `Me` + takes `{silent}` (no loading flip), Upload retries the probe
+bounded (4×, backoff) then navigates, last-resort "résumé uploaded — open your dashboard" state;
+`/upload` back link; honest reupload blurb; Dashboard keeps previous data on poll ticks (no more
+10s "loading…" flash); backend regression test pins the API-level double-upload path (same bytes
+idempotent · edited bytes → new active version + old deactivated · backfill per accepted upload).
+
+**Verified:** eslint + `tsc -b` + vitest **83/83** (was 73) · backend ruff/format/mypy/
+import-linter/pytest **506 passed** · full fresh-account walkthrough in headless Chrome against
+the served build on a **copy** of the local DB (throwaway secret, `VJA_BACKFILL_MAX_POSTINGS=0`,
+bogus Anthropic key — zero LLM spend): onboarding → delayed-POST busy state → auto-land on
+/dashboard with poll notice; aborted-POST friendly error; back-link click navigated; no overflow
+at 1440/720. Before/after shots on the artifact page. Docs: D-082 · docs/17 (new) · docs/15 Day-1
+ticked done + Day-3 gains the onboarding item · CLAUDE.md Phase-BH line + doc map. **Also
+corrected:** WORKLOG/CLAUDE.md said UI PR 3 was pending merge — all four UI PRs (#74–77) are in
+fact merged on `main`; the D-080 block is live. Robotics vertical config still absent (landing
+advertises it; picker can't offer it) — Hayden's, pre-beta. **Next:** Hayden reviews/commits/PRs
+PR 1; then PR 2 (status signal + migration) and PR 3 (tutorial) per docs/17.
+
 ## 2026-07-13 — UI rework PR 3: dashboard rework built (closes the D-080 block)
 
 **PR 2 confirmed merged (#76, live in prod) before starting; branch `feat/ui-dashboard`.** Layout
