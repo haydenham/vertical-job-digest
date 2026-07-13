@@ -37,7 +37,7 @@ from vja.db.matches import (
     postings_needing_match,
     save_match,
 )
-from vja.db.profiles import Profile, active_profiles
+from vja.db.profiles import Profile, active_profiles, mark_backfill_completed
 from vja.models import MatchTrigger, TokenUsage, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import in_scope
@@ -341,17 +341,23 @@ def run_backfill(
     stamp = now or datetime.now(UTC)
     cli = client or Anthropic()
     since = stamp - timedelta(days=_BACKFILL_WINDOW_DAYS)
-    total, matched, usage = _match_profile(
-        engine,
-        vertical,
-        profile,
-        config=config,
-        client=cli,
-        since=since,
-        trigger=MatchTrigger.BACKFILL,
-        now=stamp,
-        max_postings=_backfill_max_postings(),
-    )
+    try:
+        total, matched, usage = _match_profile(
+            engine,
+            vertical,
+            profile,
+            config=config,
+            client=cli,
+            since=since,
+            trigger=MatchTrigger.BACKFILL,
+            now=stamp,
+            max_postings=_backfill_max_postings(),
+        )
+    finally:
+        # The completion stamp (D-082): lands even when every candidate failed (per-posting
+        # isolation — the run itself finished) or the batch raised; only a hard process kill
+        # skips it, which the /api/me staleness guard covers.
+        mark_backfill_completed(engine, profile.id)
     return MatchingSummary(
         vertical=vertical,
         profiles=1,

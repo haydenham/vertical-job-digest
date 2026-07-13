@@ -16,7 +16,15 @@ from vja.api.app import create_app
 from vja.api.auth import get_current_user, require_user
 from vja.db.engine import begin
 from vja.db.matches import save_match
-from vja.db.profiles import Profile, active_profiles, get_profile, upsert_profile
+from vja.db.profiles import (
+    Profile,
+    active_profiles,
+    backfill_stamps,
+    get_profile,
+    mark_backfill_completed,
+    mark_backfill_started,
+    upsert_profile,
+)
 from vja.db.schema import employers, postings, profiles
 from vja.db.users import User, upsert_user_by_google
 
@@ -378,6 +386,7 @@ def test_me_returns_user_and_profile(migrated_engine: Engine) -> None:
     assert body["profile"] == {
         "vertical": _VERTICAL,
         "resume_version": mine.resume_version,
+        "backfill_status": None,  # seeded profile, never stamped (D-082)
     }
 
 
@@ -458,3 +467,44 @@ def test_reupload_via_api_versions_and_retriggers_backfill(
         first["profile_id"],
         body["profile_id"],
     ]
+
+
+# --- backfill status via /api/me (D-082) -------------------------------------------------------
+# Derivation logic is unit-pinned in test_profiles.py; here we pin the HTTP surface: the upload
+# endpoint stamps `started` BEFORE scheduling the background task (so the SPA's immediate post-202
+# /api/me probe sees `running`), and /api/me exposes the derived status per state.
+
+
+def test_upload_stamps_started_and_me_reports_running(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With run_backfill stubbed out (it never completes), the endpoint's own pre-schedule stamp
+    must already make /api/me say running — the no-race guarantee the SPA banner rests on."""
+    user = _user(migrated_engine)
+    client, _calls = _upload_client(migrated_engine, user, monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert resp.status_code == 202
+    pid = resp.json()["profile_id"]
+
+    started, completed = backfill_stamps(migrated_engine, pid)
+    assert started is not None
+    assert completed is None
+
+    me = _authed_client(migrated_engine, user.email).get("/api/me")
+    assert me.status_code == 200
+    assert me.json()["profile"]["backfill_status"] == "running"
+
+
+def test_me_reports_done_after_completion_stamp(migrated_engine: Engine) -> None:
+    prof = _profile(migrated_engine, email="me@example.com")
+    mark_backfill_started(migrated_engine, prof.id)
+    mark_backfill_completed(migrated_engine, prof.id)
+    body = _authed_client(migrated_engine, "me@example.com").get("/api/me").json()
+    assert body["profile"]["backfill_status"] == "done"
+
+
+def test_me_backfill_status_null_for_unstamped_profile(migrated_engine: Engine) -> None:
+    """Pre-D-082 rows (e.g. the seeded profile) carry no stamps → status is null, not an error."""
+    _profile(migrated_engine, email="me@example.com")
+    body = _authed_client(migrated_engine, "me@example.com").get("/api/me").json()
+    assert body["profile"]["backfill_status"] is None

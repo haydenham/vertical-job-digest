@@ -21,7 +21,7 @@ const mockUseAuth = vi.mocked(useAuth);
 // What `refresh` resolves to once the freshly-uploaded profile is visible via /api/me.
 const me = (vertical = "grid_power_software"): Me => ({
   user: { email: "a@b.co", name: "A" },
-  profile: { vertical, resume_version: "v1" },
+  profile: { vertical, resume_version: "v1", backfill_status: "running" },
 });
 
 function auth(over: Partial<AuthState> = {}): AuthState {
@@ -88,7 +88,9 @@ describe("Upload", () => {
 
   it("in update mode locks the vertical (display name, no picker, no verticals fetch)", () => {
     mockUseAuth.mockReturnValue(
-      signedIn({ profile: { vertical: "aviation_software", resume_version: "v1" } }),
+      signedIn({
+        profile: { vertical: "aviation_software", resume_version: "v1", backfill_status: null },
+      }),
     );
     renderUpload({ lockedVertical: "aviation_software" });
     expect(screen.getByText("Aerospace & aviation")).toBeInTheDocument();
@@ -212,7 +214,9 @@ describe("Upload", () => {
 
   it("update mode has a back link to the dashboard", () => {
     mockUseAuth.mockReturnValue(
-      signedIn({ profile: { vertical: "aviation_software", resume_version: "v1" } }),
+      signedIn({
+        profile: { vertical: "aviation_software", resume_version: "v1", backfill_status: null },
+      }),
     );
     renderUpload({ lockedVertical: "aviation_software" });
     expect(screen.getByRole("link", { name: /back to dashboard/i })).toHaveAttribute(

@@ -1,14 +1,32 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchPostings, type PostingsResponse } from "../api";
+import { fetchPostings, type BackfillStatus, type PostingsResponse } from "../api";
+import { useAuth, type AuthState } from "../auth/useAuth";
 import { Dashboard } from "./Dashboard";
 
 vi.mock("../api", () => ({ fetchPostings: vi.fn() }));
+vi.mock("../auth/useAuth", () => ({ useAuth: vi.fn() }));
 
 const mockPostings = vi.mocked(fetchPostings);
+const mockUseAuth = vi.mocked(useAuth);
+
+// The dashboard reads its backfill status (and the silent re-probe) from useAuth (D-082).
+function auth(backfillStatus: BackfillStatus = null, over: Partial<AuthState> = {}): AuthState {
+  return {
+    user: { email: "a@b.co", name: "A" },
+    profile: {
+      vertical: "grid_power_software",
+      resume_version: "v1",
+      backfill_status: backfillStatus,
+    },
+    loading: false,
+    refresh: vi.fn().mockResolvedValue(null),
+    logout: vi.fn(),
+    ...over,
+  };
+}
 
 function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
   return {
@@ -39,22 +57,12 @@ function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
 
 const empty = () => response({ count: 0, postings: [] });
 
-// Dashboard is now single-vertical (the user's own, passed by the route) and lives under a Router
-// (it reads `location.state.justOnboarded`).
-function renderDashboard(opts: { justOnboarded?: boolean } = {}) {
-  const entries = opts.justOnboarded
-    ? [{ pathname: "/dashboard", state: { justOnboarded: true } }]
-    : ["/dashboard"];
-  return render(
-    <MemoryRouter initialEntries={entries}>
-      <Dashboard vertical="grid_power_software" />
-    </MemoryRouter>,
-  );
-}
+const renderDashboard = () => render(<Dashboard vertical="grid_power_software" />);
 
 describe("Dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseAuth.mockReturnValue(auth());
     mockPostings.mockResolvedValue(response());
   });
   afterEach(() => vi.useRealTimers());
@@ -78,49 +86,71 @@ describe("Dashboard", () => {
     );
   });
 
-  it("shows the plain empty-state when not freshly onboarded", async () => {
+  it("shows the plain empty-state when no backfill was ever stamped", async () => {
     mockPostings.mockResolvedValue(empty());
     renderDashboard();
     expect(await screen.findByText(/no postings match/i)).toBeInTheDocument();
   });
 
-  it("polls the matched view after onboarding until matches arrive", async () => {
+  // --- the status-driven backfill poll (D-082, supersedes the justOnboarded router-state poll) ---
+
+  it("polls status + postings while the backfill runs, streaming matches in", async () => {
     vi.useFakeTimers();
-    mockPostings.mockResolvedValueOnce(empty()); // first paint: backfill hasn't landed
-    mockPostings.mockResolvedValue(response()); // next poll: a match appears
-    renderDashboard({ justOnboarded: true });
+    const refresh = vi.fn().mockResolvedValue(null);
+    mockUseAuth.mockReturnValue(auth("running", { refresh }));
+    mockPostings.mockResolvedValueOnce(empty()); // first paint: nothing computed yet
+    mockPostings.mockResolvedValue(response()); // next poll: a match has landed
+    renderDashboard();
 
-    await act(() => vi.advanceTimersByTimeAsync(0)); // flush the initial fetch
-    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText(/matching in progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/matches appear here as they’re computed/i)).toBeInTheDocument();
 
-    await act(() => vi.advanceTimersByTimeAsync(10_000)); // one poll interval → refetch
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // one poll tick
     expect(screen.getByText("Grid Engineer")).toBeInTheDocument();
+    expect(refresh).toHaveBeenCalledWith({ silent: true }); // the status re-probe, route not blanked
+  });
+
+  it("shows the banner above existing rows while re-matching (the reupload case)", async () => {
+    mockUseAuth.mockReturnValue(auth("running"));
+    renderDashboard();
+    expect(await screen.findByText("Grid Engineer")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/matching in progress/i);
+  });
+
+  it("no banner and no poll once the server reports done", async () => {
+    vi.useFakeTimers();
+    mockUseAuth.mockReturnValue(auth("done"));
+    renderDashboard();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.queryByText(/matching in progress/i)).not.toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(30_000)); // three would-be ticks
+    expect(mockPostings).toHaveBeenCalledTimes(1); // never refetched — no interval running
+  });
+
+  it("empty matched view after a finished backfill points at tonight's run", async () => {
+    mockUseAuth.mockReturnValue(auth("done"));
+    mockPostings.mockResolvedValue(empty());
+    renderDashboard();
+    expect(
+      await screen.findByText(/no matches yet — full results after tonight’s run/i),
+    ).toBeInTheDocument();
   });
 
   it("a poll tick keeps the current view — no blanking to 'loading…' (D-082)", async () => {
     vi.useFakeTimers();
+    mockUseAuth.mockReturnValue(auth("running"));
     mockPostings.mockResolvedValueOnce(empty()); // first paint: still empty
     mockPostings.mockImplementation(() => new Promise(() => {})); // next tick: fetch stays in flight
-    renderDashboard({ justOnboarded: true });
+    renderDashboard();
 
     await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
+    expect(screen.getByText(/matches appear here as they’re computed/i)).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(10_000)); // poll tick → refetch pending
-    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
+    expect(screen.getByText(/matches appear here as they’re computed/i)).toBeInTheDocument();
     expect(screen.queryByText("loading…")).not.toBeInTheDocument();
-  });
-
-  it("falls back to 'after tonight's run' when the poll times out", async () => {
-    vi.useFakeTimers();
-    mockPostings.mockResolvedValue(empty()); // never lands
-    renderDashboard({ justOnboarded: true });
-
-    await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(screen.getByText(/finding your matches/i)).toBeInTheDocument();
-
-    await act(() => vi.advanceTimersByTimeAsync(150_000)); // exhaust the bounded poll
-    expect(screen.getByText(/full results after tonight/i)).toBeInTheDocument();
   });
 
   it("filter-as-you-type narrows rows client-side and shows X of N — no refetch", async () => {

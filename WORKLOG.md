@@ -5,6 +5,35 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — Onboarding PR 2: backfill-status signal built (branch `feat/backfill-status`)
+
+**PR 1 confirmed merged (#78) before starting.** The D-082 matching-progress signal, per docs/17.
+Two refinements over the sketch (recorded in docs/17; D-082 governs): the `started` stamp lives in
+the **upload endpoint** (pre-`add_task` — the 202 returns before the background task runs, so
+stamping only in `run_backfill` would race the SPA's immediate probe), and **staleness is derived
+server-side** (one clock, unit-testable; client stays dumb).
+
+**Landed:** migration `a06b99424c4c` (nullable `profiles.backfill_started_at`/`_completed_at`;
+additive; rehearsed on a local copy — **run on Neon before merge**, D-068) · `db/profiles.py`
+stamp writers + `derive_backfill_status` (done ⇔ `completed >= started`, the reupload-ordering
+rule; `running` staler than 10 min → done, the crash guard; never-stamped → null) ·
+`run_backfill` stamps completed in a `finally` (lands even when every candidate fails) ·
+`/api/me` profile gains `backfill_status` · Dashboard: status-driven ~10s poll (silent `/api/me`
+re-probe + postings refetch; survives refresh, fires on reupload; `justOnboarded` router state no
+longer read), "Matching in progress — results update live" banner shown above existing rows too
+(the reupload case), matched empty states split into running ("Matches appear here as they're
+computed") vs done ("No matches yet — full results after tonight's run").
+
+**Verified:** backend gates + pytest **518** (+12: stamp round-trip, six derivation cases,
+completion-on-failure, /api/me per state, endpoint-stamps-before-schedule) · frontend eslint +
+tsc + vitest **85/85** (Dashboard suite reworked) · live headless-Chrome walkthrough on the
+migrated DB copy (throwaway secret, zero LLM): fresh signup → done state; banner over real rows;
+**the running→done poll flip observed live** — stamped `completed` mid-session, banner cleared on
+the next tick without a reload; no console errors. Docs: INVARIANTS D-057 poll line rewritten
+(+ commit-point line), docs/17 PR-2 ticked. **Next:** Hayden runs `alembic upgrade head` on Neon,
+then reviews/commits/PRs (shots on the artifact page); then PR 3 (welcome slides + toggle copy —
+copy sign-off at execution).
+
 ## 2026-07-13 — Onboarding overhaul scoped (D-082, docs/17) + PR 1 (upload-flow fixes) built
 
 **Trigger:** the first real private-beta user hit onboarding friction (outdated résumé → confusing

@@ -72,26 +72,39 @@ migration, no API change.*
   keep-data · fresh-flow walkthrough in headless Chrome (signup → upload → dashboard; reupload
   → back-nav) with before/after screenshots in the PR body.
 
-## PR 2 — matching-progress signal (backend + frontend)
+## PR 2 — matching-progress signal (backend + frontend) ✅ (built 2026-07-13, branch `feat/backfill-status`)
 
-- [ ] **Migration (Alembic):** `profiles.backfill_started_at` + `profiles.backfill_completed_at`
-  (nullable UTC). New résumé version ⇒ new profile row, so status is naturally per-version.
-  **Run manually on Neon before merge** (D-068); both-dialect CI covers the schema.
-- [ ] **`run_backfill` stamps started at entry, completed at exit** (`src/vja/match.py`) —
-  per-posting isolation already prevents aborts; completion stamps even when every candidate
-  fails.
-- [ ] **`GET /api/me`:** profile gains derived `backfill_status: "running" | "done" | null`
-  (null = pre-signal rows). Client treats a "running" older than ~10 min as done (crash guard —
-  a killed container must not strand the banner).
-- [ ] **Dashboard progress display:** poll keys off the real status (survives refresh, works
-  for reupload; `justOnboarded` router state demoted to a fast-path hint). Persistent
-  "Matching in progress — results update live" banner while running; the matched empty state
-  finally distinguishes "still matching" from "no matches yet — full results after tonight's
-  run".
-- [ ] **INVARIANTS:** rewrite the D-057 bounded-blind-poll line to the status-driven poll
-  (cite D-082).
-- **DoD:** both-dialect suite green · migration rehearsed locally before the Neon run · a live
-  fresh-account walkthrough showing running → done · screenshots.
+*Two refinements from the plan sketch, recorded here (D-082 governs, no new ADR): (a) the **started
+stamp moved to the upload endpoint** (before `background.add_task`) — the 202 returns before the
+background task runs, so stamping only inside `run_backfill` would race the SPA's immediate
+`/api/me` probe; (b) **staleness is applied server-side** in the status derivation (one clock, one
+place, unit-testable) rather than by the client as first sketched — the client stays dumb.*
+
+- [x] **Migration (Alembic `a06b99424c4c`):** `profiles.backfill_started_at` +
+  `backfill_completed_at` (nullable UTC), additive. Rehearsed on a local DB copy;
+  **run manually on Neon before merge** (D-068); both-dialect CI covers the schema.
+- [x] **Stamps:** endpoint stamps `started` pre-schedule; `run_backfill` stamps `completed` in a
+  `finally` (lands even when every candidate fails — per-posting isolation means the run itself
+  finished). Only a hard process kill skips it; the staleness guard covers that.
+- [x] **`GET /api/me`:** profile gains derived `backfill_status: "running" | "done" | null`
+  (`derive_backfill_status` in `db/profiles.py`): done ⇔ `completed >= started` (the
+  reupload-ordering rule — a reactivated row carries the previous run's completion stamp);
+  stale running (> `BACKFILL_STALE_AFTER`, 10 min) reads done (crash guard); never-stamped → null.
+- [x] **Dashboard:** poll keys off the real status (survives refresh, fires on reupload;
+  `justOnboarded` router state no longer read — the pre-202 stamp makes it unnecessary).
+  Persistent "Matching in progress — results update live" banner while running, shown **above
+  existing rows too** (the reupload case); matched empty states distinguish "Matches appear here
+  as they're computed." (running) from "No matches yet — full results after tonight's run." (done).
+  No client timeout — the server's staleness guard bounds the poll.
+- [x] **INVARIANTS:** D-057 bounded-blind-poll line rewritten to the status signal + commit-point
+  rules (D-082).
+- **DoD met:** backend gates green (ruff/format/mypy/import-linter + pytest **518**, +12: stamp
+  round-trip, 6 derivation cases incl. reupload-ordering + staleness, completion-on-failure,
+  /api/me per state, endpoint-stamps-before-schedule) · frontend gates green (eslint + tsc +
+  vitest **85/85**; Dashboard suite reworked to the status-driven poll) · migration rehearsed on
+  a migrated local copy · live headless-Chrome walkthrough: fresh signup → done state; banner
+  over real rows; **running → done poll flip observed live** (stamped `completed` mid-session,
+  banner cleared on the next tick without a reload); no console errors, no overflow.
 
 ## PR 3 — welcome-slides tutorial + toggle clarity
 

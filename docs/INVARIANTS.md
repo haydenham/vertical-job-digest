@@ -120,11 +120,20 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   D-058, D-059, D-060, D-064, D-065)
 - **Résumé upload is the SPA's only write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
-  `require_user`). On success the SPA **refreshes `/api/me`** (so the new profile lands before routing) then
-  navigates to `/dashboard`; the matched view shows a **bounded client-side poll** (`~10s × ~2.5min`) of the
-  backfill — no backend push/status endpoint (honours D-057) — then falls back to "full results after tonight's
-  run". Guard responses (401/413/422/429/404 + **409 second-vertical**) surface a typed `ApiError`. (D-058,
-  D-057, D-065)
+  `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
+  the SPA's `/api/me` re-probe is silent (no global loading flip) with bounded retries, then navigates to
+  `/dashboard` (last resort: a calm "uploaded — open your dashboard" state). Guard responses (401/413/422/429/404
+  + **409 second-vertical**) surface a typed `ApiError`; transport failures get friendly copy and the POST carries
+  a 30s abort timeout. (D-058, D-057, D-065, D-082)
+- **Backfill progress is a real server signal (D-082 — supersedes D-057's "no status endpoint" clause).** The
+  upload endpoint stamps `profiles.backfill_started_at` *before* scheduling `run_backfill` (so the immediate
+  post-202 probe is race-free); `run_backfill` stamps `backfill_completed_at` on exit (even when every candidate
+  failed). `/api/me` exposes the derived `backfill_status` (`running`/`done`/`null` for never-stamped rows):
+  done means `completed >= started` (the reupload-ordering rule — a reactivated row carries the *previous* run's
+  completion), and a `running` older than `BACKFILL_STALE_AFTER` (10 min) reads done (the crash guard). The
+  dashboard polls (~10s, silent `/api/me` re-probe + postings refetch) while `running`, shows the
+  "Matching in progress" banner (over existing rows too — the reupload case), and stops when the server flips
+  the status; the poll is bounded by the server's staleness guard, not a client timer. (D-082, D-057, D-005)
 
 ## Dashboard & freshness
 

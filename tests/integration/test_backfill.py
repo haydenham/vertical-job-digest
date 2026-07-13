@@ -269,3 +269,45 @@ def test_postings_needing_match_since_filters_to_window(migrated_engine: Engine)
         "Data Engineer",
         "Senior Sales Lead",
     }
+
+
+# --- backfill completion stamp (D-082) --------------------------------------------------------
+
+
+def test_backfill_stamps_completed_on_exit(migrated_engine: Engine) -> None:
+    """run_backfill stamps backfill_completed_at when it finishes — the /api/me signal flips the
+    dashboard banner from running to done."""
+    from vja.db.profiles import backfill_stamps
+
+    profile = _seed(migrated_engine)
+    assert backfill_stamps(migrated_engine, profile.id) == (None, None)
+
+    _run(migrated_engine, profile)
+    _started, completed = backfill_stamps(migrated_engine, profile.id)
+    assert completed is not None
+
+
+def test_backfill_stamps_completed_even_when_every_match_fails(migrated_engine: Engine) -> None:
+    """Per-posting isolation means a run whose every candidate errors still FINISHED — the
+    completion stamp must land so the banner doesn't strand on running (D-082)."""
+    from vja.db.profiles import backfill_stamps
+
+    class _RaisingMessages:
+        def parse(self, **kwargs: Any) -> Any:
+            raise RuntimeError("api down")
+
+    class _RaisingClient:
+        messages = _RaisingMessages()
+
+    profile = _seed(migrated_engine)
+    summary = run_backfill(
+        migrated_engine,
+        _VERTICAL,
+        profile,
+        config=_CONFIG,
+        client=cast("Anthropic", _RaisingClient()),
+        now=_NOW,
+    )
+    assert (summary.matched, summary.failed) == (0, summary.total)
+    _started, completed = backfill_stamps(migrated_engine, profile.id)
+    assert completed is not None

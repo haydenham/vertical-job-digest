@@ -231,6 +231,11 @@ profiles = Table(
     Column("domain_vocabulary", JSON),
     Column("active", Integer, nullable=False, server_default="1"),
     Column("created_at", UTCDateTime(), nullable=False),
+    # Backfill status stamps (D-082): the upload endpoint stamps `started` before scheduling the
+    # background backfill (so the SPA's immediate /api/me probe already sees it); `run_backfill`
+    # stamps `completed` on exit. `/api/me` derives running/done from their ordering + staleness.
+    Column("backfill_started_at", UTCDateTime()),
+    Column("backfill_completed_at", UTCDateTime()),
 )
 
 

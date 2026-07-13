@@ -33,7 +33,7 @@ describe("AuthProvider", () => {
   it("exposes the user + their profile once /api/me resolves", async () => {
     mockFetchMe.mockResolvedValue({
       user: { email: "a@b.co", name: "A" },
-      profile: { vertical: "grid_power_software", resume_version: "v1" },
+      profile: { vertical: "grid_power_software", resume_version: "v1", backfill_status: null },
     });
     render(
       <AuthProvider>
@@ -89,7 +89,7 @@ describe("AuthProvider", () => {
 
     resolveMe({
       user: { email: "a@b.co", name: "A" },
-      profile: { vertical: "grid_power_software", resume_version: "v2" },
+      profile: { vertical: "grid_power_software", resume_version: "v2", backfill_status: null },
     });
     expect(await screen.findByText("a@b.co / grid_power_software")).toBeInTheDocument();
   });
