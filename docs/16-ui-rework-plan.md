@@ -57,16 +57,30 @@ invent). Scope decisions were run through Hayden 2026-07-12 (D-080).
 - **DoD met:** eslint + tsc + vitest green (45/45) · candidate + after screenshots on the
   comparison artifact · DESIGN.md v2 in the diff.
 
-## PR 1 — Landing page (Linear-style marketing)
+## PR 1 — Landing page (Linear-style marketing) ✅ (built 2026-07-13)
 
-- [ ] `Landing.tsx` → full page: viewport **hero** (sharp claim + subline + Google CTA +
-  product visual) · **how-it-works** 3-step (bounded employer universe → nightly diff →
-  written match verdict that will say *no*) · **verticals** section (grid/power + aviation) ·
-  honest **footer**.
-- [ ] Product visual = a **CSS-built dashboard mock** (mini table on real v2 tokens), not a
-  binary screenshot — stays current with the design system, no asset pipeline.
-- Static, no new endpoints; stays the logged-out branch of the D-065 smart root.
-- **DoD:** gates green · screenshots · route guards untouched (`App.test.tsx` green).
+*Copy decisions locked by Hayden 2026-07-13 from his business thesis (recorded here + WORKLOG,
+no new ADR — D-080 governs the block): hero = **coverage-led** ("The engineering jobs the big
+boards miss."); sections expanded beyond the original four to also include a **stats band**,
+**three-pillar value props** (the thesis talking points), and a **founder story**; brand stays
+**"Rolefeed"** (D-058), not the thesis's "RoleFeed"; the verticals section **lists robotics as
+served alongside aerospace + energy** — Hayden is adding the robotics vertical before the beta
+drops. ⚠️ Until that vertical's config lands, the deployed landing advertises a vertical the
+onboarding picker doesn't offer (`main` auto-deploys, D-068) — Hayden owns merge timing.*
+
+- [x] `Landing.tsx` → full page: viewport **hero** (coverage-led claim + subline + Google CTA +
+  product visual + the one DESIGN.md-allowed glow) · **stats band** (100+ employers · 3
+  verticals · nightly link verification · the LinkedIn first-day stat) · **three pillars** ·
+  **how-it-works** 3-step (bounded universe → nightly diff → verdict that will say *no*) ·
+  **verticals** (aerospace + energy + robotics) · **founder story** · honest **footer**
+  (no-auto-apply line).
+- [x] Product visual = a **CSS-built dashboard mock** (mini table on real v2 tokens mirroring
+  `PostingsTable` markup — verdict chips + mono scores), no binary asset.
+- Static, no new endpoints; stays the logged-out branch of the D-065 smart root (rendered
+  inside the App shell — header/nav above, Linear-like).
+- **DoD met:** eslint + tsc + vitest green (50/50, incl. the new `Landing.test.tsx` pinning the
+  section skeleton + CTA) · before/after screenshots (1440 + 720 sanity, no horizontal
+  overflow) · route guards untouched (`App.test.tsx` green, `App.tsx` not in the diff).
 
 ## PR 2 — Login + onboarding polish
 
