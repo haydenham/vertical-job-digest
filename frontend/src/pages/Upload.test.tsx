@@ -29,6 +29,7 @@ function auth(over: Partial<AuthState> = {}): AuthState {
     user: null,
     profile: null,
     loading: false,
+    authError: false,
     refresh: vi.fn().mockResolvedValue(me()),
     logout: vi.fn(),
     ...over,
@@ -78,7 +79,11 @@ describe("Upload", () => {
   it("submits the vertical picked via its card", async () => {
     mockUseAuth.mockReturnValue(signedIn());
     mockVerticals.mockResolvedValue(["grid_power_software", "aviation_software"]);
-    mockUpload.mockResolvedValue({ profile_id: 5, vertical: "aviation_software", resume_version: 1 });
+    mockUpload.mockResolvedValue({
+      profile_id: 5,
+      vertical: "aviation_software",
+      resume_version: "v1",
+    });
     renderUpload();
     await userEvent.click(await screen.findByRole("radio", { name: /aerospace & aviation/i }));
     await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
@@ -116,7 +121,7 @@ describe("Upload", () => {
     mockUpload.mockResolvedValue({
       profile_id: 5,
       vertical: "grid_power_software",
-      resume_version: 3,
+      resume_version: "v3",
     });
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
@@ -138,7 +143,7 @@ describe("Upload", () => {
     mockUpload.mockResolvedValue({
       profile_id: 5,
       vertical: "grid_power_software",
-      resume_version: 3,
+      resume_version: "v3",
     });
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
@@ -160,7 +165,7 @@ describe("Upload", () => {
     mockUpload.mockResolvedValue({
       profile_id: 5,
       vertical: "grid_power_software",
-      resume_version: 3,
+      resume_version: "v3",
     });
     renderUpload();
     await act(() => vi.advanceTimersByTimeAsync(0)); // flush the verticals fetch

@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -64,6 +66,7 @@ from vja.db.profiles import (
     mark_backfill_started,
     upsert_profile,
 )
+from vja.db.schema_guard import ensure_configured_schema_ready
 from vja.db.users import User, upsert_user_by_google
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
@@ -269,8 +272,18 @@ def _cors_origins() -> list[str]:
 
 def create_app(engine: Engine | None = None) -> FastAPI:
     """Build the read-only dashboard API. Pass `engine` in tests; defaults to `get_engine()`."""
-    app = FastAPI(title="VJA dashboard API", version="0.1.0")
-    app.state.engine = engine if engine is not None else get_engine()
+    resolved_engine = engine if engine is not None else get_engine()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # D-083: fail readiness before Cloud Run sends traffic when code is ahead of the DB.
+        # Unknown/newer DB revisions remain allowed so an old image can still cold-start on
+        # rollback.
+        ensure_configured_schema_ready(resolved_engine)
+        yield
+
+    app = FastAPI(title="VJA dashboard API", version="0.1.0", lifespan=lifespan)
+    app.state.engine = resolved_engine
     # OAuth registry (None until GOOGLE_CLIENT_* are set); the login routes report 503 when absent.
     app.state.oauth = build_oauth()
 

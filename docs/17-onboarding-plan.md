@@ -106,6 +106,21 @@ place, unit-testable) rather than by the client as first sketched — the client
   over real rows; **running → done poll flip observed live** (stamped `completed` mid-session,
   banner cleared on the next tick without a reload); no console errors, no overflow.
 
+### PR-2 post-merge incident + hotfix (D-083)
+
+PR #79 merged and deployed before production Neon actually reached `a06b99424c4c`. The migration
+had been run as a bare `uv run alembic upgrade head`; Alembic does not load `.env`, so that command
+upgraded the default local SQLite DB. On the new Cloud Run revision, an existing user's `/api/me`
+hit the missing `backfill_started_at` column and returned 500. `AuthProvider` then collapsed that
+non-401 failure to logged-out, making the successful Google login appear to redirect to Landing.
+
+**Production recovery completed 2026-07-13:** explicitly exported the Secret Manager Neon
+`VJA_DATABASE_URL`, upgraded to `a06b99424c4c`, and restored `/api/me`. Follow-up branch
+`fix/onboarding-auth-failure` adds the D-083 production startup guard (known-behind schema → new
+revision never becomes ready; unknown newer revision allowed for rollback), separates auth-probe
+errors from 401 with a retry state, guards `/login` for existing sessions, and corrects the
+frontend upload response's `resume_version` from number to string. This hotfix lands before PR 3.
+
 ## PR 3 — welcome-slides tutorial + toggle clarity
 
 - [ ] **First-run dialog** on the dashboard (reuses the `PostingPanel` dialog pattern:

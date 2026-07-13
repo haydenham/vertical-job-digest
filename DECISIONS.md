@@ -1478,3 +1478,27 @@ plus upload timeout, silent bounded `/api/me` retry, `/upload` back nav, keep-da
 status signal (migration + stamps + `/api/me` + banner; INVARIANTS' D-057 poll line rewritten when it lands) →
 PR 3 tutorial + toggle tooltips/labels (copy = Hayden sign-off at execution). Groups with the docs/15 Day-3
 bug shakeout as its fresh-account leg. References D-057, D-064, D-065, D-021, D-068. **Amends D-057.**
+
+### D-083 · Onboarding incident · Schema readiness + honest auth-probe failures · accepted · 2026-07-13
+PR #79 deployed the D-082 backfill-status code while production Neon was still at `b2f4c1a9e07d`.
+The migration had been run, but a bare `uv run alembic upgrade head` does **not** load `.env` and
+therefore upgraded the default local SQLite DB, not Neon. The new `/api/me` query raised
+`UndefinedColumn(backfill_started_at)` in Cloud Run. A second bug converted every non-401
+`/api/me` failure into `me=null`, so the SPA rendered the logged-out Landing page after a successful
+OAuth callback and hid the real 500. Production recovered by explicitly exporting the Secret
+Manager `VJA_DATABASE_URL` and applying `a06b99424c4c` to Neon.
+
+**Decision:** manual migrations stay manual and pre-merge (D-068), but the production image now
+sets `VJA_ALEMBIC_INI=/app/alembic.ini` and the API lifespan compares the DB's Alembic revision with
+the migration head packaged in that image. A known older revision fails startup, so Cloud Run never
+makes the incompatible revision ready and the prior revision keeps serving. A DB revision unknown to
+an older image is allowed with a warning: this is the normal additive-migration rollback case, and a
+cold-starting old revision must remain viable. Local/test processes stay opt-in by leaving the env
+unset. This is a last-line compatibility guard, **not** an automatic migration and not permission to
+merge code before migrating Neon.
+
+**Frontend follow-through:** 401 remains the only logged-out signal; a thrown `/api/me` probe shows a
+retryable account-load error rather than Landing, and an authenticated visit to `/login` routes to
+that user's onboarding/dashboard destination. The adjacent upload-response contract is corrected:
+`resume_version` is a string, matching FastAPI. **Status:** built on
+`fix/onboarding-auth-failure`. References D-082, D-068, D-067, D-065, D-021.

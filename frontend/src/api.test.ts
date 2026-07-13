@@ -99,12 +99,16 @@ describe("uploadResume", () => {
 
   it("POSTs multipart credentialed and returns the created profile on 202", async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse(202, { profile_id: 5, vertical: "grid_power_software", resume_version: 3 }),
+      jsonResponse(202, {
+        profile_id: 5,
+        vertical: "grid_power_software",
+        resume_version: "abc123",
+      }),
     );
     await expect(uploadResume("grid_power_software", file)).resolves.toEqual({
       profile_id: 5,
       vertical: "grid_power_software",
-      resume_version: 3,
+      resume_version: "abc123",
     });
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe("/api/profiles");

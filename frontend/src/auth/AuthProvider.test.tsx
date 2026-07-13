@@ -12,8 +12,9 @@ const mockFetchMe = vi.mocked(fetchMe);
 const mockLogout = vi.mocked(logout);
 
 function Probe() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authError } = useAuth();
   if (loading) return <span>loading</span>;
+  if (authError) return <span>account-error</span>;
   if (!user) return <span>anon</span>;
   return <span>{`${user.email} / ${profile?.vertical ?? "no-profile"}`}</span>;
 }
@@ -61,6 +62,17 @@ describe("AuthProvider", () => {
       </AuthProvider>,
     );
     expect(await screen.findByText("anon")).toBeInTheDocument();
+  });
+
+  it("keeps a non-401 /api/me failure distinct from logged-out", async () => {
+    mockFetchMe.mockRejectedValue(new Error("500 Internal Server Error"));
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("account-error")).toBeInTheDocument();
+    expect(screen.queryByText("anon")).not.toBeInTheDocument();
   });
 
   it("silent refresh updates state without flipping the global loading flag", async () => {

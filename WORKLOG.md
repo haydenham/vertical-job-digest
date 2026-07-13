@@ -5,6 +5,34 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — Onboarding PR-2 prod incident recovered + auth/schema hotfix built (D-083)
+
+**Incident:** after PR #79 deployed, successful Google login appeared to return an existing user
+to Landing. Cloud Run logs proved OAuth was not the failure: every `/api/me` probe on revision
+`rolefeed-00032-5bf` returned 500 because production Neon lacked
+`profiles.backfill_started_at`. The migration had been run as bare `uv run alembic upgrade head`;
+Alembic does not load `.env`, so it upgraded default local SQLite. `AuthProvider` then hid the 500
+by collapsing every probe failure to logged-out. **Recovered prod:** Hayden explicitly exported
+the Secret Manager Neon `VJA_DATABASE_URL` and applied `a06b99424c4c`; read-only log verification
+then showed `/api/me` 200 twice on the same revision (with the expected anonymous 401 separate).
+
+**Built on `fix/onboarding-auth-failure`:** D-083 production schema-readiness guard — the image
+sets `VJA_ALEMBIC_INI=/app/alembic.ini`; FastAPI lifespan rejects a known older DB revision before
+Cloud Run readiness, while an unknown/newer DB revision remains allowed for old-image rollback.
+Manual pre-merge migrations stay policy. Frontend auth now distinguishes thrown `/api/me` failures
+from 401 and renders a retryable account-load error instead of Landing; `/login` is logged-out-only
+and routes an existing session to onboarding/dashboard. Audit fix: `ProfileCreated.resume_version`
+is now the API's real string type (the stale no-status comment also corrected). The low-probability
+duplicate-backfill-on-timeout issue was deliberately left out of this focused PR.
+
+**Verified:** regression tests were observed red first (auth failure → anon/Landing, unguarded
+`/login`, missing schema-guard module), then green. Full backend: **522 passed**, 20 opt-in
+deselected; ruff format/check, mypy (52 source files), import-linter (1 kept / 0 broken), and
+`uv lock --check` green. Frontend: eslint + `tsc --noEmit` + vitest **89/89** green. Docs: D-083,
+INVARIANTS, docs/17 incident note, CLAUDE/README, and the GCP deploy runbook now spell out that
+Alembic needs an explicit production URL plus `current → upgrade → current`. **Next:** Hayden
+reviews/commits/opens the PR; after merge, continue onboarding PR 3 (welcome slides + toggle copy).
+
 ## 2026-07-13 — Onboarding PR 2: backfill-status signal built (branch `feat/backfill-status`)
 
 **PR 1 confirmed merged (#78) before starting.** The D-082 matching-progress signal, per docs/17.

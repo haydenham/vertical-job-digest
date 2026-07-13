@@ -15,18 +15,37 @@ function Spinner() {
   return <div className="notice">loading…</div>;
 }
 
+function AccountLoadError() {
+  const { refresh } = useAuth();
+  return (
+    <div className="notice error" role="alert">
+      We couldn't load your account.{" "}
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => void refresh().catch(() => undefined)}
+      >
+        Try again
+      </button>
+      .
+    </div>
+  );
+}
+
 // `/` — the smart root: route each visitor to where they belong (D-065).
 function Root() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authError } = useAuth();
   if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
   if (!user) return <Landing />;
   return <Navigate to={profile ? "/dashboard" : "/onboarding"} replace />;
 }
 
 // `/dashboard` — authed + onboarded only; otherwise bounce to login / onboarding.
 function DashboardRoute() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authError } = useAuth();
   if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
   if (!user) return <Navigate to="/login" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
   return <Dashboard vertical={profile.vertical} />;
@@ -34,8 +53,9 @@ function DashboardRoute() {
 
 // `/onboarding` — authed + NOT yet onboarded: pick a vertical + upload (the picker mode of Upload).
 function OnboardingRoute() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authError } = useAuth();
   if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
   if (!user) return <Navigate to="/login" replace />;
   if (profile) return <Navigate to="/dashboard" replace />;
   return <Upload />;
@@ -44,15 +64,26 @@ function OnboardingRoute() {
 // `/upload` — résumé update for an already-onboarded user: vertical is fixed to theirs (immutable,
 // one-vertical-per-user D-064). No profile yet → send to onboarding instead.
 function UploadRoute() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authError } = useAuth();
   if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
   if (!user) return <Navigate to="/login" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
   return <Upload lockedVertical={profile.vertical} />;
 }
 
+// `/login` is a logged-out-only route. An existing session continues through the same one-profile
+// routing as `/` instead of presenting another Google sign-in form (D-083).
+function LoginRoute() {
+  const { user, profile, loading, authError } = useAuth();
+  if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
+  if (!user) return <Login />;
+  return <Navigate to={profile ? "/dashboard" : "/onboarding"} replace />;
+}
+
 export default function App() {
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, loading, authError, logout } = useAuth();
 
   return (
     <div className="app">
@@ -62,7 +93,7 @@ export default function App() {
           Rolefeed
         </Link>
         <nav className="nav">
-          {loading ? null : user ? (
+          {loading || authError ? null : user ? (
             <>
               {profile && (
                 <Link to="/upload" className="nav-link">
@@ -84,7 +115,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Root />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginRoute />} />
         <Route path="/onboarding" element={<OnboardingRoute />} />
         <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/upload" element={<UploadRoute />} />

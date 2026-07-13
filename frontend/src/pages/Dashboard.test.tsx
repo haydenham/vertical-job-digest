@@ -22,6 +22,7 @@ function auth(backfillStatus: BackfillStatus = null, over: Partial<AuthState> = 
       backfill_status: backfillStatus,
     },
     loading: false,
+    authError: false,
     refresh: vi.fn().mockResolvedValue(null),
     logout: vi.fn(),
     ...over,

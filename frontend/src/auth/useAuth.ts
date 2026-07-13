@@ -12,6 +12,7 @@ export interface AuthState {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  authError: boolean;
   refresh: (opts?: { silent?: boolean }) => Promise<Me | null>;
   logout: () => Promise<void>;
 }

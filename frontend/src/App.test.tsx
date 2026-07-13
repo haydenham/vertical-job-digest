@@ -18,7 +18,15 @@ const mockUseAuth = vi.mocked(useAuth);
 const logout = vi.fn();
 
 function auth(over: Partial<AuthState> = {}): AuthState {
-  return { user: null, profile: null, loading: false, refresh: vi.fn(), logout, ...over };
+  return {
+    user: null,
+    profile: null,
+    loading: false,
+    authError: false,
+    refresh: vi.fn(),
+    logout,
+    ...over,
+  };
 }
 
 const alice: User = { email: "alice@example.com", name: "Alice" };
@@ -108,6 +116,28 @@ describe("App routing + guards", () => {
     mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
     renderAt("/onboarding");
     expect(screen.getByText("dashboard-page")).toBeInTheDocument();
+  });
+
+  it("/login when already onboarded → dashboard", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    renderAt("/login");
+    expect(screen.getByText("dashboard-page")).toBeInTheDocument();
+  });
+
+  it("/login when signed in without a profile → onboarding", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
+    renderAt("/login");
+    expect(screen.getByText("upload-page")).toBeInTheDocument();
+  });
+
+  it("shows a retryable account error instead of the landing page when /api/me fails", async () => {
+    const refresh = vi.fn().mockResolvedValue(null);
+    mockUseAuth.mockReturnValue(auth({ authError: true, refresh }));
+    renderAt("/");
+    expect(screen.getByRole("alert")).toHaveTextContent(/couldn't load your account/i);
+    expect(screen.queryByText("landing-page")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("shows a spinner while auth is loading", () => {
