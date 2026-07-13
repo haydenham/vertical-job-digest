@@ -22,19 +22,24 @@ a human-read diff + updated docs, on a branch → PR.
 
 ---
 
-## Day 1 — UI rework
+## Day 1 — UI rework (SCOPED — D-080; plan of record: `docs/16-ui-rework-plan.md`)
 
-Real landing page + dashboard polish, modeled on a proven industry-leader UX (copy what works rather than
-invent). **Timebox the "which leader / what to copy" decision** up front (~30 min) so reference-hunting
-doesn't eat the build day.
+Scoped 2026-07-12 in a planning session (every decision Hayden's). The timeboxed reference-pick resolved to
+**Linear**; the item expanded from one day to a **4-PR block, strict merge order** — see `docs/16` for the
+full plan + per-PR DoD. Summary:
 
-- **Scope:** `frontend/` — `Landing` page overhaul, login/dashboard visual polish. No backend contract change
-  (the `/api/me` + `/api/postings` shapes stay put; this is presentation).
-- **DoD:** frontend gate (eslint + `tsc --noEmit` + vitest) green; human-read diff; screenshots of before/after
-  in the PR.
-- **Watch:** keep the Rolefeed brand; don't regress the D-065 route guards (`/` smart-root, `/onboarding`,
-  `/dashboard`, `/upload`). One vertical per user (D-064) is a policy, not a UI toggle — don't reintroduce a
-  cross-user vertical picker.
+- **PR 0** — design-language foundation: DESIGN.md v2 ("softer, more premium dark"; accent/fonts/terminal
+  motifs all up for replacement, Hayden signs off accent + font from screenshots) + `theme.css` tokens +
+  app shell.
+- **PR 1** — full Linear-style marketing landing (hero · how-it-works · verticals · footer; CSS-built
+  product mock, no binary asset).
+- **PR 2** — login/onboarding polish (auth card, descriptive vertical cards, drag-drop upload; fixes
+  Login's stale "browse without signing in" copy — false since D-067).
+- **PR 3** — dashboard rework: row-level match info (verdict/score + rationale snippet without a click),
+  Linear-style side-panel detail, client-side sortable columns + text filter. No API contract change —
+  `/api/postings` already returns the full set unpaginated.
+- **Watch (unchanged):** Rolefeed brand; D-065 route guards; one vertical per user (D-064) — no cross-user
+  vertical picker. **Out:** mobile pass (deferred), keyboard nav (not selected).
 
 ## Day 2 — Discovery agent: live run + supporting tooling
 

@@ -5,6 +5,29 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-12 — UI rework scoped: Linear reference, design language v2, 4-PR block (D-080, docs/16)
+
+**Planning-only session** for the docs/15 Day-1 item; every decision run through Hayden via questionnaire.
+Locked: **reference = Linear** (the D-072 timeboxed pick); **design language v2 with everything on the
+table** — softer/more premium dark; the orange accent, Space Grotesk/JetBrains Mono, and the terminal motifs
+(`$` prompt, blinking ▮, `//comments`) are all up for replacement, with accent + font decided from screenshot
+comparisons during PR 0; **full Linear-style marketing landing**; **dashboard rework** = sortable columns +
+text filter + side-panel detail + match info surfaced at row level (verdict/score + rationale snippet visible
+without a click). Explicitly out: mobile pass, keyboard nav. **Shape: 4 PRs, strict order** — PR 0 foundation
+(DESIGN.md v2 + tokens + shell) → PR 1 landing → PR 2 login/onboarding (incl. the stale "browse without
+signing in" copy fix) → PR 3 dashboard. All frontend-only: verified `/api/postings` returns the full filtered
+set unpaginated (`db/postings.py:470`), so sorting/filtering is client-side and no API contract moves.
+
+A `/design-sync` (claude.ai/design testing-ground) detour was considered and **skipped** — Hayden's call after
+clarifying the sync is one-way repo→design-tool.
+
+**Landed:** `docs/16-ui-rework-plan.md` (plan of record, per-PR scope + DoD), D-080, docs/15 Day-1 section
+rewritten to point at it, CLAUDE.md Phase-BH line updated. No `frontend/` code this session; no INVARIANTS
+change (no live cross-cutting rule moved — D-080 governs a build block). Also noted: WORKLOG's prior top entry
+predated the Pinpoint PR merge — #72 is merged; its post-merge steps (Aireon #135 `set-ats`, Aurora Neon seed
+import) still unrecorded. **Next:** Hayden reviews/commits this branch → PR 0 (token candidates + screenshot
+sign-off) in a fresh session.
+
 ## 2026-07-12 — Generic Pinpoint fetcher + Aurora onboard (D-079)
 
 **Live contract first:** verified the same public `GET {board}/postings.json` contract on canonical Aireon
