@@ -54,10 +54,14 @@ from vja.api.auth import (
 from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality
 from vja.db.profiles import (
+    BackfillStatus,
     Profile,
     active_profile_for_user,
     active_profiles,
+    backfill_stamps,
+    derive_backfill_status,
     get_profile,
+    mark_backfill_started,
     upsert_profile,
 )
 from vja.db.users import User, upsert_user_by_google
@@ -139,10 +143,16 @@ class MeUser(BaseModel):
 
 
 class MeProfile(BaseModel):
-    """The user's one active profile (D-064), or `None` in `MeResponse` when not yet onboarded."""
+    """The user's one active profile (D-064), or `None` in `MeResponse` when not yet onboarded.
+
+    `backfill_status` (D-082) is derived server-side from the profile's backfill stamps —
+    `running` while the signup/reupload catch-up computes (drives the dashboard's progress
+    banner + poll), `done` once it finished (or went stale — the crash guard), `null` for rows
+    that never had a stamped backfill (pre-D-082 / CLI-seeded)."""
 
     vertical: str
     resume_version: str
+    backfill_status: BackfillStatus | None
 
 
 class MeResponse(BaseModel):
@@ -334,12 +344,15 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if user is None:
             raise HTTPException(401, "not authenticated")
         profile = active_profile_for_user(engine, user.email)
+        if profile is None:
+            return MeResponse(user=MeUser(email=user.email, name=user.name), profile=None)
+        started, completed = backfill_stamps(engine, profile.id)
         return MeResponse(
             user=MeUser(email=user.email, name=user.name),
-            profile=(
-                MeProfile(vertical=profile.vertical, resume_version=profile.resume_version)
-                if profile is not None
-                else None
+            profile=MeProfile(
+                vertical=profile.vertical,
+                resume_version=profile.resume_version,
+                backfill_status=derive_backfill_status(started, completed, now=datetime.now(UTC)),
             ),
         )
 
@@ -436,6 +449,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         )
         profile = get_profile(engine, profile_id)
         assert profile is not None  # just upserted
+        # Stamp `started` BEFORE scheduling (D-082): the 202 returns before the background task
+        # runs, and the SPA probes /api/me immediately after — stamping only inside run_backfill
+        # would race that probe and the progress banner would never show.
+        mark_backfill_started(engine, profile_id)
         background.add_task(run_backfill, engine, vertical, profile, config=cfg)
         return ProfileCreated(
             profile_id=profile_id, vertical=vertical, resume_version=profile.resume_version

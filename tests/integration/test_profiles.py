@@ -5,11 +5,18 @@ re-loading the same resume is idempotent; editing the resume makes a new active 
 deactivates the prior one; `active_profiles` returns only the current one.
 """
 
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import Engine, func, select
 
 from vja.db.profiles import (
+    BACKFILL_STALE_AFTER,
     active_profile_for_user,
     active_profiles,
+    backfill_stamps,
+    derive_backfill_status,
+    mark_backfill_completed,
+    mark_backfill_started,
     resume_version,
     upsert_profile,
 )
@@ -96,3 +103,56 @@ def test_active_profile_for_user_ignores_deactivated(migrated_engine: Engine) ->
     prof = active_profile_for_user(migrated_engine, "me@example.com")
     assert prof is not None
     assert prof.id == second
+
+
+# --- backfill status stamps + derivation (D-082) ----------------------------------------------
+
+_T0 = datetime(2026, 7, 13, 12, 0, tzinfo=UTC)
+
+
+def test_backfill_stamps_roundtrip(migrated_engine: Engine) -> None:
+    """Both stamps write independently and read back tz-aware; unstamped rows read (None, None)."""
+    pid = _load(migrated_engine, "RESUME ONE")
+    assert backfill_stamps(migrated_engine, pid) == (None, None)
+
+    mark_backfill_started(migrated_engine, pid, now=_T0)
+    assert backfill_stamps(migrated_engine, pid) == (_T0, None)
+
+    done = _T0 + timedelta(minutes=2)
+    mark_backfill_completed(migrated_engine, pid, now=done)
+    assert backfill_stamps(migrated_engine, pid) == (_T0, done)
+
+
+def test_derive_backfill_status_unstamped_is_none() -> None:
+    """Pre-D-082 rows / CLI-seeded profiles never stamped anything → no status at all."""
+    assert derive_backfill_status(None, None, now=_T0) is None
+
+
+def test_derive_backfill_status_fresh_start_is_running() -> None:
+    assert derive_backfill_status(_T0, None, now=_T0 + timedelta(minutes=1)) == "running"
+
+
+def test_derive_backfill_status_completed_after_start_is_done() -> None:
+    assert (
+        derive_backfill_status(_T0, _T0 + timedelta(minutes=2), now=_T0 + timedelta(minutes=3))
+        == "done"
+    )
+
+
+def test_derive_backfill_status_reupload_ordering_is_running() -> None:
+    """The reupload race (D-082): a same-résumé reupload reactivates a row whose completed_at is
+    from the PREVIOUS backfill. completed < started must read running, not done."""
+    old_completed = _T0 - timedelta(days=3)
+    assert derive_backfill_status(_T0, old_completed, now=_T0 + timedelta(minutes=1)) == "running"
+
+
+def test_derive_backfill_status_stale_running_reads_done() -> None:
+    """The crash guard: a started-but-never-completed run older than the staleness window must not
+    strand the dashboard banner."""
+    now = _T0 + BACKFILL_STALE_AFTER + timedelta(seconds=1)
+    assert derive_backfill_status(_T0, None, now=now) == "done"
+
+
+def test_derive_backfill_status_completed_only_is_done() -> None:
+    """A completed stamp with no started (CLI backfill on a pre-stamp row) still reads done."""
+    assert derive_backfill_status(None, _T0, now=_T0 + timedelta(minutes=1)) == "done"

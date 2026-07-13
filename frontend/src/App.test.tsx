@@ -22,7 +22,11 @@ function auth(over: Partial<AuthState> = {}): AuthState {
 }
 
 const alice: User = { email: "alice@example.com", name: "Alice" };
-const gridProfile: Profile = { vertical: "grid_power_software", resume_version: "v1" };
+const gridProfile: Profile = {
+  vertical: "grid_power_software",
+  resume_version: "v1",
+  backfill_status: null,
+};
 
 function renderAt(path: string) {
   return render(

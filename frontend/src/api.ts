@@ -51,10 +51,16 @@ export interface User {
   name: string | null;
 }
 
+// Backfill progress as `/api/me` reports it (D-082): "running" while the signup/reupload
+// catch-up computes (server-side staleness guard included), "done" once finished, null for
+// profiles that never had a stamped backfill (pre-signal rows).
+export type BackfillStatus = "running" | "done" | null;
+
 // The user's one active profile (mirrors `MeProfile`); `null` in `Me` ⇒ signed in but not onboarded.
 export interface Profile {
   vertical: string;
   resume_version: string;
+  backfill_status: BackfillStatus;
 }
 
 // `GET /api/me` — the SPA's routing source of truth (D-064/D-065): who you are + your one vertical

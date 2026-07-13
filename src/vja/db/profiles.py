@@ -11,13 +11,19 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import cast
+from datetime import UTC, datetime, timedelta
+from typing import Literal, cast
 
 from sqlalchemy import Engine, select
 
 from vja.db.engine import begin
 from vja.db.schema import profiles
+
+# A "running" stamp older than this reads as done — the crash guard (D-082): a killed container
+# must not strand the dashboard's "matching in progress" banner forever.
+BACKFILL_STALE_AFTER = timedelta(minutes=10)
+
+BackfillStatus = Literal["running", "done"]
 
 _PROFILE_COLS = (
     profiles.c.id,
@@ -134,6 +140,62 @@ def active_profiles(engine: Engine, vertical: str) -> list[Profile]:
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [_row_to_profile(dict(row)) for row in rows]
+
+
+def mark_backfill_started(engine: Engine, profile_id: int, *, now: datetime | None = None) -> None:
+    """Stamp `backfill_started_at` (D-082). The upload endpoint calls this *before* scheduling the
+    background task, so the SPA's immediate post-202 `/api/me` probe already sees `running` —
+    stamping only inside `run_backfill` would race the probe. Idempotent overwrite."""
+    with begin(engine) as conn:
+        conn.execute(
+            profiles.update()
+            .where(profiles.c.id == profile_id)
+            .values(backfill_started_at=now or datetime.now(UTC))
+        )
+
+
+def mark_backfill_completed(
+    engine: Engine, profile_id: int, *, now: datetime | None = None
+) -> None:
+    """Stamp `backfill_completed_at` (D-082) — `run_backfill` calls this on exit, including when
+    every candidate failed (per-posting isolation means the run itself still finished)."""
+    with begin(engine) as conn:
+        conn.execute(
+            profiles.update()
+            .where(profiles.c.id == profile_id)
+            .values(backfill_completed_at=now or datetime.now(UTC))
+        )
+
+
+def backfill_stamps(engine: Engine, profile_id: int) -> tuple[datetime | None, datetime | None]:
+    """(started_at, completed_at) for the profile — the raw inputs to `derive_backfill_status`."""
+    stmt = select(profiles.c.backfill_started_at, profiles.c.backfill_completed_at).where(
+        profiles.c.id == profile_id
+    )
+    with engine.connect() as conn:
+        row = conn.execute(stmt).one_or_none()
+    return (row[0], row[1]) if row is not None else (None, None)
+
+
+def derive_backfill_status(
+    started: datetime | None,
+    completed: datetime | None,
+    *,
+    now: datetime,
+    stale_after: timedelta = BACKFILL_STALE_AFTER,
+) -> BackfillStatus | None:
+    """running/done/None from the two stamps (D-082), computed server-side so the client stays dumb.
+
+    Ordering matters: a same-résumé reupload reactivates a row whose `completed_at` is from the
+    *previous* backfill, so `completed >= started` (not mere presence) is what means done. A fresh
+    `started` with no newer `completed` is running — unless it is older than `stale_after`, which
+    reads as done (the crash guard). Both stamps absent (pre-D-082 rows, CLI-only profiles) → None.
+    """
+    if started is None:
+        return "done" if completed is not None else None
+    if completed is not None and completed >= started:
+        return "done"
+    return "running" if now - started < stale_after else "done"
 
 
 def active_profile_for_user(engine: Engine, user_email: str) -> Profile | None:
