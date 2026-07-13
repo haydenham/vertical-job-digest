@@ -82,18 +82,27 @@ onboarding picker doesn't offer (`main` auto-deploys, D-068) — Hayden owns mer
   section skeleton + CTA) · before/after screenshots (1440 + 720 sanity, no horizontal
   overflow) · route guards untouched (`App.test.tsx` green, `App.tsx` not in the diff).
 
-## PR 2 — Login + onboarding polish
+## PR 2 — Login + onboarding polish ✅ (built 2026-07-13)
 
-- [ ] `Login.tsx` → proper auth card: brand, 2–3 benefit lines, Google button. **Fix stale
-  copy:** it claims you can browse without signing in — false since `VJA_AUTH_REQUIRED` went
-  ON at go-live (D-067).
-- [ ] `Upload.tsx` onboarding mode → vertical choice as **descriptive cards** (not a bare
-  `<select>`) + drag-and-drop file zone (type hints, selected-file state) + clearer
-  submit/error states (typed `ApiError` messages styled, incl. the 409 second-vertical).
-- [ ] `/upload` update mode gets the same treatment with the vertical locked (D-064).
-  Two-mode logic + guards unchanged.
-- **DoD:** gates green · screenshots · Login/Upload test suites updated for the new
-  interactions.
+*Decisions locked by Hayden 2026-07-13 (recorded here + WORKLOG, no new ADR — D-080 governs):
+**centered** auth-card layout for /login, /onboarding, /upload · login card = mark + heading +
+**3 benefit lines** + Google button · vertical display copy = a **frontend slug→{name, blurb}
+map** (`frontend/src/verticalCopy.ts`; `/api/verticals` returns slugs only and the API is frozen
+this block) reusing the landing's vertical copy, with a prettified-slug fallback so an unknown
+vertical still renders · **robotics pre-added** under slug `robotics_software` (Hayden's naming).*
+
+- [x] `Login.tsx` → proper auth card: brand, 3 benefit lines, Google button. **Stale copy
+  fixed:** the browse-without-signing-in claim (false since `VJA_AUTH_REQUIRED` went ON at
+  go-live, D-067) is deleted and pinned gone by a test.
+- [x] `Upload.tsx` onboarding mode → vertical choice as **descriptive cards** (visually-hidden
+  native radios, accessible) + drag-and-drop file zone (native DnD, no new deps; type hints,
+  selected-file state) + clearer submit/error states (typed `ApiError` statuses get a friendly
+  lead before the server detail — 409 second-vertical, 413, 422, 429).
+- [x] `/upload` update mode gets the same treatment with the vertical locked (D-064), shown as
+  a static card (display name + mono slug). Two-mode logic + guards unchanged.
+- **DoD met:** eslint + tsc + vitest green (57/57) · before/after screenshots (1440 + 720, no
+  horizontal overflow; interactive states — file-selected, 409 — driven in a real headless
+  Chrome against the live API) · Login/Upload suites updated + new `verticalCopy` unit test.
 
 ## PR 3 — Dashboard rework
 
