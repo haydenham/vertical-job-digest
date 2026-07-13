@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — UI rework PR 1: Linear-style marketing landing built
+
+**PR 0 confirmed merged (#74) before starting; branch `feat/ui-landing`.** Copy decisions ran through
+Hayden first (from his business thesis): **hero = coverage-led** ("The engineering jobs the big boards
+miss."), sections expanded to hero → stats band → three thesis pillars → how-it-works → verticals →
+founder story → footer; brand stays **"Rolefeed"** (D-058, not the thesis's "RoleFeed"); **robotics is
+listed as a served vertical** alongside aerospace + energy — Hayden's call, he's adding the vertical
+config this week before beta. **Flagged:** `main` auto-deploys (D-068), so until that config lands the
+live landing advertises a vertical the onboarding picker (`/api/verticals`, config-driven) doesn't
+offer — merge timing is Hayden's.
+
+**Landed (frontend-only):** `Landing.tsx` rewritten (19-line placeholder → full static marketing page;
+only live element is the `loginUrl()` Google CTA; product visual = a CSS-built mini dashboard mock
+mirroring `PostingsTable` markup on live v2 tokens, per docs/16 no-binary-asset rule). `theme.css`
+gains a scoped `.landing` block (marketing type scale, the one DESIGN.md-allowed hero glow — reworked
+to a centered bounded ellipse after the first cut caused horizontal overflow — stats band, card/step
+grids that collapse via `auto-fit minmax`). New `Landing.test.tsx` pins the section skeleton, CTA href,
+pillars, three verticals, and the no-auto-apply footer. `App.tsx`/routes/guards untouched.
+
+**Verified:** eslint + `tsc -b --noEmit` + vitest **50/50** green; headless-Chrome screenshots at 1440
+(before/after) + 720 (grid-collapse sanity) — no horizontal scroll, no unexpected console errors.
+Docs: docs/16 PR-1 section ticked with the copy decisions recorded (no new ADR — D-080 governs; no
+INVARIANTS change). **Next:** Hayden reviews/commits/opens the PR (before/after shots on the artifact
+page); then PR 2 (login/onboarding polish, incl. the stale "browse without signing in" copy fix).
+
 ## 2026-07-12 — UI rework PR 0: design language v2 landed (Indigo · Inter; D-081)
 
 **The D-080 screenshot sign-off ran first:** built the SPA, served it from the API against the **local**

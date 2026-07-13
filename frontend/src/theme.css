@@ -452,3 +452,237 @@ a:hover {
   font-size: 12.5px;
   color: var(--accent-tint-text);
 }
+
+/* ---- landing (marketing page — UI rework PR 1, D-080) ----
+   Marketing type scale + the one restrained hero glow DESIGN.md allows on the landing only.
+   Everything below is scoped under .landing / .landing-footer; app rules stay untouched. */
+.landing {
+  display: grid;
+  gap: 96px;
+  padding-top: 48px;
+}
+
+.landing .section-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  text-wrap: balance;
+}
+.landing .section-sub {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  max-width: 60ch;
+}
+
+/* hero */
+.hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 20px;
+  position: relative;
+}
+.hero::before {
+  /* the landing's single allowed glow: a faint indigo wash behind the hero */
+  content: "";
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, 100vw);
+  height: 480px;
+  background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(110, 121, 214, 0.14), transparent 70%);
+  pointer-events: none;
+}
+.hero > * {
+  position: relative;
+}
+.hero-title {
+  margin: 0;
+  font-size: 52px;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  line-height: 1.08;
+  max-width: 18ch;
+  text-wrap: balance;
+}
+.hero-sub {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 58ch;
+  text-wrap: balance;
+}
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+/* the CSS-built dashboard mock (no binary asset) — mirrors the real table's markup/tokens */
+.hero-mock {
+  margin-top: 28px;
+  width: min(860px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  overflow: hidden;
+  text-align: left;
+}
+.hero-mock-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+}
+.hero-mock-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-tint-text);
+}
+.hero-mock-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 130px 100px 110px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.hero-mock-row:last-child {
+  border-bottom: 0;
+}
+.hero-mock-row .match {
+  justify-self: end;
+}
+.hero-mock-row .score {
+  font-size: 14px;
+}
+
+/* stats band */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 24px 0;
+}
+.stat {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent-tint-text);
+}
+.stat-label {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  max-width: 26ch;
+}
+
+/* pillar + vertical cards */
+.pillars,
+.vertical-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.verticals {
+  display: grid;
+  gap: 20px;
+}
+.landing .card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 22px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.landing .card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.landing .card-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* how it works */
+.how {
+  display: grid;
+  gap: 24px;
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.step {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.step-num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+
+/* founder story */
+.founder {
+  display: grid;
+  gap: 14px;
+  max-width: 62ch;
+}
+.founder-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+.founder-sig {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+/* footer */
+.landing-footer {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+}
+.footer-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 60ch;
+}
+.footer-copy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
