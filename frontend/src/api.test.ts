@@ -5,6 +5,7 @@ import {
   fetchMe,
   loginUrl,
   postingsPath,
+  UPLOAD_TIMEOUT_MS,
   uploadResume,
   type PostingsQuery,
 } from "./api";
@@ -123,5 +124,22 @@ describe("uploadResume", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(status);
     expect((err as ApiError).message).toBe(detail);
+  });
+
+  it("aborts a hung upload after the timeout (D-082)", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_path: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    const pending = uploadResume("grid_power_software", file);
+    const assertion = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(UPLOAD_TIMEOUT_MS);
+    await assertion;
+    vi.useRealTimers();
   });
 });

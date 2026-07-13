@@ -22,9 +22,10 @@ a human-read diff + updated docs, on a branch → PR.
 
 ---
 
-## Day 1 — UI rework (SCOPED — D-080; plan of record: `docs/16-ui-rework-plan.md`)
+## Day 1 — UI rework ✅ (D-080; plan of record: `docs/16-ui-rework-plan.md`)
 
-Scoped 2026-07-12 in a planning session (every decision Hayden's). The timeboxed reference-pick resolved to
+**Done — all 4 PRs merged (#74–77) and live in prod (verified on `main` 2026-07-13).** Scoped 2026-07-12 in
+a planning session (every decision Hayden's). The timeboxed reference-pick resolved to
 **Linear**; the item expanded from one day to a **4-PR block, strict merge order** — see `docs/16` for the
 full plan + per-PR DoD. Summary:
 
@@ -78,11 +79,17 @@ the existing validate-by-fetch gate is required before a supported ATS is stampe
 providers and typed failure reasons remain visible in proposal notes. The first Terra live run now supplies
 the cost/yield/rate-limit evidence that still gates schedule enablement.
 
-## Day 3 — Bug shakeout
+## Day 3 — Bug shakeout (+ onboarding overhaul — SCOPED, D-082; plan of record: `docs/17-onboarding-plan.md`)
 
 Fix bugs surfaced by real private-user usage and the Day-2 run. Bug fixes **start with a failing regression
 test** (D-021).
 
+- **Onboarding overhaul (scoped 2026-07-13, D-082):** the first real user's fresh-signup walkthrough exposed
+  the untested onboarding path — the "stuck on upload page" bug cluster, the reupload match-orphaning UX gap,
+  no matching-progress signal, no `/upload` back nav, ambiguous toggles, no tutorial. A **3-PR block** (see
+  `docs/17`): PR 1 upload/onboarding bug fixes → PR 2 backend backfill-status signal (+migration) → PR 3
+  welcome-slides tutorial + toggle clarity. This is the fresh-account leg of this day; PR 1 built
+  2026-07-13.
 - **Scope:** whatever real usage exposes — onboarding edge cases, digest content, dashboard windows, fetcher
   drift.
 - **Proposed sub-item (Hayden's call at execution):** **basic observability/alerting on the nightly** so a

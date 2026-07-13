@@ -63,6 +63,37 @@ describe("AuthProvider", () => {
     expect(await screen.findByText("anon")).toBeInTheDocument();
   });
 
+  it("silent refresh updates state without flipping the global loading flag", async () => {
+    mockFetchMe.mockResolvedValueOnce({ user: { email: "a@b.co", name: "A" }, profile: null });
+    function SilentRefresh() {
+      const { refresh } = useAuth();
+      return (
+        <button type="button" onClick={() => void refresh({ silent: true })}>
+          silent
+        </button>
+      );
+    }
+    render(
+      <AuthProvider>
+        <Probe />
+        <SilentRefresh />
+      </AuthProvider>,
+    );
+    await screen.findByText("a@b.co / no-profile");
+
+    // hold the re-probe open: the Probe must keep rendering the user, not "loading"
+    let resolveMe!: (m: Awaited<ReturnType<typeof fetchMe>>) => void;
+    mockFetchMe.mockImplementationOnce(() => new Promise((r) => (resolveMe = r)));
+    await userEvent.click(screen.getByRole("button", { name: "silent" }));
+    expect(screen.queryByText("loading")).not.toBeInTheDocument();
+
+    resolveMe({
+      user: { email: "a@b.co", name: "A" },
+      profile: { vertical: "grid_power_software", resume_version: "v2" },
+    });
+    expect(await screen.findByText("a@b.co / grid_power_software")).toBeInTheDocument();
+  });
+
   it("clears the user on logout", async () => {
     mockFetchMe.mockResolvedValue({
       user: { email: "a@b.co", name: "A" },

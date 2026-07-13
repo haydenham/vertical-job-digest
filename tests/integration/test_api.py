@@ -421,3 +421,40 @@ def test_reupload_same_vertical_updates_resume(
     assert body["vertical"] == _VERTICAL
     assert body["resume_version"] != original.resume_version  # résumé text changed → new version
     assert len(calls) == 1  # backfill runs for the update
+
+
+def test_reupload_via_api_versions_and_retriggers_backfill(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The end-to-end API reupload protocol (D-082): same bytes → idempotent (same profile row);
+    edited bytes → a NEW active version (the old row deactivated, its matches orphaned by the
+    version key) and the 5-day backfill re-triggered each accepted upload — the uncapped nightly
+    re-matches the rest (D-039)."""
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    first = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE).json()
+
+    # same bytes → same version, same row (idempotent update, not a 409 — D-064 only rejects a
+    # DIFFERENT vertical); the backfill still re-runs (idempotently matching nothing new).
+    same = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert same.status_code == 202
+    assert same.json() == first
+
+    # edited résumé → new active profile row + resume_version.
+    edited = {"file": ("resume.txt", b"Jane Engineer. Python, grid software, SCADA.", "text/plain")}
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=edited)
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["resume_version"] != first["resume_version"]
+    assert body["profile_id"] != first["profile_id"]
+
+    # exactly one active profile survives: the new version (the old one is deactivated, D-064).
+    assert [p.id for p in active_profiles(migrated_engine, _VERTICAL)] == [body["profile_id"]]
+
+    # every accepted upload kicked off a backfill for the then-current profile row.
+    assert [args[2].id for args, _ in calls] == [
+        first["profile_id"],
+        first["profile_id"],
+        body["profile_id"],
+    ]

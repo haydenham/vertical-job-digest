@@ -100,7 +100,9 @@ export function Dashboard({ vertical }: { vertical: string }) {
 
       {error ? (
         <div className="notice error">{error}</div>
-      ) : loading ? (
+      ) : loading && data === null ? (
+        // Only the very first load blanks the page — refetches (poll ticks, toggle changes)
+        // keep the previous rows/notice in place instead of flashing "loading…" (D-082).
         <div className="notice">loading…</div>
       ) : visible.length > 0 ? (
         <PostingsTable
