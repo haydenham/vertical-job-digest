@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — UI rework PR 3: dashboard rework built (closes the D-080 block)
+
+**PR 2 confirmed merged (#76, live in prod) before starting; branch `feat/ui-dashboard`.** Layout
+decisions ran through Hayden first: rationale snippet = **two-line row** (muted truncated line
+under the title, not a sixth column) · detail = **overlay panel** (Linear peek over the table,
+not a docked split).
+
+**Landed (frontend-only):** row-level match info — verdict/score chips stay, plus the snippet
+line and a **verdict-colored spine** per row. Inline expansion deleted → new `PostingPanel`
+(`role="dialog"`: title/company, meta card, full rationale, fits/gaps, apply CTA, ✕; Esc /
+click-away / row-switch close; selection keys on `posting_id` so refetches that drop the posting
+close it naturally). **Sortable headers** (natural-direction first click, flip on second, nulls
+last both ways; default = freshness-desc, the server order) + **filter-as-you-type** over
+company/title/location with `X of N` count — both pure client-side (`postingsView.ts` helpers;
+`/api/postings` already returns the full set, contract untouched). Subbar search input, notice
+cards, footer copy fixed. Bonus inside the table CSS (not a mobile pass): `minmax` title column
++ `overflow-x: auto` — narrow viewports scroll the table instead of the pre-existing 720px
+column-crush. `postingsPath` mapping, D-057 poll, and routing pinned untouched by the existing
+tests.
+
+**Verified:** eslint + `tsc -b --noEmit` + vitest **73/73** green (was 57; new `postingsView` +
+`PostingPanel` suites, reworked table/dashboard tests); headless-Chrome before/after shots at
+1440 + 720 against the served build on the local sqlite DB (throwaway session secret) — panel
+open, filter active, sorted-by-score, cleaned view, landing (shared `.cell-*`/`.verdict-*`
+classes regression-checked, hero mock unchanged); no page overflow, no new console errors (the
+landing's anon `/api/me` 401 log predates this PR). Docs: docs/16 PR-3 section ticked — the
+**whole D-080 4-PR block is now built** (no new ADR, no INVARIANTS change). **Next:** Hayden
+reviews/commits/opens the PR (shots on the artifact page); after merge the docs/15 Day-1 UI
+item closes and the beta-hardening week moves to its next item.
+
 ## 2026-07-13 — UI rework PR 2: login + onboarding polish built
 
 **PR 1 confirmed merged (#75) before starting; branch `feat/ui-auth`.** Decisions ran through Hayden
