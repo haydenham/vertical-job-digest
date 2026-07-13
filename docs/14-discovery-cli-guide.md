@@ -9,7 +9,7 @@ reference for running it.
 - `vja-review` — the human gate: `list` / `approve` / `reject` those proposals.
 
 Related: `deploy/launchd/README.md` (§ "Discovery (disabled by default)" + "Running against prod"),
-`deploy/gcp/CUTOVER.md` §8b (cloud schedule, not yet enabled), and D-070/D-071 in `DECISIONS.md`.
+`deploy/gcp/CUTOVER.md` §8b (historical schedule runbook), and D-070/D-071/D-084 in `DECISIONS.md`.
 
 ---
 
@@ -196,7 +196,9 @@ is needed; the data reached prod through the database, not through code.
   needs it before the first run.
 - Verticals available: `grid_power_software`, `aviation_software` (`config/verticals/*.yaml`).
 
-## Not yet enabled
-The **weekly schedule** is ready-but-off (D-071): run `vja-discover` by hand until its live per-run
-cost is known. The disabled launchd template (`deploy/launchd/com.vja.discover.plist.template`) and
-Cloud Scheduler runbook (`deploy/gcp/CUTOVER.md` §8b) are the paths to turn it on later.
+## Run policy — manual/on-demand
+The discovery live-run gate is complete: multiple full Terra runs measured approximately
+**$0.77–$0.99 each**. Hayden chose **manual/on-demand operation** (D-084), not a weekly schedule.
+Run `vja-discover` when the company universe needs a refresh, then review its proposals explicitly.
+The disabled launchd template and Cloud Scheduler runbook remain historical/available machinery,
+not pending setup work.

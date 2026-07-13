@@ -5,6 +5,34 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — Beta-hardening ledger reconciled + PR-3/follow-up scope locked (D-084/D-085)
+
+**Planning/docs only on `docs/beta-hardening-reconcile`; no application code changed.** Reconciled the
+post-merge state that the prior top entry missed: onboarding PR 1 #78, PR 2 #79, and the D-083 auth/schema
+hotfix #80 are merged on clean `main`; docs/17's PR-1 checklist is now checked and PR 3 is the only remaining
+onboarding block. PR-3 copy is signed off: four welcome slides; Matched for you / All in-scope; New today /
+1 week / 2 weeks / All open; Skip/Back/Next/Start exploring; the table-use/read-only/nightly hint moves above
+the results; `aviation_software` displays as **Aviation Technology** while the internal slug stays stable.
+
+**Discovery Day 2 closed (D-084):** multiple complete Terra reports show ~$0.77–$0.99 per run; ledger +
+human review tooling exist. Hayden chose manual/on-demand discovery permanently — do not create a recurring
+Job. Proposal activation/pruning continues as company-database curation, not unfinished agent work.
+
+**Accepted post-PR-3 queue (D-085):** separate landing-copy pass (benefits vs mechanics vs founder story;
+outward software→technology vocabulary) · separate résumé abuse guard (identical content = success/no
+backfill; one changed reupload/user/rolling 24h → 429 + Retry-After) · minimum Cloud Job monitoring · robotics
+promise/config resolution · scaling assessment + no-code activations. Read-only production logs supplied the
+missing D-069 evidence: July 8–10 held at 44 fetched employers yet produced 343–654 new and 384–592 closed
+postings nightly; extraction dominated ~$0.63–$1.65/night while matching usually hit 84–93% cache. **Decision:
+diagnose identity/diff churn before Batch API; re-measure, then batch extraction first if still material.**
+After onboarding, the main loops are UI/UX, employer databases, and beta-user feedback; scheduled discovery
+and the endless fetcher tail are not beta-exit gates.
+
+**Docs updated:** D-084/D-085 · INVARIANTS discovery schedule · docs/14 run policy · docs/15 closeout/exit
+line · docs/16 landing follow-up · docs/17 merged state + PR-3/follow-ups · CLAUDE roadmap/doc map.
+**Verification:** human-read docs diff + stale-phrase scan; no code gates triggered. **Next:** Hayden reviews,
+commits, and PRs this docs branch; then branch from updated `main` for onboarding PR 3 implementation.
+
 ## 2026-07-13 — Onboarding PR-2 prod incident recovered + auth/schema hotfix built (D-083)
 
 **Incident:** after PR #79 deployed, successful Google login appeared to return an existing user

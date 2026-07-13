@@ -318,7 +318,7 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Discovery (Layer 3)
 
 - **The discovery agent finds new *employers*, never postings, and only ever writes `proposed`
-  rows.** Weekly (thin core is on-demand via `vja-discover`), **GPT-5.6 Terra** by default
+  rows.** On demand via `vja-discover`, **GPT-5.6 Terra** by default
   (`VJA_DISCOVER_MODEL`; only priced 5.6 Sol/Terra/Luna models are accepted) runs three sequential,
   separately bounded waves: capital portfolios, industry lists, and market adjacency. Every proposal
   is **validated by actually fetching** —
@@ -351,7 +351,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   promotion gate and must also promote **parked** rows whose ATS became fetchable. The new-fetcher
   activation sweep is a composed runbook (`list --provider` → `set-ats` → `approve`, docs/14), not a
   batch command. (D-077)
-- **The weekly discovery schedule is ready-but-OFF.** `vja-discover` stays a manual command until its
-  live per-run cost is measured; the launchd template (`com.vja.discover.plist.template`, not
-  auto-installed) + Cloud Scheduler runbook (CUTOVER §8b, not created) exist but are disabled. The
-  trigger is swappable config, not code (D-031). (D-071)
+- **Discovery runs manually/on demand; no recurring schedule is planned.** Complete Terra runs measured
+  roughly $0.77–$0.99 each, closing D-071's live-run gate; Hayden runs `vja-discover` only when the
+  company universe needs a refresh. The disabled launchd template + Cloud Scheduler runbook remain
+  available machinery, not pending setup. The trigger is still swappable config, not code. (D-084,
+  D-071, D-031)

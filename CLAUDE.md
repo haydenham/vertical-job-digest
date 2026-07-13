@@ -31,7 +31,7 @@ Builder (Hayden) is the first user — actively recruiting into both verticals.
 2. **Layer 2 — LLM retrieval/extraction.** Unstructured sources: raw-HTML careers
    pages (LLM-read-the-page as universal fallback), HN Who's Hiring, niche boards.
    Only runs on items the Layer 1 diff flags as new/changed.
-3. **Layer 3 — agentic discovery (weekly, later).** Agent finds new EMPLOYERS, not
+3. **Layer 3 — agentic discovery (manual/on-demand).** Agent finds new EMPLOYERS, not
    postings: VC portfolios, conference sponsor lists, funding news. Writes
    proposed employer records into a review queue (human approval at first).
 
@@ -182,18 +182,21 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   prod data cleanup + fresh-account walkthrough passed; **real private users are signed up and working.**
 - **Phase 9.6 — full CI/CD ✅ (D-068).** Merge-to-`main` auto-deploys to Cloud Run (keyless WIF, smoke +
   auto-rollback; migrations stay manual), replacing the manual Phase-A `ship.sh` (which stays the break-glass).
-- **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072).** The pre-broad-invite week: six one-day items —
+- **Phase BH — beta hardening (ACTIVE; `docs/15`, scope D-072/D-085).** The pre-broad-invite workstreams —
   UI rework (**✅ done, D-080** → `docs/16`: Linear reference, design-language v2, a 4-PR block —
   foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs merged #74–77, live in
-  prod**) · **onboarding overhaul (scoped D-082 → `docs/17`: a 3-PR block — upload-flow bug fixes →
-  backfill-status signal → welcome-slides tutorial; the fresh-account leg of the bug shakeout)** ·
-  discovery-agent live run (+ coverage ledger + low-signal pruning) · bug shakeout · scaling plan
-  (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**, incl. the parked Batch API Block 2) · more fetchers
+  prod**) · **onboarding overhaul (D-082/D-085 → `docs/17`: PR 1 upload fixes #78 ✅ → PR 2
+  backfill status #79 ✅ → D-083 hotfix #80 ✅ → PR 3 welcome tutorial + toggle clarity next)** ·
+  discovery-agent live run/ledger/pruning **✅ (D-084; manual/on-demand permanently, no scheduled Job)** ·
+  bug shakeout · scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; diagnose abnormal posting
+  identity churn before D-069 Batch API work) · more fetchers/company-database growth
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
-  (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo). Runs with the
-  private beta users giving feedback.
-- **Phase 10 — Layer 3: discovery agent (resequenced down; D-047).** Weekly agent finds new *employers* →
+  (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo).
+  **Beta exit:** PR 3 + user-facing fixes/reupload guard + robotics-promise resolution + minimum Job monitoring +
+  scaling assessment + validated no-code activations. After that, the main loops are UI/UX, company databases,
+  and beta-user feedback; scheduled discovery and the endless fetcher tail are not exit gates (D-085).
+- **Phase 10 — Layer 3: discovery agent (resequenced down; D-047/D-084).** On-demand agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):
   `vja-discover` — **GPT-5.6 Terra** three-wave web research → budgeted per-candidate **ATS
@@ -205,9 +208,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   provider-URL evidence; only a successful registry fetch stamps a supported ATS.
   **10.2 ✅** (D-071): the `vja-review` approve/reject/list CLI — the human gate
   that promotes proposals (`approve`→`active` if fetchable, else `approved`+parked; `reject`→`retired`; fetchability
-  keyed on `SUPPORTED_ATS_TYPES`, parked rows structurally unfetchable) + weekly scheduling **ready-but-OFF**
-  (disabled launchd template + Cloud Scheduler runbook; discovery stays manual until live cost is measured). **Later:**
-  auto-approval, a proposal-precision eval, non-employer `sources`, and actually enabling the weekly schedule.
+  keyed on `SUPPORTED_ATS_TYPES`, parked rows structurally unfetchable). **Live-run gate ✅ (D-084):** complete
+  Terra runs measured ~$0.77–$0.99; discovery is **manual/on-demand by policy**, with no recurring schedule
+  planned (disabled templates remain available machinery). **Later:** auto-approval, a proposal-precision eval,
+  and non-employer `sources`.
 
 ## Conventions for this repo
 
@@ -261,7 +265,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/11-multi-user-and-hosting.md` — living migration ledger: what's already portable, the single-user seams each phase must preserve, and the deferred auth/security/PII/cost work to build at the D-025 cutover. §5 = post-launch change management (data-only vs config/code redeploy loops; drives the vertical-expansion + discovery-agent roadmap).
 - `docs/12-cloud-deploy-plan.md` — Phase 9.5 plan of record (sub-blocks 9.5a–d + locked decisions). Read it + `docs/11` + the WORKLOG top entry to continue 9.5 after a chat reset.
 - `docs/14-discovery-cli-guide.md` — operator guide for the Layer-3 discovery workflow: `vja-discover` + `vja-review` commands, which DB they write (local vs Neon/prod), cost, and the first-run walkthrough (D-070/D-071).
-- `docs/15-beta-hardening-plan.md` — the active beta-hardening week: six one-day items (UI · discovery run · bugs · scaling incl. LLM spend · fetchers), DoD per day, and what's parked. Scope of record: D-072. Read after `WORKLOG.md` top to continue the week.
+- `docs/15-beta-hardening-plan.md` — the active beta-hardening workstreams (UI · discovery run · bugs/onboarding · scaling incl. LLM spend · fetchers/company data), beta exit line, DoD per block, and what's parked. Scope of record: D-072/D-085. Read after `WORKLOG.md` top to continue.
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.

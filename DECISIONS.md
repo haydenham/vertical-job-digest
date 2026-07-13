@@ -1502,3 +1502,40 @@ retryable account-load error rather than Landing, and an authenticated visit to 
 that user's onboarding/dashboard destination. The adjacent upload-response contract is corrected:
 `resume_version` is a string, matching FastAPI. **Status:** built on
 `fix/onboarding-auth-failure`. References D-082, D-068, D-067, D-065, D-021.
+
+### D-084 · Discovery operations · Live-run gate complete; run manually/on demand, never on a recurring schedule · accepted · 2026-07-13
+D-071 shipped the discovery scheduler as ready-but-OFF until live cost and yield were known. That gate is now
+complete: multiple full GPT-5.6 Terra runs exercised all three research waves plus per-candidate ATS resolution
+on both verticals, with complete-run estimates of approximately **$0.77–$0.99** and rolling evidence under
+`data/discovery_reports/`. The coverage ledger exists (`docs/07`), the production coverage audit produced the
+low-signal retire slate, and D-077's `vja-review` correction/approval path makes the results operable. **Decision
+(Hayden): discovery remains manual/on demand.** Run `vja-discover` only when the employer universe needs a
+refresh; do not create or enable a weekly Cloud Scheduler/launchd trigger. The disabled templates/runbook remain
+available machinery, not unfinished work. Proposal activation, retirement, and new-fetcher sweeps continue as
+ordinary company-database curation behind the human gate. **Status:** accepted; closes docs/15 Day 2 and
+supersedes D-071 only where it frames measured cost as a gate to a future schedule-enable decision. D-071's
+human approval, inert-proposal, and swappable-trigger rules remain. References D-071, D-074, D-077, D-031.
+
+### D-085 · Beta hardening · Closeout sequence + post-onboarding product focus · accepted · 2026-07-13
+After UI PRs #74–77, onboarding PRs #78–79, and incident hotfix #80 merged, Hayden re-ran the remaining
+beta-hardening scope. The old plan also said "six items" while enumerating only five and still described merged
+work as pending. **Accepted sequence:** (1) finish onboarding PR 3 first: four welcome slides (nightly Rolefeed ·
+Matched for you · every in-scope role · details/résumé updates), controls **Skip / Back / Next / Start exploring**,
+view labels **Matched for you / All in-scope**, recency labels **New today / 1 week / 2 weeks / All open**, move
+the table-use/read-only/nightly hint above the results, and display internal `aviation_software` as **Aviation
+Technology** without renaming the config/API/DB slug. (2) A separate landing PR gives each section one job —
+three cards = user benefits, How it works = pipeline mechanics, Why I built this = Hayden's recruiting problem
+and thesis — and broadens outward *software roles* language to *technology roles* so analyst/data work fits.
+(3) A separate abuse-control PR makes identical-content reuploads a success with no new backfill and limits a
+changed résumé to **one reupload per user per rolling 24 hours**, server-enforced with 429 + `Retry-After`; the
+first upload remains allowed. (4) D-069 Block 2 now runs **correctness before discount**: production logs on
+July 8–10 showed 343–654 new and 384–592 closed postings per night with the same 44 fetched employers, while
+extraction dominated roughly $0.63–$1.65 nightly spend and matching usually hit 84–93% prompt cache. Diagnose
+the posting identity/diff churn first, re-measure steady state, then batch **extraction first** if it remains
+material; do not make a correctness bug merely cheaper. (5) The beta exit also includes resolving the live
+robotics-promise/config mismatch, minimum Cloud Job monitoring, the five-pillar scaling assessment, and the
+already-validated no-code employer activations. Scheduled discovery and an endless fetcher queue are not beta
+exit gates. **After onboarding, the main loops are UI/UX iteration, building the employer databases, and beta-user
+feedback.** Status: planning/docs accepted; only D-084's scheduling rule is live now. The PR-3 UI, landing,
+reupload guard, churn fix/Batch work, monitoring, and scaling assessment become live only when their own tested
+PRs land. References D-069, D-072, D-078, D-080, D-082, D-083, D-084, D-021.

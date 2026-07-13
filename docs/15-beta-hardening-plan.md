@@ -14,9 +14,11 @@ live (D-068 — merge-to-`main` auto-deploys). The onboarding overhaul (D-065) s
 users are signed up and working**. So the launch blockers are cleared; this week is about making the beta
 *good*, not making it *possible*.
 
-**Shape.** Six items, **one day each**, so every fix is verified sound before the next starts. Order is
-Hayden's; the only hard dependency is **Day 2 → Day 4** (the discovery run produces the per-run cost number
-the scaling day consumes). Each day's Definition of Done is the repo standard (D-021): green gates
+**Shape (amended by D-085).** D-072 said "six items" but enumerated **five workstreams**; this plan now names
+that actual shape rather than preserving the counting error. The original one-day sizing also stopped being
+useful when UI and onboarding each became multi-PR blocks. Work stays serial and reviewable; the only hard
+dependency was **Day 2 → Day 4** (the discovery run produced the per-run cost number the scaling assessment
+consumes), and Day 2 is now complete. Each block's Definition of Done is the repo standard (D-021): green gates
 (ruff/format/mypy/import-linter/pytest, + frontend eslint/tsc/vitest where the change touches `frontend/`) +
 a human-read diff + updated docs, on a branch → PR.
 
@@ -42,23 +44,29 @@ full plan + per-PR DoD. Summary:
 - **Watch (unchanged):** Rolefeed brand; D-065 route guards; one vertical per user (D-064) — no cross-user
   vertical picker. **Out:** mobile pass (deferred), keyboard nav (not selected).
 
-## Day 2 — Discovery agent: live run + supporting tooling
+## Day 2 — Discovery agent: live run + supporting tooling ✅ (D-084)
 
-Run `vja-discover` → `vja-review` for real (the still-pending 10.1/10.2 live smoke folds in here), landing a
-good batch of new companies with **minimal manual input**. This is where the ready-but-OFF weekly schedule
-earns its enable decision.
+**Done; operation is deliberately manual/on-demand.** Multiple complete GPT-5.6 Terra runs exercised all
+three research waves plus ATS resolution on both verticals. Complete-run estimates were approximately
+**$0.77–$0.99 per run**; the reports/checkpoints live in `data/discovery_reports/`. The coverage ledger exists
+in `docs/07`, the 2026-07-12 coverage audit supplied the low-signal retire slate, and `vja-review` supplies the
+human correction/approval path. Hayden does **not** want a scheduled discovery Job: run `vja-discover` only
+when the company universe needs a refresh. This supersedes the old "measure cost, then decide whether to turn
+the weekly schedule ON" framing (D-071); there is no remaining schedule-enable gate.
+
+The original execution brief is retained below as history; its live-run and measurement requirements are met.
 
 - **Scope:**
-  - Run the live `vja-discover --vertical grid_power_software` loop (needs `OPENAI_API_KEY` + web search;
+  - Run the live `vja-discover --vertical <vertical>` loop when needed (needs `OPENAI_API_KEY` + web search;
     Hayden-run) → review/approve via `vja-review`. Operator guide: `docs/14`.
   - **Coverage ledger** — a way to see fetchable vs. parked vs. proposed across the universe, so "how much do
     we actually cover" is a number, not a guess.
   - **Low-signal pruning** — drop/retire noisy or irrelevant employers the run surfaces (the agent adding
     companies is exactly when noise creeps in).
-- **Produces:** the **real per-run cost** of discovery → the input that gates flipping the weekly schedule from
-  ready-but-OFF to ON (D-071), and the LLM-spend numbers Day 4 needs.
-- **DoD:** new `active` employers in the DB (surfacing on the next nightly); ledger exists; measured per-run
-  cost recorded (WORKLOG + Day 4). Any new tooling gets tests.
+- **Produces:** the **real per-run cost** of discovery and the LLM-spend input Day 4 needs.
+- **DoD met:** complete live runs + reports; coverage ledger; measured cost; correction/review tooling with
+  tests. Proposal activation/retirement continues as ordinary company-database curation, not as unfinished
+  discovery-agent implementation.
 
 **First live run — 2026-07-10 (partial):** after fixing a self-starving tool budget (searches/fetches 8→20/16,
 `$` ceiling 2→4; the old per-request `max_uses`==cumulative-cap coupling ended the run after one blocked turn —
@@ -66,20 +74,19 @@ see WORKLOG) the loop did **real oblique sourcing**: 5 candidates off the Energy
 (GridBeyond, GridX, Emerald AI, CivilGrid, eSmart Systems), all landing `proposed`/`layer2` (GridBeyond's ATS
 confirmed **BambooHR** — the fetcher is now built, with activation pending deployment + D-077 review;
 the other four are JS-rendered/unresolved). **New binding
-constraint (feeds Day 4):** the run stopped on an **external web-tool rate limit (429s), not our `$`/tool caps** —
-so discovery *yield* is now gated by the Anthropic `web_search`/`web_fetch` rate limit, not our budget. It
-completed only ~1 of ~3 planned source waves. Before flipping the weekly schedule ON, decide whether that limit
-is per-minute (→ add pacing/backoff between waves) or a hard quota. Triage of #91–95 + the BambooHR-fetcher
-question are still open.
+constraint at the time:** the run stopped on an **external web-tool rate limit (429s), not our `$`/tool caps**
+and completed only ~1 of ~3 planned source waves. D-074's move to Terra replaced that provider/tool loop;
+later complete runs supplied the missing cost/yield evidence. Triage and activation are now ordinary
+company-database work.
 
 **Provider/ATS hardening branch — 2026-07-10:** the next run moves discovery only to GPT-5.6 Terra
 (D-074). It replaces the single Claude loop with three independently capped source waves and reserves a
 separate four-action resolver for each of at most five candidates. Canonical provider-URL evidence plus
 the existing validate-by-fetch gate is required before a supported ATS is stamped; confirmed unsupported
-providers and typed failure reasons remain visible in proposal notes. The first Terra live run now supplies
-the cost/yield/rate-limit evidence that still gates schedule enablement.
+providers and typed failure reasons remain visible in proposal notes. The complete Terra runs supplied the
+cost/yield evidence; D-084 closes the schedule question as manual-only.
 
-## Day 3 — Bug shakeout (+ onboarding overhaul — SCOPED, D-082; plan of record: `docs/17-onboarding-plan.md`)
+## Day 3 — Bug shakeout (+ onboarding overhaul — ACTIVE, D-082/D-085; plan: `docs/17-onboarding-plan.md`)
 
 Fix bugs surfaced by real private-user usage and the Day-2 run. Bug fixes **start with a failing regression
 test** (D-021).
@@ -88,15 +95,30 @@ test** (D-021).
   the untested onboarding path — the "stuck on upload page" bug cluster, the reupload match-orphaning UX gap,
   no matching-progress signal, no `/upload` back nav, ambiguous toggles, no tutorial. A **3-PR block** (see
   `docs/17`): PR 1 upload/onboarding bug fixes → PR 2 backend backfill-status signal (+migration) → PR 3
-  welcome-slides tutorial + toggle clarity. This is the fresh-account leg of this day; PR 1 built
-  2026-07-13.
+  welcome-slides tutorial + toggle clarity. **PR 1 merged #78; PR 2 merged #79; its production
+  schema/auth follow-up merged #80 (D-083). PR 3 is next.** Its approved scope now also moves the
+  table-use hint above the results and displays `aviation_software` as **Aviation Technology** without
+  changing the internal slug.
 - **Scope:** whatever real usage exposes — onboarding edge cases, digest content, dashboard windows, fetcher
   drift.
-- **Proposed sub-item (Hayden's call at execution):** **basic observability/alerting on the nightly** so a
+- **Accepted sub-item (D-085):** **basic observability/alerting on the nightly** so a
   silent failure doesn't strand private users who now depend on the digest. `docs/11` deferred this; the
   minimum is "if the nightly fails or sends nothing unexpectedly, Hayden finds out." Small, but it's the
   difference between "beta" and "beta that embarrasses you."
 - **DoD:** a regression test per fix; green gates; WORKLOG notes each bug + fix.
+
+**Accepted follow-up queue (D-085; separate reviewable PRs after onboarding PR 3):**
+
+1. Landing copy de-duplication + outward *software → technology* language (benefits vs mechanics vs founder
+   story, not three repetitions of the same thesis).
+2. Résumé-reupload abuse guard: identical content becomes a no-backfill success; changed content is limited
+   to one reupload per user per rolling 24 hours (server-side 429 + `Retry-After`).
+3. Diagnose the posting identity/diff churn exposed by the D-069 production metrics before building Batch
+   API support. Stable 44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings;
+   that is a correctness/coverage problem before it is a cost problem.
+4. Minimum cloud observability: alert when the scheduled nightly does not start/fails at the platform level,
+   and make partial coverage degradation + LLM-spend trends visible. The existing in-process hard-failure and
+   digest-send email remains useful but cannot alert if the Job never starts.
 
 ## Day 4 — Scaling plan (analysis + guardrails)
 
@@ -110,13 +132,15 @@ pillar** (Hayden's call — folded in rather than a separate day).
      `role-feed.com` sender.
   4. **Google OAuth** — consent-screen/verification status, user cap, quota.
   5. **Anthropic / LLM spend** — read the **real nightly token numbers** now persisted to `pipeline_runs`
-     (D-069's four token columns) and decide the **parked Batch API "Block 2"** (extraction is input-bound and
-     uncacheable; the Batch API is the lever, not caching). Set spend guardrails beyond the existing backfill
-     cap + daily ceiling (D-057).
+     (D-069's four token columns). **D-085 sequencing:** first explain/fix the abnormal new/closed identity
+     churn; then re-measure steady state. If extraction remains material, implement **extraction batching
+     first** (input-bound and uncacheable; batching is the lever, not more prompt caching). Matching already
+     showed roughly 84–93% cache hits on most measured nights and is not the first target. Set spend
+     guardrails beyond the existing backfill cap + daily ceiling (D-057).
 - **DoD:** a written scaling doc (thresholds + "what breaks first" + the Block-2 decision); any guardrail
   config that's cheap to land now. Reads `docs/11` (portability ledger) as the baseline.
 
-## Day 5 — More fetchers
+## Day 5 — More fetchers / company-database expansion (ONGOING, not a beta-exit gate)
 
 Expand coverage, **demand-ranked** (D-076 — reordered from "Phenom next" after the discovery runs + live
 probes; the demand ledger now lives in `docs/07` — the Day-2 "coverage ledger" first edition). Order:
@@ -157,12 +181,27 @@ discovery runs type these providers deterministically instead of burning resolve
 - **DoD:** fetcher + tests (fixtures, not live) green; employers onboarded config-only; coverage count updated
   in the docs/07 ledger + CLAUDE.md Phase 8 line; fixed-`ats_type` proposals promoted via `vja-review`.
 
+**D-085 focus after onboarding:** continued UI/UX iteration, building the employer/company databases, and
+incorporating beta-user feedback are the main product loops. Execute already-validated no-code activations;
+then add fetchers by the `docs/07` demand ledger when coverage demand justifies them. An endless fetcher queue
+does not block broader beta by itself.
+
+## Beta exit line (accepted 2026-07-13, D-085)
+
+- Finish onboarding PR 3.
+- Resolve the live robotics promise mismatch (ship the config or remove the public claim).
+- Land user-facing beta fixes, the résumé-reupload guard, and minimum Cloud Job monitoring.
+- Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
+- Execute already-validated no-code employer activations.
+
+Scheduled discovery and the remaining generic-fetcher roadmap are explicitly outside this exit gate.
+
 ---
 
 ## Not in this week's scope (parked, tracked)
 
 - **Auto-approval + proposal-precision eval** for discovery (Phase 10 later — needs a real sample).
 - **Non-employer `sources`** (HN/niche) discovery.
-- **Enabling the weekly discovery schedule** — gated on Day 2's measured cost; flip is config, not code (D-031).
+- **A scheduled discovery Job** — explicitly not planned; discovery is manual/on-demand (D-084).
 - **Moving `config/verticals/*.yaml` out of the image** (Path-A config) — premature per `docs/11` §5; revisit
   when Path-B redeploys actually hurt.

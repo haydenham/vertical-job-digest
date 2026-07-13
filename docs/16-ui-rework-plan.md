@@ -146,6 +146,11 @@ screenshots in the PR body.
 
 ## Out of scope (parked, tracked)
 
+- **Landing copy second pass (accepted next work, D-085):** beta review found that the three
+  thesis cards, How it works, and Why I built this repeat the same idea. A separate follow-up PR
+  will make cards = user benefits, How it works = pipeline mechanics, and founder story = Hayden's
+  recruiting problem/thesis; outward *software roles* language broadens to *technology roles* so
+  analyst/data work fits. This does not reopen or invalidate the completed D-080 block.
 - **Mobile pass** — explicitly deferred (Hayden, D-080); beta users open digest links on
   phones, so it's a strong candidate for a later block.
 - **Keyboard navigation** (↑↓/↵/o) — offered, not selected.
