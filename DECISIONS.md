@@ -1407,3 +1407,27 @@ hashing while the untouched object remains `raw`. Aurora onboards through curate
 the D-077 discovery-proposal activation path after deployment. `pinpoint` fits the existing application-validated
 `VARCHAR(15)`, so no migration. **Status:** built on the Pinpoint-only branch. References D-078, D-077, D-017,
 D-016, D-021.
+
+### D-080 · Beta hardening · UI rework scope: Linear reference, design language v2, 4-PR block · accepted · 2026-07-12
+The docs/15 Day-1 "UI rework" item is scoped (planning session; every decision below is Hayden's, via
+questionnaire). **Reference = Linear** — the landing page and app UX copy a proven leader rather than invent
+(the D-072 "timeboxed reference-pick" resolved). **Design language v2, everything on the table:** the v1
+"terminal dev-tool, dark" DESIGN.md is revised toward **softer, more premium dark** — the orange `#f6821f`
+accent, the Space Grotesk/JetBrains Mono pairing, and the terminal motifs (`$` prompt, blinking ▮ cursor,
+`//comment` strings) are all up for replacement; Claude drafts the revision, and the accent + font picks get
+Hayden's sign-off from screenshot comparisons on the real dashboard before landing. **Scope expands Day 1 to a
+4-PR block, strict merge order** (plan of record: `docs/16-ui-rework-plan.md`): **PR 0** design-language
+foundation (DESIGN.md v2 + `theme.css` tokens + app shell) → **PR 1** full Linear-style marketing landing
+(hero + how-it-works + verticals + footer; the product visual is a CSS-built mock on real tokens, no binary
+asset) → **PR 2** login/onboarding polish (auth card + descriptive vertical cards + drag-drop upload; also
+fixes Login's stale "browse without signing in" copy, false since D-067 flipped `VJA_AUTH_REQUIRED` on) →
+**PR 3** dashboard rework (row-level match info — verdict/score + rationale snippet visible without a click —
+Linear-style side-panel detail replacing inline expansion, client-side sortable columns + text filter).
+**Everything is frontend-only:** `GET /api/postings` already returns the full filtered set server-sorted with
+no pagination (`db/postings.py`), so sorting/filtering is client-side and no API contract moves. Standing
+rules hold: Rolefeed brand, D-065 route guards, D-064 one-vertical (no cross-user picker), frontend gate +
+screenshots per PR, branch-only. **Explicitly out:** mobile pass (deferred, strong later candidate), keyboard
+navigation (offered, not selected), backend-assisted sorting. **Why:** the beta surface must sell before
+broader invites, and copying a leader converts taste questions into execution questions; the separate
+foundation PR keeps the token swap reviewable and lets PRs 1–3 land on merged tokens. **Amends D-072's
+"one day" sizing for this item.** References D-072, D-042, D-064, D-065, D-067, D-068, D-021.
