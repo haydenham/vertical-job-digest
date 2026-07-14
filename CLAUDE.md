@@ -188,7 +188,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   UI rework (**✅ done, D-080** → `docs/16`: Linear reference, design-language v2, a 4-PR block —
   foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs merged #74–77, live in
   prod**) · **onboarding overhaul (D-082/D-085 → `docs/17`: PR 1 upload fixes #78 ✅ → PR 2
-  backfill status #79 ✅ → D-083 hotfix #80 ✅ → PR 3 welcome tutorial + toggle clarity #82 ✅)** ·
+  backfill status #79 ✅ → D-083 hotfix #80 ✅ → PR 3 welcome tutorial + toggle clarity #82 ✅ →
+  D-085 landing-copy follow-up built ✅)** ·
   discovery-agent live run/ledger/pruning **✅ (D-084; manual/on-demand permanently, no scheduled Job)** ·
   nightly timeout/retry duplicate guard **✅ (D-086; 6h, zero automatic task retries)** · bug shakeout ·
   scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; diagnose abnormal posting

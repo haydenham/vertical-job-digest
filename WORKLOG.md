@@ -5,6 +5,24 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-14 — D-085 landing-copy follow-up built
+
+**Built on `feat/landing-copy` (uncommitted; Hayden owns commit/PR):** completed the first accepted
+post-PR-3 follow-up. The hero now promises **technology jobs** rather than engineering jobs; the three
+cards each state a distinct user benefit (overlooked employers · fresh opportunities · honest fit);
+How it works now owns the actual curate → fetch/diff/verify → extract/match/deliver mechanics. Hayden's
+new founder description is preserved and its contact email is a direct link. Per Hayden's explicit
+decision, the three-vertical/Robotics promise stays on the landing because the Robotics vertical will
+be added; the config/picker work remains a separate beta-exit item.
+
+**Regression + docs:** focused landing expectations failed against the old headline/cards/steps/contact
+before the implementation, then passed. Full frontend eslint + TypeScript + Vitest **95/95** + production
+build are green. No backend, API, schema, ADR, or live invariant changed. Docs/15 and docs/17 now correctly
+record onboarding PR 3 as merged #82 (superseding their stale awaiting-review text); docs/16 and CLAUDE
+record the completed D-085 copy pass. Browser visual verification was not completed; Hayden reviews the
+rendered copy in the PR. **Next:** Hayden reviews/commits/PRs; then the D-085 résumé-reupload abuse guard
+gets its own backend/security branch.
+
 ## 2026-07-14 — Post-beta feature slate decided + roadmap written (D-087)
 
 **Planning/docs only on `docs/post-beta-feature-roadmap` (uncommitted; Hayden owns commit/PR); no
