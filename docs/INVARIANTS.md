@@ -101,6 +101,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Digest recipient is the matched profile's `user_email`.** `VJA_DIGEST_RECIPIENT` is the
   **ops/alert** recipient (failure alerts), NOT the digest recipient. (D-027, D-037)
 - **Empty digest = skip send:** no email, no `digests` row. (D-028)
+- **The Cloud Run nightly Job gets one attempt, with a 6-hour task timeout.** `ship.sh` reasserts
+  `--task-timeout 21600 --max-retries 0` on every deploy. The pipeline sends a vertical's digests
+  immediately after that vertical's Layer-2 pass and is not yet delivery-idempotent across whole-task
+  retries; automatic retry therefore risks duplicate email after a later vertical times out. A
+  process-level failure is operator-reviewed and manually rerun until per-execution delivery
+  idempotency exists. (D-086)
 - **Closures roll up by company above 10 in the digest body** — ≤10 enumerate per role, >10 render
   `N roles across C companies` + top-10 + "…and M more". Subject keeps the true count and the audit
   blob keeps the full closed list; only the human-facing body summarizes. (D-056)

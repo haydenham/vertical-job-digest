@@ -1539,3 +1539,24 @@ exit gates. **After onboarding, the main loops are UI/UX iteration, building the
 feedback.** Status: planning/docs accepted; only D-084's scheduling rule is live now. The PR-3 UI, landing,
 reupload guard, churn fix/Batch work, monitoring, and scaling assessment become live only when their own tested
 PRs land. References D-069, D-072, D-078, D-080, D-082, D-083, D-084, D-021.
+
+### D-086 · Beta hardening · Nightly task timeout/retry guard prevents duplicate digest delivery · accepted · 2026-07-14
+The first nightly after another beta signup exposed an attempt-level delivery defect. Cloud Run execution
+`vja-nightly-zvw6s` ran the sequential pipeline under the existing **7,200-second timeout + one retry**:
+attempt 0 completed aviation Layer 2 and sent both aviation digests, then timed out while grid was still
+running; Cloud Run restarted the entire command as attempt 1, which sent aviation again before completing
+grid. Production evidence ruled out duplicate profiles: every affected recipient had one active profile,
+and the digest audit rows matched the two task attempts. The new grid user received one correct digest only
+on attempt 1 because attempt 0 never reached grid's send phase.
+
+**Immediate decision:** the Cloud Run nightly Job uses a **21,600-second (6h) task timeout and zero automatic
+task retries**. `deploy/gcp/ship.sh` reasserts both values on every deploy, the cutover/create runbook carries
+the same flags, and an offline regression test pins the deploy contract. The current beta run took under
+three hours even with the retry, so six hours restores headroom. Because the pipeline isolates most provider,
+vertical, and send failures internally, a remaining process-level failure is safer as a visible failed Job
+and an operator-reviewed manual rerun than as a blind whole-command retry that can resend completed verticals.
+
+**Follow-up, not in this quick guard:** durable delivery idempotency keyed to the Cloud Run execution/attempt
+boundary, after which automatic retries can be reconsidered. This does not close D-085's minimum platform-level
+Job monitoring item; a killed process cannot send its own in-process alert. References D-031, D-068, D-085,
+D-021.

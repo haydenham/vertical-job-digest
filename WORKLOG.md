@@ -5,6 +5,24 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-14 — Nightly duplicate-digest timeout guard built (D-086)
+
+**Production diagnosis (read-only):** execution `vja-nightly-zvw6s` started under the standing Cloud Run
+Job policy (`timeoutSeconds=7200`, `maxRetries=1`). Attempt 0 completed aviation Layer 2 and sent both
+aviation digests, then Cloud Run killed it at exactly 7,200 seconds while grid was still running. Attempt 1
+restarted the entire command, sent aviation again, then completed grid. Neon confirmed no duplicate active
+profiles; Kanaga's single grid profile had 25 backfill + 154 nightly matches and one successful 28-role
+digest. The duplicate was task retry, not signup/profile duplication.
+
+**Built on `fix/nightly-timeout-duplicates` (uncommitted; Hayden owns commit/PR):** `ship.sh` now reasserts
+a **21,600-second (6h) timeout + zero automatic retries** on every Job update; the cutover/create runbook
+uses the same flags. An offline deploy-contract regression pins both paths; `bash -n` and installed-gcloud
+flag discovery verify the shell/CLI surface. D-086, INVARIANTS, docs/15, and CLAUDE record the incident,
+current rule, and durable per-execution delivery-idempotency follow-up. Full default suite **524 passed,
+20 opt-in deselected**; ruff format/check, mypy (130 source files), import-linter (1 kept / 0 broken), and
+`uv lock --check` green. Frontend/eval gates are path-filtered out. **Next:** Hayden reviews/commits/PRs;
+merge-to-main CD applies the new Job policy. Production remains 2h/one-retry until that deploy completes.
+
 ## 2026-07-14 — SPAN + The Brattle Group curated seed onboarding built
 
 **Built on `data/add-span-brattle` (uncommitted; Hayden owns commit/PR):** added SPAN and The Brattle Group

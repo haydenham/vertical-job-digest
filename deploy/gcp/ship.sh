@@ -31,6 +31,14 @@ set -euo pipefail
 : "${JOB:=vja-nightly}"
 : "${RUNTIME_SA:=850723734041-compute@developer.gserviceaccount.com}"
 
+# D-086: the nightly is not delivery-idempotent across Cloud Run task attempts. A 2026-07-14
+# execution hit the old 2h timeout after aviation emails had sent; maxRetries=1 restarted the
+# whole process and sent aviation again before reaching grid. Give the current sequential pipeline
+# ample headroom and require an explicit operator rerun on process-level failure until durable
+# per-execution delivery idempotency exists.
+: "${JOB_TASK_TIMEOUT_SECONDS:=21600}"
+: "${JOB_MAX_RETRIES:=0}"
+
 # Unattended CD (9.6/D-068) sets this to 1: on a failed smoke, auto-roll traffic back to the prior
 # revision before exiting non-zero (gcloud run deploy sends 100% traffic to the new revision on deploy,
 # so a bad revision is already serving). Default 0 = the manual behavior — print rollback + exit, human
@@ -96,6 +104,8 @@ gcloud run jobs update "$JOB" \
   --image "$IMAGE" \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
+  --task-timeout "$JOB_TASK_TIMEOUT_SECONDS" \
+  --max-retries "$JOB_MAX_RETRIES" \
   --set-secrets "$JOB_SECRETS"
 
 # --- Smoke -------------------------------------------------------------------------------------
