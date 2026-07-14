@@ -106,6 +106,11 @@ test** (D-021).
   silent failure doesn't strand private users who now depend on the digest. `docs/11` deferred this; the
   minimum is "if the nightly fails or sends nothing unexpectedly, Hayden finds out." Small, but it's the
   difference between "beta" and "beta that embarrasses you."
+- **2026-07-14 retry/duplicate incident guard (D-086):** one long execution sent aviation, hit the
+  old 2-hour task timeout during grid, and Cloud Run's one automatic retry reran the whole command,
+  sending aviation twice before grid completed. Immediate guard: **6-hour timeout + zero automatic
+  retries**, reasserted by `ship.sh` and test-pinned. Durable per-execution digest idempotency remains
+  follow-up work alongside minimum Job monitoring.
 - **DoD:** a regression test per fix; green gates; WORKLOG notes each bug + fix.
 
 **Accepted follow-up queue (D-085; separate reviewable PRs after onboarding PR 3):**

@@ -152,6 +152,8 @@ gcloud run jobs create vja-nightly \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
   --command /app/.venv/bin/vja-nightly \
+  --task-timeout 21600 \
+  --max-retries 0 \
   --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
 
 # Cloud Scheduler → Jobs Admin :run API (nightly; matches the launchd 06:00 local trigger)
@@ -166,6 +168,13 @@ gcloud scheduler jobs create http vja-nightly-trigger \
 Prove it before trusting the cron: `gcloud run jobs execute vja-nightly --region "$REGION"` and watch logs
 (`gcloud run jobs executions list --job vja-nightly`). The Job needs DB + Anthropic (extract/match) + Resend +
 `VJA_DIGEST_*` (send) — but **not** OAuth/session (it has no HTTP surface).
+
+**Task-attempt policy (D-086):** keep the timeout at **21,600 seconds (6h)** and automatic task retries at
+**zero**. The nightly processes verticals sequentially and sends each vertical immediately after its Layer-2
+pass; it is not yet delivery-idempotent across Cloud Run attempts. On 2026-07-14 the old 7,200-second task sent
+aviation, timed out during grid, then `maxRetries=1` restarted the whole command and sent aviation a second
+time. Six hours gives the current beta workload headroom; a process-level failure is an operator-reviewed
+manual rerun until per-execution delivery idempotency is built. `ship.sh` reasserts both values on every deploy.
 
 ## 8b. Weekly discovery agent (Phase 10.2 — NOT yet enabled)
 
