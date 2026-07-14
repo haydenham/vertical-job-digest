@@ -215,6 +215,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   Terra runs measured ~$0.77–$0.99; discovery is **manual/on-demand by policy**, with no recurring schedule
   planned (disabled templates remain available machinery). **Later:** auto-approval, a proposal-precision eval,
   and non-employer `sources`.
+- **Post-beta feature slate (planned; D-087, `docs/18`).** Decided 2026-07-14, builds only after the D-085
+  beta exit: intraday freshness + instant alerts (supersedes D-005's once-daily fetch at build time) ·
+  salary display (own extraction first, then DOL H1B/LCA enrichment; Glassdoor/Indeed path closed) ·
+  recurring-gaps report · per-employer lifespan/urgency intel. The D-085 churn diagnosis blocks the
+  freshness + lifespan builds.
 
 ## Conventions for this repo
 
@@ -271,6 +276,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/15-beta-hardening-plan.md` — the active beta-hardening workstreams (UI · discovery run · bugs/onboarding · scaling incl. LLM spend · fetchers/company data), beta exit line, DoD per block, and what's parked. Scope of record: D-072/D-085. Read after `WORKLOG.md` top to continue.
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
+- `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing, the churn-fix prerequisite, and the rejected-features record. Planning only; nothing live.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

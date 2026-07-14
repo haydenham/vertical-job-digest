@@ -1560,3 +1560,34 @@ and an operator-reviewed manual rerun than as a blind whole-command retry that c
 boundary, after which automatic retries can be reconsidered. This does not close D-085's minimum platform-level
 Job monitoring item; a killed process cannot send its own in-process alert. References D-031, D-068, D-085,
 D-021.
+
+### D-087 · Product roadmap · Post-beta feature slate: intraday freshness + alerts, salary, gaps report, lifespan intel · accepted · 2026-07-14
+Hayden set the post-public-beta product frame — **new** = jobs grouped by a niche vertical, **better** = AI
+matching, **proven** = a job-finding tool — and benchmarked jobright.ai: minute-level freshness ("posted 10
+minutes ago" on a wanted role feels like striking gold) and salary display are its standout features, while
+most of its remaining surface (résumé editing, networking matches, autofill apply) reads as clutter.
+**Selection rule adopted: adapt 1–2 proven features, add something genuinely novel, resist clutter.**
+
+**Accepted slate (plan of record: `docs/18-post-beta-features.md`):** (F1) **intraday freshness + instant
+alerts** — poll fetch→diff→extract→match every ~1–2h via a new scheduled Job, alert relevant-verdict matches
+immediately with an alerted-at idempotency marker, digest stays the nightly roll-up; the bounded ~66-employer
+universe makes intraday polling cheap and polite where horizontal boards can't follow, and total LLM spend is
+roughly unchanged because only diff items are extracted/matched. (F2) **salary** — Phase A surfaces the
+already-extracted `comp_min/comp_max/comp_raw` (stored since Phase 5, never displayed; fill-rate query first);
+Phase B enriches comp-less postings from public DOL H1B/LCA wage-disclosure files filtered to our employer
+universe, honestly labeled as visa-disclosure-based estimates. **Glassdoor/Indeed is a closed path** — no open
+API exists and scraping violates their ToS plus our politeness-is-policy invariant. (F3) **recurring-gaps
+report** (novel) — aggregate the profile's stored `matches.gaps` periodically into "the #1 thing between you
+and strong_yes," one cheap metered LLM call per user per period, feeding the résumé-update→re-match loop.
+(F4) **urgency/lifespan intel** (novel; the D-009 promise) — per-employer median posting lifespan from
+`first_seen_at`/`closed_at` → "typically fills in ~N days" + closing-soon flags; read-only, zero LLM.
+**Rejected for clutter/honesty:** YOE/new-grad flags (redundant — the platform is early-career by
+construction), networking matches, autofill apply (collides with no-auto-apply), applicant counts (no honest
+source; freshness is the substitute signal).
+
+**Hard prerequisite:** the D-085 posting-identity/diff churn diagnosis now **blocks F1 and F4** — intraday
+polling would amplify churn into alert spam and repeated LLM spend, and churned close/reopen cycles corrupt
+lifespan medians. **Sequence (post-beta-exit):** churn diagnosis → F2 Phase A → F4 → F1 → F3, with F2 Phase B
+as a parallel data-only track. **Status: planning/docs accepted; nothing is live.** All beta-exit work
+(D-085) precedes this slate. D-005's once-daily-fetch rule remains authoritative in `docs/INVARIANTS.md`
+until F1's own build ADR supersedes it. References D-085, D-005, D-009, D-086, D-035, D-069, D-053.

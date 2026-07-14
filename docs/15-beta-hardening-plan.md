@@ -121,7 +121,8 @@ test** (D-021).
    to one reupload per user per rolling 24 hours (server-side 429 + `Retry-After`).
 3. Diagnose the posting identity/diff churn exposed by the D-069 production metrics before building Batch
    API support. Stable 44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings;
-   that is a correctness/coverage problem before it is a cost problem.
+   that is a correctness/coverage problem before it is a cost problem. *(This item now also gates two
+   post-beta roadmap features — intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
 4. Minimum cloud observability: alert when the scheduled nightly does not start/fails at the platform level,
    and make partial coverage degradation + LLM-spend trends visible. The existing in-process hard-failure and
    digest-send email remains useful but cannot alert if the Job never starts.
@@ -201,6 +202,9 @@ does not block broader beta by itself.
 - Execute already-validated no-code employer activations.
 
 Scheduled discovery and the remaining generic-fetcher roadmap are explicitly outside this exit gate.
+
+**What comes after the exit:** the post-beta feature roadmap lives in `docs/18-post-beta-features.md`
+(D-087) — intraday freshness + alerts, salary display, recurring-gaps report, lifespan intel.
 
 ---
 
