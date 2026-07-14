@@ -153,7 +153,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (D-076/D-077) → **Phenom + United ✅** (D-076; config-driven) → **BambooHR ✅** → **Honeywell Oracle
   config onboard ✅** (D-078 coverage audit, 2026-07-12; canonical host found, 1,455 postings validated;
   activates at the next seed import). **Pinpoint ✅** (D-079; Aurora seed onboarded; Aireon pending D-077
-  activation). **Next (D-078 re-rank):** no-code runbook activations (6 validated discovery rows) →
+  activation). **SPAN + The Brattle Group curated seed onboard ✅** (2026-07-14; Ashby + Greenhouse,
+  **49 → 51 seed-fetchable**; production activates at the next seed import). **Next (D-078 re-rank):**
+  no-code runbook activations (6 validated discovery rows) →
   Radancy variants (L3Harris JSON / NRG / AA) → JazzHR → Jobvite → Taleo,
   then the Layer-2 LLM-read tail for what truly has no platform (demand ledger: `docs/07`).
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover

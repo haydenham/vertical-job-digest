@@ -5,6 +5,24 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-14 — SPAN + The Brattle Group curated seed onboarding built
+
+**Built on `data/add-span-brattle` (uncommitted; Hayden owns commit/PR):** added SPAN and The Brattle Group
+to the `grid_power_software` curated seed as active, verified Layer-1 employers. SPAN is Tier 5 / Grid & Clean
+Energy Tech on Ashby slug `span`; Brattle is Tier 4 / Energy Economics & Consulting on Greenhouse slug
+`thebrattlegroup`. Both use the existing slug-derived generic endpoints — no source code, explicit endpoint,
+schema, or vertical-scope change. Seed fetchable coverage moves **49 → 51** after import. This entry also
+supersedes the now-stale prior top entry's “awaiting review/merge” state: onboarding PR 3 merged as #82 before
+this branch began.
+
+**Validation + gates:** live application-fetcher validation returned **34 SPAN** and **21 Brattle** postings
+with valid apply URLs. A seed-import regression pins both mappings/statuses plus the new Greenhouse/Ashby and
+total counts. Focused import suite **8/8**; full default suite **523 passed, 20 opt-in deselected**; ruff format
++ lint, mypy (129 source files), import-linter (1 kept / 0 broken), `uv lock --check`, and `git diff --check`
+green. Frontend/eval gates are path-filtered out. **Next:** Hayden reviews/commits/PRs; after merge, explicitly
+targets Neon and runs `uv run vja-import-employers data/seed/employers_seed.csv`; the following nightly fetch
+ingests both boards.
+
 ## 2026-07-13 — Onboarding PR 3 built: welcome tour + dashboard clarity (D-082/D-085)
 
 **Built on `feat/onboarding-tutorial` (frontend-only; awaiting Hayden review/commit/PR):** a four-slide,

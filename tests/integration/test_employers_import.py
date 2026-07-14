@@ -50,6 +50,28 @@ def test_known_employer_is_mapped_correctly(migrated_engine: Engine) -> None:
     assert row["created_at"] is not None
 
 
+def test_new_curated_employers_are_mapped_correctly(migrated_engine: Engine) -> None:
+    import_employers_from_csv(migrated_engine, _SEED)
+    with migrated_engine.connect() as conn:
+        rows = {
+            row["name"]: row
+            for row in conn.execute(
+                select(employers).where(employers.c.name.in_(["SPAN", "The Brattle Group"]))
+            ).mappings()
+        }
+
+    assert rows["SPAN"]["vertical"] == "grid_power_software"
+    assert rows["SPAN"]["ats_type"] == "ashby"
+    assert rows["SPAN"]["ats_slug"] == "span"
+    assert rows["SPAN"]["status"] == "active"
+    assert rows["SPAN"]["verification"] == "verified"
+    assert rows["The Brattle Group"]["vertical"] == "grid_power_software"
+    assert rows["The Brattle Group"]["ats_type"] == "greenhouse"
+    assert rows["The Brattle Group"]["ats_slug"] == "thebrattlegroup"
+    assert rows["The Brattle Group"]["status"] == "active"
+    assert rows["The Brattle Group"]["verification"] == "verified"
+
+
 def test_reimport_is_idempotent(migrated_engine: Engine) -> None:
     import_employers_from_csv(migrated_engine, _SEED)
     before = count_employers(migrated_engine)
@@ -89,17 +111,20 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Grid: 5 Greenhouse + 3 Lever + 1 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
-    # + 1 Oracle + 1 Radancy + 1 Pinpoint = 34. Aviation: 2 Greenhouse + 1 Lever +
+    # Grid: 6 Greenhouse + 3 Lever + 2 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
+    # + 1 Oracle + 1 Radancy + 1 Pinpoint = 36. Aviation: 2 Greenhouse + 1 Lever +
     # 1 Ashby + 5 Workday + 2 iCIMS
-    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle = 15. Total 49,
-    # of which 22 are Workday, 6 iCIMS/Jibe, 2 Workable, 1 SmartRecruiters (Vitol),
+    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle = 15. Total 51,
+    # of which 8 are Greenhouse, 3 Ashby, 22 Workday, 6 iCIMS/Jibe, 2 Workable,
+    # 1 SmartRecruiters (Vitol),
     # 2 Oracle ORC (Southern Company + Honeywell, canonical host found at the 2026-07-12 coverage
     # audit), 1 Radancy (NextEra), and 1 Pinpoint (Aurora) — Phase 8. (Collins/RTX exceeds the ~4000
     # offset cap → Layer 2; iCIMS legacy-portal Alaska/Joby have no Jibe API and Oracle Con Edison
     # fails paginate-or-fail (61 of 62) → Layer 2; Delta/Avature is bot-challenged → Layer 2;
     # NRG/National Grid/L3Harris Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
-    assert len(fetchable) == 49
+    assert len(fetchable) == 51
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 8
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 3
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 22
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
