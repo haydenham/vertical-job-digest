@@ -159,7 +159,6 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
             <span className="label">vertical</span>
             <div className="vertical-card locked">
               <span className="vertical-name">{verticalCopy(lockedVertical).name}</span>
-              <span className="vertical-slug">{lockedVertical}</span>
             </div>
           </div>
         )}

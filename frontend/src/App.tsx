@@ -1,6 +1,8 @@
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { useAuth } from "./auth/useAuth";
+import { TOUR_SEEN_KEY, WelcomeTour } from "./components/WelcomeTour";
 import { Dashboard } from "./pages/Dashboard";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
@@ -84,6 +86,21 @@ function LoginRoute() {
 
 export default function App() {
   const { user, profile, loading, authError, logout } = useAuth();
+  const location = useLocation();
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // D-085 first-run tutorial: browser-local is sufficient for beta. Auto-open only when an
+  // onboarded user reaches the dashboard; the nav button can reopen it from any profiled route.
+  useEffect(() => {
+    if (profile && location.pathname === "/dashboard" && !localStorage.getItem(TOUR_SEEN_KEY)) {
+      setTourOpen(true);
+    }
+  }, [location.pathname, profile]);
+
+  const dismissTour = useCallback(() => {
+    localStorage.setItem(TOUR_SEEN_KEY, "1");
+    setTourOpen(false);
+  }, []);
 
   return (
     <div className="app">
@@ -96,9 +113,20 @@ export default function App() {
           {loading || authError ? null : user ? (
             <>
               {profile && (
-                <Link to="/upload" className="nav-link">
-                  Update résumé
-                </Link>
+                <>
+                  <button
+                    type="button"
+                    className="nav-link as-button tour-help"
+                    aria-label="Open welcome tour"
+                    title="How Rolefeed works"
+                    onClick={() => setTourOpen(true)}
+                  >
+                    ?
+                  </button>
+                  <Link to="/upload" className="nav-link">
+                    Update résumé
+                  </Link>
+                </>
               )}
               <span className="nav-user">{user.email}</span>
               <button type="button" className="nav-link as-button" onClick={() => void logout()}>
@@ -120,6 +148,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/upload" element={<UploadRoute />} />
       </Routes>
+      {tourOpen && profile && <WelcomeTour onDismiss={dismissTour} />}
     </div>
   );
 }

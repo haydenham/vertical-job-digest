@@ -28,8 +28,8 @@ complaint — see D-082 for the decision record. Scope decisions were run throug
   pattern), seen-flag in `localStorage`, re-openable via a "?" nav button. Not a coach-marks
   tour.
 - **3 PRs**: bug-fix tier → progress signal → tutorial + toggle clarity. PRs 1 and 2 are
-  merged (#78/#79); the D-083 production follow-up is merged (#80). PR 3 is the remaining
-  onboarding block.
+  merged (#78/#79); the D-083 production follow-up is merged (#80). PR 3 is built on
+  `feat/onboarding-tutorial` and awaits review/merge.
 
 **Constraints that hold throughout:**
 
@@ -120,12 +120,12 @@ non-401 failure to logged-out, making the successful Google login appear to redi
 `fix/onboarding-auth-failure` added the D-083 production startup guard (known-behind schema → new
 revision never becomes ready; unknown newer revision allowed for rollback), separates auth-probe
 errors from 401 with a retry state, guards `/login` for existing sessions, and corrects the
-frontend upload response's `resume_version` from number to string. **Merged as PR #80; PR 3 is
-unblocked.**
+frontend upload response's `resume_version` from number to string. **Merged as PR #80; PR 3 was
+then built on `feat/onboarding-tutorial`.**
 
-## PR 3 — welcome-slides tutorial + toggle clarity
+## PR 3 — welcome-slides tutorial + toggle clarity ✅ (built 2026-07-13; awaiting review/merge)
 
-- [ ] **First-run dialog** on the dashboard (reuses the `PostingPanel` dialog pattern:
+- [x] **First-run dialog** on the dashboard (reuses the `PostingPanel` dialog pattern:
   `role="dialog"`, Esc/click-away). Approved four-slide copy (D-085):
   1. **Your Rolefeed, updated nightly** — curated employers, nightly changes, verified links,
      and the morning digest.
@@ -136,16 +136,21 @@ unblocked.**
      and full completion through the nightly.
   Shown once per browser (`localStorage` `rolefeed.tour.seen`); a "?" nav button reopens it.
   Controls = **Skip · Back · Next · Start exploring**.
-- [ ] **Toggle clarity** (`Controls.tsx`): display labels = **Matched for you / All in-scope**
+- [x] **Toggle clarity** (`Controls.tsx`): display labels = **Matched for you / All in-scope**
   and **New today / 1 week / 2 weeks / All open**; every toggle gets a concise `title`
   explaining its exact D-030/D-045 semantics.
-- [ ] **Put the table-use hint where it is visible:** move
+- [x] **Put the table-use hint where it is visible:** move
   "Click a row for details · read-only · updates nightly" from the footer to immediately above
   the table/results area.
-- [ ] **Human vertical display:** render the dashboard's internal `aviation_software` slug as
-  **Aviation Technology** through `verticalCopy()`; the config/API/DB slug remains unchanged.
-- [ ] RTL tests: first-run show / dismiss / persist / reopen via "?".
-- **DoD:** frontend gate green · slide-by-slide screenshot pass at 1440/720.
+- [x] **Human vertical display:** render the internal `aviation_software` slug as **Aviation
+  Technology** through `verticalCopy()` on the dashboard and locked résumé-update screen, and keep
+  the landing vertical card consistent; the raw key stays out of user-facing UI while the
+  config/API/DB slug remains unchanged. (The broader landing-copy rewrite remains a separate PR.)
+- [x] RTL tests: first-run show / dismiss / persist / reopen via "?"; forward/back, final CTA,
+  Escape, backdrop, and Skip are also pinned.
+- **DoD met:** eslint + `tsc -b --noEmit` + vitest **95/95** + production build green;
+  headless-Chrome slide-by-slide pass at 1440/720 plus the post-dismiss dashboard at both widths
+  (no horizontal overflow, raw slug, console errors, or page errors; guide verified above table).
 
 ## Accepted follow-ups after PR 3 (D-085)
 

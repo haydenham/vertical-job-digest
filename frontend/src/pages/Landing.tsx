@@ -118,7 +118,7 @@ const STEPS = [
 
 const VERTICALS = [
   {
-    name: "Aerospace & aviation",
+    name: "Aviation Technology",
     body: "Airline ops and tech arms, flight data and tracking, avionics, and the platforms behind them.",
   },
   {

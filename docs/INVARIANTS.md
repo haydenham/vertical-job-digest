@@ -121,6 +121,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   to *their own* vertical via **`GET /api/me`** (`{user, profile|null}`), never a cross-user picker; the
   dashboard never renders logged-out (killing the old 401-as-error leak). **Only a 401 means
   logged-out:** a non-401 `/api/me` failure renders a retryable account-load error, never Landing.
+  **Dashboard onboarding (D-082/D-085):** the first dashboard visit per browser opens a four-step
+  welcome dialog; dismissing it stores `rolefeed.tour.seen` in `localStorage`, and the auth-aware `?`
+  nav button reopens it. User-facing controls say **Matched for you / All in-scope** and **New today /
+  1 week / 2 weeks / All open** with native-title explanations; internal vertical keys remain stable
+  and render through `verticalCopy()` (notably `aviation_software` → **Aviation Technology**).
   `GET /api/verticals` remains **only**
   the onboarding picker's source and is now **config-driven** (`available_verticals()`, joinable even with zero
   profiles — the B-4 fix), not active-profile-driven. **Prod ships as one multi-stage image** (`Dockerfile`; SPA

@@ -33,7 +33,8 @@ describe("Landing", () => {
 
   it("renders the three served verticals", () => {
     render(<Landing />);
-    expect(screen.getByRole("heading", { name: /aerospace & aviation/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /aviation technology/i })).toBeInTheDocument();
+    expect(screen.queryByText(/aerospace & aviation/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /energy & grid/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^robotics$/i })).toBeInTheDocument();
   });
