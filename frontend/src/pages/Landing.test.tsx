@@ -3,23 +3,30 @@ import { describe, expect, it } from "vitest";
 
 import { Landing } from "./Landing";
 
-// The marketing landing (UI rework PR 1) is static — these pin the section skeleton and the one
-// live element (the Google CTA), not the marketing copy itself.
+// The marketing landing (UI rework PR 1, D-085 copy pass) is static — these pin the section
+// responsibilities and live links without freezing every sentence of marketing copy.
 describe("Landing", () => {
-  it("renders the coverage-led hero with a Google sign-in anchor to /auth/login", () => {
+  it("promises overlooked technology jobs and links the Google CTA to /auth/login", () => {
     render(<Landing />);
     expect(
-      screen.getByRole("heading", { level: 1, name: /engineering jobs the big boards miss/i }),
+      screen.getByRole("heading", { level: 1, name: /technology jobs the big boards miss/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 1, name: /engineering jobs/i }),
+    ).not.toBeInTheDocument();
     const cta = screen.getByRole("link", { name: /sign in with google/i });
     expect(cta).toHaveAttribute("href", "/auth/login");
   });
 
-  it("renders the three thesis pillars", () => {
+  it("gives the three value cards distinct user-benefit jobs", () => {
     render(<Landing />);
-    expect(screen.getByRole("heading", { name: /beyond the usual suspects/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /fresh postings, every day/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /brutally honest matching/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /find roles beyond the obvious employers/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /apply while opportunities are fresh/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /know where you stand/i })).toBeInTheDocument();
   });
 
   it("renders how-it-works as the anchor the hero's secondary CTA points at", () => {
@@ -29,6 +36,9 @@ describe("Landing", () => {
       "#how-it-works",
     );
     expect(screen.getByRole("heading", { name: /^how it works$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /curate the universe/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /fetch, diff, and verify/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /extract, match, and deliver/i })).toBeInTheDocument();
   });
 
   it("renders the three served verticals", () => {
@@ -42,6 +52,11 @@ describe("Landing", () => {
   it("renders the founder story and the no-auto-apply footer", () => {
     render(<Landing />);
     expect(screen.getByRole("heading", { name: /why i built this/i })).toBeInTheDocument();
+    expect(screen.getByText(/university of wisconsin.madison/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "haydenham10@gmail.com" })).toHaveAttribute(
+      "href",
+      "mailto:haydenham10@gmail.com",
+    );
     expect(screen.getByText(/never auto-applies/i)).toBeInTheDocument();
   });
 });

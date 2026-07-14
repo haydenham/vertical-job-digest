@@ -79,40 +79,37 @@ function HeroMock() {
 
 const PILLARS = [
   {
-    title: "Beyond the usual suspects",
+    title: "Find roles beyond the obvious employers",
     body:
-      "The same big-tech and finance roles flood every job board. Rolefeed covers the employers " +
-      "the boards skip — airline tech arms, grid operators, robotics startups — with hundreds of " +
-      "roles you won't find in any feed.",
+      "Explore technology opportunities at airline tech arms, grid operators, robotics startups, " +
+      "and other specialized employers that broad job boards bury or miss.",
   },
   {
-    title: "Fresh postings, every day",
+    title: "Apply while opportunities are fresh",
     body:
-      "Jobs are pulled straight from company career pages nightly — often weeks before they " +
-      "reach a board. A digest lands in your inbox each morning, and roles that vanish are " +
-      "marked closed, so you never apply to a filled position.",
+      "Start from newly opened roles, verified links, and a clear view of what has already closed " +
+      "— so your time goes toward opportunities that are still real.",
   },
   {
-    title: "Brutally honest matching",
+    title: "Know where you stand",
     body:
-      "Every new role is matched against your résumé with a written verdict: what fits, what " +
-      "doesn't, and a straight yes or no. It might sting — but you'll know where you stand " +
-      "before you put your name out there.",
+      "See what fits, what does not, and whether a role is worth your effort before you apply. " +
+      "Honest recommendations help you focus without hiding the gaps.",
   },
 ];
 
 const STEPS = [
   {
-    title: "A bounded universe",
-    body: "Each vertical starts from a curated list of the employers that matter in the space — total coverage of a real industry, not an infinite scrape.",
+    title: "Curate the universe",
+    body: "Rolefeed starts with a bounded, human-curated list of the employers that matter in each vertical rather than scraping an endless horizontal market.",
   },
   {
-    title: "The nightly diff",
+    title: "Fetch, diff, and verify",
     body: "Rolefeed fetches every career page each night and diffs it against yesterday. New roles surface, vanished ones close, and every apply link is verified before it ships.",
   },
   {
-    title: "A written verdict",
-    body: "New postings are matched to your résumé with reasoning, not keyword similarity — fits, gaps, and a verdict that's willing to say no.",
+    title: "Extract, match, and deliver",
+    body: "New roles are normalized, filtered to the vertical's scope, and matched to your résumé with written fits, gaps, and a verdict before they reach your dashboard and morning digest.",
   },
 ];
 
@@ -135,11 +132,11 @@ export function Landing() {
   return (
     <div className="landing">
       <section className="hero">
-        <h1 className="hero-title">The engineering jobs the big boards miss.</h1>
+        <h1 className="hero-title">The technology jobs the big boards miss.</h1>
         <p className="hero-sub">
-          Rolefeed watches company career pages across aerospace, energy, and robotics — the roles
-          that never flood the LinkedIn feed — and matches every new posting to your résumé, fresh
-          each morning.
+          Rolefeed watches company career pages across aviation, energy, and robotics — surfacing
+          overlooked technology roles and matching every new posting to your résumé, fresh each
+          morning.
         </p>
         <div className="hero-actions">
           <a className="btn btn-primary" href={loginUrl()}>
@@ -211,11 +208,14 @@ export function Landing() {
       <section className="founder">
         <h2 className="section-title">Why I built this</h2>
         <p className="founder-body">
-          I'm a college senior recruiting for software roles. Hundreds of applications, few
-          responses — the same big-tech jobs on every board, often weeks stale, with an ATS
-          filtering my résumé before a human ever saw it. My classmates had the same experience.
-          Rolefeed is the tool I wanted: the interesting jobs the boards miss, the morning they
-          appear, with an honest read on my chances.
+          My name is Hayden, and I am a senior at the University of Wisconsin–Madison. I study
+          computer science and economics, and the thought of entering the job market looms over my
+          classmates and me. As an avid builder, I wanted to make a positive impact on the job
+          search for myself and my peers, which inspired me to build Rolefeed. The three domains I
+          chose reflect the general interests of my close peers and me, and they are often
+          underserved on traditional job boards. Feel free to reach me at{" "}
+          <a href="mailto:haydenham10@gmail.com">haydenham10@gmail.com</a> with any questions or
+          inquiries.
         </p>
         <p className="founder-sig">— Hayden, founder</p>
       </section>

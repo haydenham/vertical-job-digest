@@ -28,8 +28,7 @@ complaint — see D-082 for the decision record. Scope decisions were run throug
   pattern), seen-flag in `localStorage`, re-openable via a "?" nav button. Not a coach-marks
   tour.
 - **3 PRs**: bug-fix tier → progress signal → tutorial + toggle clarity. PRs 1 and 2 are
-  merged (#78/#79); the D-083 production follow-up is merged (#80). PR 3 is built on
-  `feat/onboarding-tutorial` and awaits review/merge.
+  merged (#78/#79); the D-083 production follow-up is merged (#80); PR 3 is merged (#82).
 
 **Constraints that hold throughout:**
 
@@ -123,7 +122,7 @@ errors from 401 with a retry state, guards `/login` for existing sessions, and c
 frontend upload response's `resume_version` from number to string. **Merged as PR #80; PR 3 was
 then built on `feat/onboarding-tutorial`.**
 
-## PR 3 — welcome-slides tutorial + toggle clarity ✅ (built 2026-07-13; awaiting review/merge)
+## PR 3 — welcome-slides tutorial + toggle clarity ✅ (merged #82)
 
 - [x] **First-run dialog** on the dashboard (reuses the `PostingPanel` dialog pattern:
   `role="dialog"`, Esc/click-away). Approved four-slide copy (D-085):
@@ -154,11 +153,15 @@ then built on `feat/onboarding-tutorial`.**
 
 ## Accepted follow-ups after PR 3 (D-085)
 
-- **Landing-page copy pass (separate UI PR):** stop the three thesis cards, How it works, and
+- **Landing-page copy pass ✅ (built on `feat/landing-copy`; awaiting Hayden's commit/PR):** stop the
+  three thesis cards, How it works, and
   Why I built this from repeating the same claim. Cards = user benefits; How it works = actual
   pipeline mechanics; founder story = Hayden's recruiting problem and product thesis. Broaden
   outward language from *software roles* to *technology roles* so analyst/data roles fit the
-  promise. Internal vertical slugs stay stable.
+  promise. Internal vertical slugs stay stable. The approved implementation broadens the hero to
+  **technology jobs**, gives the cards three distinct user benefits, makes the three steps the
+  curate → fetch/diff/verify → extract/match/deliver pipeline, and uses Hayden's new founder
+  description with a direct email link.
 - **Résumé-reupload abuse guard (separate backend/security PR):** first upload stays allowed;
   identical-content reuploads return success without scheduling another backfill; a changed
   résumé is limited to one reupload per user per rolling 24 hours, server-enforced with 429 +
@@ -177,7 +180,8 @@ then built on `feat/onboarding-tutorial`.**
   ceiling; nightly heals within a day). Revisit only with per-user rate limits + budget rework.
 - **Backend persistence of the tutorial-seen flag** — localStorage is enough for beta.
 - **Mobile pass** — already parked (D-080).
-- **Robotics vertical config** — Hayden's, pre-beta; the live landing advertises it while the
-  picker can't offer it until the config lands.
+- **Robotics vertical config** — Hayden's, pre-beta. Hayden reaffirmed 2026-07-14 that the live
+  landing should keep the Robotics promise because the vertical will be added; the picker still
+  cannot offer it until the config lands.
 - Deleting the stale `origin/docs/onboarding-and-shipping-plan` remote branch (its docs/13
   content is on `main`) — Hayden's call.

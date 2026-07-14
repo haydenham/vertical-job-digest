@@ -96,8 +96,8 @@ test** (D-021).
   no matching-progress signal, no `/upload` back nav, ambiguous toggles, no tutorial. A **3-PR block** (see
   `docs/17`): PR 1 upload/onboarding bug fixes → PR 2 backend backfill-status signal (+migration) → PR 3
   welcome-slides tutorial + toggle clarity. **PR 1 merged #78; PR 2 merged #79; its production
-  schema/auth follow-up merged #80 (D-083). PR 3 is built on `feat/onboarding-tutorial` and awaits
-  review/merge.** It adds the four-slide first-run/reopenable tutorial, clarifies both toggle groups,
+  schema/auth follow-up merged #80 (D-083); PR 3 merged #82.** PR 3 adds the four-slide
+  first-run/reopenable tutorial, clarifies both toggle groups,
   moves the table-use hint above the results, and displays `aviation_software` as **Aviation Technology**
   without changing the internal slug. Frontend gate: 95/95 + 1440/720 visual pass.
 - **Scope:** whatever real usage exposes — onboarding edge cases, digest content, dashboard windows, fetcher
@@ -115,8 +115,10 @@ test** (D-021).
 
 **Accepted follow-up queue (D-085; separate reviewable PRs after onboarding PR 3):**
 
-1. Landing copy de-duplication + outward *software → technology* language (benefits vs mechanics vs founder
-   story, not three repetitions of the same thesis).
+1. **Landing copy de-duplication ✅ (built on `feat/landing-copy`; awaiting Hayden's commit/PR):** outward
+   *software/engineering → technology* language; cards = benefits, How it works = mechanics, founder story =
+   Hayden's recruiting problem and thesis. The Robotics promise remains by Hayden's explicit choice; its
+   config is still a separate beta-exit item.
 2. Résumé-reupload abuse guard: identical content becomes a no-backfill success; changed content is limited
    to one reupload per user per rolling 24 hours (server-side 429 + `Retry-After`).
 3. Diagnose the posting identity/diff churn exposed by the D-069 production metrics before building Batch
@@ -195,7 +197,7 @@ does not block broader beta by itself.
 
 ## Beta exit line (accepted 2026-07-13, D-085)
 
-- Review/merge onboarding PR 3, then take the accepted follow-ups as separate branches.
+- Onboarding PR 3 merged #82; take the accepted follow-ups as separate branches (landing copy built first).
 - Resolve the live robotics promise mismatch (ship the config or remove the public claim).
 - Land user-facing beta fixes, the résumé-reupload guard, and minimum Cloud Job monitoring.
 - Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
