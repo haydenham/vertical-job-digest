@@ -132,6 +132,18 @@ a:hover {
   padding: 0;
   font: inherit;
 }
+.tour-help {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-weight: 600;
+}
+.tour-help:hover {
+  border-color: var(--border-hover);
+}
 
 /* the dashboard's controls + open-count row, under the global header */
 .subbar {
@@ -539,6 +551,12 @@ a:hover {
   font-size: 13px;
 }
 
+.table-guide {
+  margin: -6px 0 -10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .footer {
   font-size: 12px;
   color: var(--text-dim);
@@ -547,6 +565,107 @@ a:hover {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ---- first-run welcome tour (onboarding PR 3, D-082/D-085) ---- */
+.tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 8, 0.78);
+  backdrop-filter: blur(4px);
+}
+.welcome-tour {
+  width: min(560px, 100%);
+  min-height: 360px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  background: var(--surface);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.welcome-tour:focus {
+  outline: none;
+}
+.tour-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.tour-dots {
+  display: flex;
+  gap: 6px;
+}
+.tour-dots span {
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-hover);
+}
+.tour-dots span.active {
+  background: var(--accent);
+}
+.tour-copy {
+  display: grid;
+  gap: 14px;
+  margin: auto 0;
+}
+.tour-copy h2 {
+  margin: 0;
+  max-width: 18ch;
+  font-size: clamp(25px, 4vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -1px;
+}
+.tour-copy p {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.tour-actions,
+.tour-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tour-actions {
+  justify-content: space-between;
+}
+.tour-step-actions {
+  justify-content: flex-end;
+}
+.tour-skip {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+@media (max-width: 600px) {
+  .tour-backdrop {
+    padding: 12px;
+  }
+  .welcome-tour {
+    min-height: min(420px, calc(100vh - 24px));
+    padding: 22px;
+  }
+  .tour-actions {
+    align-items: flex-end;
+  }
+  .tour-step-actions {
+    flex-wrap: wrap;
+  }
 }
 
 /* ---- panels: login + upload (9.4) ---- */
@@ -699,12 +818,6 @@ a:hover {
   line-height: 1.5;
   color: var(--text-muted);
 }
-.vertical-slug {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-dim);
-}
-
 /* drag-and-drop résumé zone; the real file input stays in the label, visually hidden */
 .dropzone {
   border: 1px dashed var(--border);

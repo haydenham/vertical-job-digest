@@ -5,6 +5,25 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-13 — Onboarding PR 3 built: welcome tour + dashboard clarity (D-082/D-085)
+
+**Built on `feat/onboarding-tutorial` (frontend-only; awaiting Hayden review/commit/PR):** a four-slide,
+first-dashboard welcome dialog with Skip/Back/Next/Start exploring, Escape/backdrop dismissal, browser-local
+`rolefeed.tour.seen` persistence, and an auth-aware `?` nav reopen affordance. Dashboard controls now read
+**Matched for you / All in-scope** and **New today / 1 week / 2 weeks / All open**, with exact native-title
+semantics. The table-use/read-only/nightly guide moved above results. `aviation_software` now renders as
+**Aviation Technology** on the dashboard, locked résumé-update screen, and landing vertical card while its
+config/API/DB key remains unchanged and hidden from user-facing UI; the broader landing rewrite remains queued.
+
+**Regression-first + verification:** the initial focused expectations failed against the old UI (5 files,
+8 tests), then the implementation and remaining stale upload-label assertions were brought green. Frontend
+eslint + `tsc -b --noEmit` + vitest **95/95** + production build pass. Headless Chrome walked all four slides
+at 1440/720 and captured the post-dismiss dashboard at both widths: no overflow, console/page errors, or raw
+slug; guide position and all control labels verified. Docs/17 PR-3 checklist + DoD, docs/15 active ledger,
+INVARIANTS dashboard contract, and CLAUDE roadmap reconciled. **Next:** Hayden reviews/commits/PRs; after
+merge, continue the D-085 follow-up queue as separate branches (landing copy, reupload guard, churn diagnosis,
+minimum Job monitoring) alongside UI/UX, company-database work, and beta feedback.
+
 ## 2026-07-13 — Beta-hardening ledger reconciled + PR-3/follow-up scope locked (D-084/D-085)
 
 **Planning/docs only on `docs/beta-hardening-reconcile`; no application code changed.** Reconciled the

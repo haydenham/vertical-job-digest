@@ -10,7 +10,7 @@ export interface VerticalCopy {
 
 const COPY: Record<string, VerticalCopy> = {
   aviation_software: {
-    name: "Aerospace & aviation",
+    name: "Aviation Technology",
     blurb:
       "Airline ops and tech arms, flight data and tracking, avionics, and the platforms behind them.",
   },

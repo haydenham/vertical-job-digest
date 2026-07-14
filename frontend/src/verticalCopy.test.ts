@@ -5,6 +5,7 @@ import { verticalCopy } from "./verticalCopy";
 describe("verticalCopy", () => {
   it("maps known slugs to display copy", () => {
     expect(verticalCopy("grid_power_software").name).toBe("Energy & grid");
+    expect(verticalCopy("aviation_software").name).toBe("Aviation Technology");
     expect(verticalCopy("aviation_software").blurb).toMatch(/flight data/i);
     expect(verticalCopy("robotics_software").name).toBe("Robotics");
   });

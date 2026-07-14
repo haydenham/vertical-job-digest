@@ -45,7 +45,10 @@ function renderAt(path: string) {
 }
 
 describe("App routing + guards", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
 
   // --- nav chrome ---
 
@@ -63,6 +66,34 @@ describe("App routing + guards", () => {
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /update résumé/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
+  });
+
+  it("shows the welcome tour once on the dashboard and persists dismissal", async () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    const first = renderAt("/dashboard");
+    expect(
+      await screen.findByRole("dialog", { name: /your rolefeed, updated nightly/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("rolefeed.tour.seen")).toBe("1");
+
+    first.unmount();
+    renderAt("/dashboard");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("reopens the welcome tour from the question-mark nav button", async () => {
+    window.localStorage.setItem("rolefeed.tour.seen", "1");
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    renderAt("/dashboard");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Open welcome tour" }));
+    expect(
+      screen.getByRole("dialog", { name: /your rolefeed, updated nightly/i }),
+    ).toBeInTheDocument();
   });
 
   it("hides the update-résumé link when signed in but not onboarded", () => {

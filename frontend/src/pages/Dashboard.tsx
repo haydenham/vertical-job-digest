@@ -6,6 +6,7 @@ import { Controls, type ControlState } from "../components/Controls";
 import { PostingPanel } from "../components/PostingPanel";
 import { PostingsTable } from "../components/PostingsTable";
 import { DEFAULT_SORT, filterPostings, sortPostings, type SortState } from "../postingsView";
+import { verticalCopy } from "../verticalCopy";
 
 const INITIAL: ControlState = {
   window: "all",
@@ -81,7 +82,7 @@ export function Dashboard({ vertical }: { vertical: string }) {
           onChange={(e) => setQuery(e.target.value)}
         />
         <span className="meta">
-          <span className="accent">{vertical}</span>
+          <span className="accent">{verticalCopy(vertical).name}</span>
           {data && (filtering ? `${visible.length} of ${data.count}` : `${data.count} open`)}
         </span>
       </div>
@@ -92,6 +93,8 @@ export function Dashboard({ vertical }: { vertical: string }) {
           Matching in progress — results update live
         </div>
       )}
+
+      <div className="table-guide">Click a row for details · read-only · updates nightly</div>
 
       {error ? (
         <div className="notice error">{error}</div>
@@ -118,8 +121,6 @@ export function Dashboard({ vertical }: { vertical: string }) {
       )}
 
       {selected && <PostingPanel p={selected} onClose={() => setSelectedId(null)} />}
-
-      <footer className="footer">Click a row for details · read-only · updates nightly</footer>
     </>
   );
 }

@@ -76,10 +76,23 @@ describe("Dashboard", () => {
     );
   });
 
+  it("puts the table guidance above the results and renders a human vertical name", async () => {
+    const { container } = render(<Dashboard vertical="aviation_software" />);
+    expect(await screen.findByText("Grid Engineer")).toBeInTheDocument();
+    expect(screen.getByText("Aviation Technology")).toBeInTheDocument();
+    expect(screen.queryByText("aviation_software")).not.toBeInTheDocument();
+
+    const guide = screen.getByText(/click a row for details · read-only · updates nightly/i);
+    const table = container.querySelector(".table");
+    expect(table).not.toBeNull();
+    expect(guide.compareDocumentPosition(table!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(container.querySelector("footer.footer")).not.toBeInTheDocument();
+  });
+
   it("refetches with the new window when a recency toggle is clicked", async () => {
     renderDashboard();
     await screen.findByText("Grid Engineer");
-    await userEvent.click(screen.getByRole("button", { name: "2 wk" }));
+    await userEvent.click(screen.getByRole("button", { name: "2 weeks" }));
     await waitFor(() =>
       expect(mockPostings).toHaveBeenLastCalledWith(
         expect.objectContaining({ window: "two_weeks" }),

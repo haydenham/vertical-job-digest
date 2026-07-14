@@ -85,7 +85,7 @@ describe("Upload", () => {
       resume_version: "v1",
     });
     renderUpload();
-    await userEvent.click(await screen.findByRole("radio", { name: /aerospace & aviation/i }));
+    await userEvent.click(await screen.findByRole("radio", { name: /aviation technology/i }));
     await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     expect(mockUpload).toHaveBeenCalledWith("aviation_software", resume);
@@ -98,8 +98,8 @@ describe("Upload", () => {
       }),
     );
     renderUpload({ lockedVertical: "aviation_software" });
-    expect(screen.getByText("Aerospace & aviation")).toBeInTheDocument();
-    expect(screen.getByText("aviation_software")).toBeInTheDocument(); // the slug, as data
+    expect(screen.getByText("Aviation Technology")).toBeInTheDocument();
+    expect(screen.queryByText("aviation_software")).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(mockVerticals).not.toHaveBeenCalled();
   });
