@@ -9,6 +9,18 @@ detect the platform signature → if JS-rendered, web-search and read the ATS do
 verify deterministic endpoints live (incl. the Workday `cxs` API). `verification` column: `verified` (hit live,
 returned jobs/valid API), `detected` (platform known, endpoint not yet live-confirmed), `layer2` (no clean API).
 
+## Curated expansion log
+
+The platform-distribution table below preserves the original 54-employer grid/power routing pass. Later curated
+additions use the same validate-live-then-seed path (D-015) and are recorded here rather than rewriting that
+historical baseline.
+
+- **2026-07-14 — SPAN + The Brattle Group:** added to `grid_power_software` as active, verified curated seed
+  employers. SPAN's Ashby slug `span` returned 34 postings; Brattle's Greenhouse slug `thebrattlegroup` returned
+  21. Both endpoints are slug-derived through the existing generic fetchers (no explicit endpoint or source-code
+  change). The seed's fetchable count moves **49 → 51**; production activates them only after Hayden runs the
+  post-merge `vja-import-employers` command (D-062).
+
 ## Platform distribution (54 employers)
 
 | platform | # | API quality | verification | build tier |
