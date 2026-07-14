@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-14 — Post-beta feature slate decided + roadmap written (D-087)
+
+**Planning/docs only on `docs/post-beta-feature-roadmap` (uncommitted; Hayden owns commit/PR); no
+application code changed.** A feature-reasoning session: Hayden set the frame (new = niche-vertical
+grouping, better = AI matching, proven = job-finding tool), benchmarked jobright.ai (freshness +
+salary are the standouts; most else is clutter), and set the rule — adapt 1–2 proven features, add
+something novel, resist clutter. Every scope decision ran through him.
+
+**Accepted slate (D-087, plan of record `docs/18-post-beta-features.md`, builds only after the D-085
+beta exit):** F1 intraday freshness + instant alerts (~1–2h fetch→diff→extract→match polls, alert-on-
+arrival with idempotency marker, digest stays nightly; supersedes D-005's once-daily fetch **at build
+time only**) · F2 salary (Phase A surfaces the stored-but-never-shown `comp_min/max/raw`, fill-rate
+query first; Phase B = public DOL H1B/LCA enrichment; **Glassdoor/Indeed documented closed** — no open
+API, scraping violates ToS + politeness policy) · F3 recurring-gaps report (aggregate `matches.gaps` →
+"the #1 thing between you and strong_yes") · F4 per-employer lifespan/urgency intel (the D-009
+promise). **Key dependency surfaced: the D-085 churn diagnosis now blocks F1 + F4** (alert spam /
+corrupted medians). Sequence: churn fix → F2A → F4 → F1 → F3, F2B parallel. Rejected: YOE flags,
+networking matches, autofill apply, applicant counts. Also verified the prior top entries' pending
+branches merged (#83 SPAN/Brattle, #84 timeout guard) — main is clean.
+
+**Docs updated:** new `docs/18` · D-087 · CLAUDE (roadmap bullet + doc map) · docs/15 (churn item
+gates two roadmap features; post-exit pointer). INVARIANTS untouched — no live rule changed.
+**Verification:** docs-only diff, human-read + stale-phrase scan; ADR id confirmed next-free; code
+gates path-filtered out. **Next:** Hayden reviews/commits/PRs; beta-exit work (docs/15) continues
+first — the slate starts only after exit, churn diagnosis leading.
+
 ## 2026-07-14 — Nightly duplicate-digest timeout guard built (D-086)
 
 **Production diagnosis (read-only):** execution `vja-nightly-zvw6s` started under the standing Cloud Run
