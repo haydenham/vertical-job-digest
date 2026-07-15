@@ -25,7 +25,7 @@ from vja.db.profiles import (
     mark_backfill_started,
     upsert_profile,
 )
-from vja.db.schema import employers, postings, profiles
+from vja.db.schema import employers, postings, profiles, users
 from vja.db.users import User, upsert_user_by_google
 
 _NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
@@ -432,41 +432,179 @@ def test_reupload_same_vertical_updates_resume(
     assert len(calls) == 1  # backfill runs for the update
 
 
-def test_reupload_via_api_versions_and_retriggers_backfill(
+@freeze_time("2026-07-15 12:00:00")
+def test_reupload_via_api_versions_and_enforces_rolling_cooldown(
     migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The end-to-end API reupload protocol (D-082): same bytes → idempotent (same profile row);
-    edited bytes → a NEW active version (the old row deactivated, its matches orphaned by the
-    version key) and the 5-day backfill re-triggered each accepted upload — the uncapped nightly
-    re-matches the rest (D-039)."""
+    """D-085: identical content is a no-backfill success; only one changed reupload may start
+    a backfill per user in a rolling 24-hour window."""
     user = _user(migrated_engine)
     client, calls = _upload_client(migrated_engine, user, monkeypatch)
 
-    first = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE).json()
+    first_response = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert first_response.status_code == 202
+    first = first_response.json()
+    first_started = backfill_stamps(migrated_engine, first["profile_id"])[0]
+    assert first_started is not None
+    with migrated_engine.connect() as conn:
+        first_clock = conn.execute(
+            select(users.c.last_resume_reupload_at).where(users.c.id == user.id)
+        ).scalar_one()
+    assert first_clock is None  # the initial upload never consumes the reupload allowance
 
-    # same bytes → same version, same row (idempotent update, not a 409 — D-064 only rejects a
-    # DIFFERENT vertical); the backfill still re-runs (idempotently matching nothing new).
+    # Identical extracted content returns the unchanged 202 contract but spends nothing: no new
+    # task and no fresh progress stamp. It therefore also succeeds when the global LLM ceiling is
+    # exhausted (that ceiling only guards work that would actually run).
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "0")
     same = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
     assert same.status_code == 202
     assert same.json() == first
+    assert len(calls) == 1
+    assert backfill_stamps(migrated_engine, first["profile_id"])[0] == first_started
+    monkeypatch.delenv("VJA_DAILY_LLM_BUDGET_USD")
 
-    # edited résumé → new active profile row + resume_version.
+    # The first changed reupload is allowed and starts one new backfill.
     edited = {"file": ("resume.txt", b"Jane Engineer. Python, grid software, SCADA.", "text/plain")}
     resp = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=edited)
     assert resp.status_code == 202
     body = resp.json()
     assert body["resume_version"] != first["resume_version"]
     assert body["profile_id"] != first["profile_id"]
+    with migrated_engine.connect() as conn:
+        claimed_at = conn.execute(
+            select(users.c.last_resume_reupload_at).where(users.c.id == user.id)
+        ).scalar_one()
+    assert claimed_at == datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
+
+    # A second changed reupload in the same rolling window is blocked before profile mutation or
+    # task scheduling, and tells the client exactly when it may retry.
+    second_edit = {
+        "file": ("resume.txt", b"Jane Engineer. Python, grid software, SCADA, EMS.", "text/plain")
+    }
+    blocked = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=second_edit)
+    assert blocked.status_code == 429
+    assert blocked.headers["Retry-After"] == "86400"
+    assert "one per user every 24 hours" in blocked.json()["detail"]
 
     # exactly one active profile survives: the new version (the old one is deactivated, D-064).
     assert [p.id for p in active_profiles(migrated_engine, _VERTICAL)] == [body["profile_id"]]
 
-    # every accepted upload kicked off a backfill for the then-current profile row.
+    # Only the initial upload and accepted changed reupload kicked off a backfill.
     assert [args[2].id for args, _ in calls] == [
-        first["profile_id"],
         first["profile_id"],
         body["profile_id"],
     ]
+
+
+def test_changed_reupload_allowed_at_rolling_window_boundary(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    with freeze_time("2026-07-14 12:00:00"):
+        first = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+        assert first.status_code == 202
+        edit = {
+            "file": ("resume.txt", b"Jane Engineer. Python, grid software, SCADA.", "text/plain")
+        }
+        assert (
+            client.post("/api/profiles", data={"vertical": _VERTICAL}, files=edit).status_code
+            == 202
+        )
+
+    with freeze_time("2026-07-15 11:59:59"):
+        too_soon = {
+            "file": (
+                "resume.txt",
+                b"Jane Engineer. Python, grid software, SCADA, EMS.",
+                "text/plain",
+            )
+        }
+        blocked = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=too_soon)
+        assert blocked.status_code == 429
+        assert blocked.headers["Retry-After"] == "1"
+
+    with freeze_time("2026-07-15 12:00:00"):
+        allowed = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=too_soon)
+        assert allowed.status_code == 202
+
+    assert len(calls) == 3
+
+
+def test_reverting_to_inactive_resume_counts_as_changed_reupload(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reusing an old content hash reactivates its audit row, but still advances the user clock."""
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    with freeze_time("2026-07-14 12:00:00"):
+        original = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+        assert original.status_code == 202
+        edited = {
+            "file": ("resume.txt", b"Jane Engineer. Python, grid software, SCADA.", "text/plain")
+        }
+        assert (
+            client.post("/api/profiles", data={"vertical": _VERTICAL}, files=edited).status_code
+            == 202
+        )
+
+    with freeze_time("2026-07-15 12:00:00"):
+        reverted = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+        assert reverted.status_code == 202
+        assert reverted.json()["profile_id"] == original.json()["profile_id"]
+
+    with freeze_time("2026-07-15 12:00:01"):
+        another_edit = {
+            "file": ("resume.txt", b"Jane Engineer. Python, grid software, EMS.", "text/plain")
+        }
+        blocked = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=another_edit)
+        assert blocked.status_code == 429
+        assert blocked.headers["Retry-After"] == "86399"
+
+    assert len(calls) == 3
+
+
+@freeze_time("2026-07-15 12:00:00")
+def test_reupload_cooldown_is_per_user(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first_user = _user(migrated_engine, "first@example.com")
+    second_user = _user(migrated_engine, "second@example.com")
+    first_client, first_calls = _upload_client(migrated_engine, first_user, monkeypatch)
+
+    assert (
+        first_client.post(
+            "/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE
+        ).status_code
+        == 202
+    )
+    first_edit = {"file": ("resume.txt", b"First user changed resume.", "text/plain")}
+    assert (
+        first_client.post(
+            "/api/profiles", data={"vertical": _VERTICAL}, files=first_edit
+        ).status_code
+        == 202
+    )
+
+    second_client, second_calls = _upload_client(migrated_engine, second_user, monkeypatch)
+    assert (
+        second_client.post(
+            "/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE
+        ).status_code
+        == 202
+    )
+    second_edit = {"file": ("resume.txt", b"Second user changed resume.", "text/plain")}
+    assert (
+        second_client.post(
+            "/api/profiles", data={"vertical": _VERTICAL}, files=second_edit
+        ).status_code
+        == 202
+    )
+
+    assert len(first_calls) == 2
+    assert len(second_calls) == 2
 
 
 # --- backfill status via /api/me (D-082) -------------------------------------------------------

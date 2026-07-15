@@ -119,8 +119,11 @@ test** (D-021).
    *software/engineering → technology* language; cards = benefits, How it works = mechanics, founder story =
    Hayden's recruiting problem and thesis. The Robotics promise remains by Hayden's explicit choice; its
    config is still a separate beta-exit item.
-2. Résumé-reupload abuse guard: identical content becomes a no-backfill success; changed content is limited
-   to one reupload per user per rolling 24 hours (server-side 429 + `Retry-After`).
+2. **Résumé-reupload abuse guard ✅ (built on `fix/resume-reupload-abuse-guard`; awaiting Hayden's
+   commit/PR):** identical extracted content keeps the 202 contract without a progress-stamp refresh or
+   backfill; changed content is limited to one accepted reupload per user per rolling 24 hours through an
+   atomic user-row clock (server-side 429 + integer-seconds `Retry-After`). **Neon migration
+   `c4e8a7d9132f` applied and verified 2026-07-15.**
 3. Diagnose the posting identity/diff churn exposed by the D-069 production metrics before building Batch
    API support. Stable 44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings;
    that is a correctness/coverage problem before it is a cost problem. *(This item now also gates two
@@ -197,9 +200,10 @@ does not block broader beta by itself.
 
 ## Beta exit line (accepted 2026-07-13, D-085)
 
-- Onboarding PR 3 merged #82; take the accepted follow-ups as separate branches (landing copy built first).
+- Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard is built on its separate branch.
 - Resolve the live robotics promise mismatch (ship the config or remove the public claim).
-- Land user-facing beta fixes, the résumé-reupload guard, and minimum Cloud Job monitoring.
+- Land remaining user-facing beta fixes and minimum Cloud Job monitoring (reupload guard built and Neon
+  migrated; review/merge remain).
 - Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
 - Execute already-validated no-code employer activations.
 

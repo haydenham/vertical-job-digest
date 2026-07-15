@@ -5,6 +5,30 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-15 — D-085 résumé-reupload abuse guard built
+
+**Built on `fix/resume-reupload-abuse-guard` (uncommitted; Hayden owns commit/PR):** identical
+extracted résumé content now keeps the existing 202/profile response without refreshing the
+backfill-progress stamp or scheduling another backfill (and succeeds even when the global LLM
+ceiling is exhausted). The first upload remains allowed. Each accepted changed résumé atomically
+claims new nullable `users.last_resume_reupload_at`; another change inside the rolling 24-hour
+window returns 429 with an integer-seconds `Retry-After`. The per-user row lock serializes concurrent
+production/Postgres uploads; reverting to an older stored content version still counts as changed
+and refreshes the clock. Existing one-vertical, profile-version audit, five-day backfill, nightly
+healing, and frontend 202 commit-point contracts remain intact.
+
+**Regression + migration + gates:** after correcting a test-fixture syntax typo, the focused tests
+failed against the old behavior (identical content hit the daily-budget 429; a second change was
+accepted), then passed. Migration `c4e8a7d9132f` upgrade + downgrade were rehearsed on a populated
+SQLite DB with a profile FK to the user; rows survived both directions. Full default suite **528
+passed, 20 opt-in deselected**; ruff format/check, mypy (52 source files), import-linter (1 kept / 0
+broken), `uv lock --check`, and `git diff --check` green. Frontend/eval gates are path-filtered out.
+Docs/04, docs/11, docs/15, docs/17, INVARIANTS, D-085's implementation note, and CLAUDE are current;
+this entry also supersedes the stale prior top entry's awaiting-PR state because landing PR #86 is
+merged. **Production migration complete:** Hayden explicitly targeted Neon (`PostgresqlImpl`) and
+verified `a06b99424c4c → c4e8a7d9132f (head)` on 2026-07-15. **Next:** Hayden reviews,
+commits, and PRs this branch.
+
 ## 2026-07-14 — D-085 landing-copy follow-up built
 
 **Built on `feat/landing-copy` (uncommitted; Hayden owns commit/PR):** completed the first accepted

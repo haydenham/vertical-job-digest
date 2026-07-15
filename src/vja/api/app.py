@@ -58,13 +58,13 @@ from vja.db.postings import open_postings_with_match_quality
 from vja.db.profiles import (
     BackfillStatus,
     Profile,
+    ProfileVerticalConflict,
+    ResumeReuploadLimited,
     active_profile_for_user,
     active_profiles,
     backfill_stamps,
     derive_backfill_status,
-    get_profile,
-    mark_backfill_started,
-    upsert_profile,
+    upload_profile,
 )
 from vja.db.schema_guard import ensure_configured_schema_ready
 from vja.db.users import User, upsert_user_by_google
@@ -418,17 +418,12 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         """Upload a résumé → create/update this user's profile → kick off the signup backfill.
 
         The first write path (9.3, D-057). Behind `require_user` (401 without a session). The
-        résumé adapter (D-033) turns the file into `resume_text`; `upsert_profile` stamps the
-        authenticated `user_id`; `run_backfill` (the D-039 5-day catch-up) runs in the background
-        so the response returns immediately (202). Two cost guards bound the LLM spend this
-        triggers: the global daily ceiling (checked here → 429) and the per-backfill cap (inside
-        `run_backfill`). PII discipline: the résumé text is never logged.
+        résumé adapter (D-033) turns the file into `resume_text`; `upload_profile` atomically
+        applies the one-vertical rule, profile versioning, and D-085's rolling reupload guard.
+        Identical content is a 202 no-op with no backfill. Work-producing uploads run D-057's
+        global daily ceiling before committing, then `run_backfill` (the D-039 5-day catch-up)
+        runs in the background. PII discipline: the résumé text is never logged.
         """
-        try:
-            check_backfill_budget(engine)
-        except BackfillBudgetExceeded as exc:
-            raise HTTPException(429, str(exc)) from exc
-
         data = await file.read()
         if len(data) > _MAX_UPLOAD_BYTES:
             raise HTTPException(413, f"file too large (max {_MAX_UPLOAD_BYTES} bytes)")
@@ -442,33 +437,38 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         except ConfigError as exc:
             raise HTTPException(404, f"unknown vertical {vertical!r}") from exc
 
-        # One vertical per user (D-064): reject a second vertical. Re-uploading the SAME vertical is
-        # a résumé update (idempotent → new resume_version, D-033), so only a *different* one 409s.
-        existing = active_profile_for_user(engine, user.email)
-        if existing is not None and existing.vertical != vertical:
+        stamp = datetime.now(UTC)
+        try:
+            upload = upload_profile(
+                engine,
+                user_id=user.id,
+                user_email=user.email,
+                vertical=vertical,
+                resume_text=resume_text,
+                domain_vocabulary=cfg.domain_vocabulary,
+                before_backfill=lambda: check_backfill_budget(engine, now=stamp),
+                now=stamp,
+            )
+        except ProfileVerticalConflict as exc:
             raise HTTPException(
                 409,
-                f"already onboarded to {existing.vertical!r}; one vertical per user "
+                f"already onboarded to {exc.vertical!r}; one vertical per user "
                 f"(changing verticals is a manual/support action)",
-            )
+            ) from exc
+        except ResumeReuploadLimited as exc:
+            raise HTTPException(
+                429,
+                "changed résumé uploads are limited to one per user every 24 hours",
+                headers={"Retry-After": str(exc.retry_after)},
+            ) from exc
+        except BackfillBudgetExceeded as exc:
+            raise HTTPException(429, str(exc)) from exc
 
-        profile_id = upsert_profile(
-            engine,
-            user_email=user.email,
-            user_id=user.id,
-            vertical=vertical,
-            resume_text=resume_text,
-            domain_vocabulary=cfg.domain_vocabulary,
-        )
-        profile = get_profile(engine, profile_id)
-        assert profile is not None  # just upserted
-        # Stamp `started` BEFORE scheduling (D-082): the 202 returns before the background task
-        # runs, and the SPA probes /api/me immediately after — stamping only inside run_backfill
-        # would race that probe and the progress banner would never show.
-        mark_backfill_started(engine, profile_id)
-        background.add_task(run_backfill, engine, vertical, profile, config=cfg)
+        profile = upload.profile
+        if upload.backfill_required:
+            background.add_task(run_backfill, engine, vertical, profile, config=cfg)
         return ProfileCreated(
-            profile_id=profile_id, vertical=vertical, resume_version=profile.resume_version
+            profile_id=profile.id, vertical=vertical, resume_version=profile.resume_version
         )
 
     # Serve the built SPA same-origin in prod, if a real build exists (D-042/D-059). Gated on

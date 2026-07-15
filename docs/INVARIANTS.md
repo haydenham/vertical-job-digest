@@ -144,9 +144,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   the SPA's `/api/me` re-probe is silent (no global loading flip) with bounded retries, then navigates to
   `/dashboard` (last resort: a calm "uploaded — open your dashboard" state). Guard responses (401/413/422/429/404
   + **409 second-vertical**) surface a typed `ApiError`; transport failures get friendly copy and the POST carries
-  a 30s abort timeout. (D-058, D-057, D-065, D-082)
-- **Backfill progress is a real server signal (D-082 — supersedes D-057's "no status endpoint" clause).** The
-  upload endpoint stamps `profiles.backfill_started_at` *before* scheduling `run_backfill` (so the immediate
+  a 30s abort timeout. **Reupload abuse guard:** identical extracted content keeps the same `202` response but does
+  not refresh progress or schedule a backfill; the first upload remains allowed; changed content is limited to one
+  accepted reupload per user per rolling 24 hours, atomically persisted on `users.last_resume_reupload_at`, with
+  `429` + integer-seconds `Retry-After` while blocked. (D-058, D-057, D-065, D-082, D-085)
+- **Backfill progress is a real server signal (D-082 — supersedes D-057's "no status endpoint" clause).** For a
+  work-producing upload, the endpoint stamps `profiles.backfill_started_at` *before* scheduling
+  `run_backfill` (so the immediate
   post-202 probe is race-free); `run_backfill` stamps `backfill_completed_at` on exit (even when every candidate
   failed). `/api/me` exposes the derived `backfill_status` (`running`/`done`/`null` for never-stamped rows):
   done means `completed >= started` (the reupload-ordering rule — a reactivated row carries the *previous* run's
@@ -224,8 +228,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (`VJA_BACKFILL_MAX_POSTINGS`, default 100) bounds one signup's candidate set inside `run_backfill`
   (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) refuses a backfill
   (429) once today's *estimated* spend (`count_matches_since(midnight) × ~$0.01`, a proxy — there's
-  no per-match ledger) is reached. Captcha / email-verify / edge rate-limiting are deferred to the
-  9.5 deploy (OAuth already bounds abuse to real accounts). (D-057)
+  no per-match ledger) is reached. Identical-content uploads bypass this ceiling because they schedule
+  no work; work-producing first/changed uploads still pass it before commit. The separate per-user changed-
+  résumé rolling guard is described above. (D-057, D-085)
 - **No auto-apply.** The tool surfaces and reasons; it never submits applications. (core)
 - **Politeness is policy:** rate limits, sane user agent, respect robots.txt on the long
   tail. Getting IP-banned is a self-inflicted coverage hole. (core)

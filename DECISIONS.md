@@ -1540,6 +1540,12 @@ feedback.** Status: planning/docs accepted; only D-084's scheduling rule is live
 reupload guard, churn fix/Batch work, monitoring, and scaling assessment become live only when their own tested
 PRs land. References D-069, D-072, D-078, D-080, D-082, D-083, D-084, D-021.
 
+**Implementation update · 2026-07-15:** PR-3 is live via #82 and landing copy via #86. The reupload
+guard is built on `fix/resume-reupload-abuse-guard` with an atomic per-user timestamp migration.
+Neon was explicitly verified as `PostgresqlImpl` and advanced to `c4e8a7d9132f (head)` on 2026-07-15;
+the behavior becomes live when the tested PR merges. Churn fix/Batch work, monitoring, and scaling
+assessment remain planned.
+
 ### D-086 · Beta hardening · Nightly task timeout/retry guard prevents duplicate digest delivery · accepted · 2026-07-14
 The first nightly after another beta signup exposed an attempt-level delivery defect. Cloud Run execution
 `vja-nightly-zvw6s` ran the sequential pipeline under the existing **7,200-second timeout + one retry**:

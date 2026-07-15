@@ -107,20 +107,43 @@ Index on `(employer_id, status)`, `(status, first_seen_at)`.
 strings, tracking query params, request timestamps, and field ordering (sort keys before hashing).
 Same `external_id` + changed `content_hash` ⇒ re-run extraction. Same hash ⇒ reuse cached extraction (free).
 
-## 4. `profiles`
+## 4. `users` + `profiles`
+
+An authenticated user owns the abuse-control clock; profile rows remain versioned résumé audit
+records beneath that identity.
+
+### `users`
+
+| column | type | notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `google_sub` | TEXT UNIQUE | Google OIDC identity; nullable for a pre-login email row |
+| `email` | TEXT NOT NULL UNIQUE | canonical identity seam (D-027/D-055) |
+| `name` | TEXT | display name |
+| `created_at` | UTC DATETIME NOT NULL | |
+| `last_resume_reupload_at` | UTC DATETIME | last accepted **changed** résumé upload; NULL after the first upload (D-085) |
+
+`last_resume_reupload_at` is claimed in the same per-user transaction that versions the profile.
+It enforces one changed reupload per rolling 24 hours without confusing an initial upload or an
+identical-content no-op with paid work.
+
+### `profiles`
 
 A matching profile = a resume + the vertical's domain vocabulary. Stored so matches can record which version they used.
 
 | column | type | notes |
 |---|---|---|
 | `id` | INTEGER PK | |
+| `user_id` | INTEGER FK→users | authenticated owner; nullable for pre-login seed/CLI rows |
 | `user_email` | TEXT NOT NULL | |
 | `vertical` | TEXT NOT NULL | a profile is per (user, vertical) |
-| `resume_version` | TEXT NOT NULL | bump on every resume edit; matches reference this |
+| `resume_version` | TEXT NOT NULL | content hash; changed content makes/reuses a version row and matches reference it |
 | `resume_text` | TEXT NOT NULL | |
 | `domain_vocabulary` | TEXT | JSON array (steer matching prompt) — may come from vertical config |
 | `active` | INTEGER NOT NULL DEFAULT 1 | |
-| `created_at` | TEXT NOT NULL | |
+| `created_at` | UTC DATETIME NOT NULL | |
+| `backfill_started_at` | UTC DATETIME | stamped before a background backfill is scheduled (D-082) |
+| `backfill_completed_at` | UTC DATETIME | stamped when that backfill exits (D-082) |
 
 ## 5. `matches`
 
