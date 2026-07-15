@@ -18,6 +18,7 @@ from vja.db.engine import get_engine
 from vja.db.schema_guard import SchemaBehindError, ensure_schema_ready
 
 _PRE_BACKFILL_REVISION = "b2f4c1a9e07d"
+_PACKAGED_HEAD = "c4e8a7d9132f"
 _ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -41,7 +42,7 @@ def test_schema_guard_rejects_database_behind_packaged_head(
     command.upgrade(_alembic_config(), _PRE_BACKFILL_REVISION)
     engine = get_engine(url)
     try:
-        with pytest.raises(SchemaBehindError, match="a06b99424c4c"):
+        with pytest.raises(SchemaBehindError, match=_PACKAGED_HEAD):
             ensure_schema_ready(engine, _alembic_config())
     finally:
         engine.dispose()
@@ -57,7 +58,7 @@ def test_configured_schema_guard_fails_app_startup_before_readiness(
     engine = get_engine(url)
     try:
         with (
-            pytest.raises(SchemaBehindError, match="a06b99424c4c"),
+            pytest.raises(SchemaBehindError, match=_PACKAGED_HEAD),
             TestClient(create_app(engine)),
         ):
             pass

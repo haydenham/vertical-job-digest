@@ -162,10 +162,12 @@ then built on `feat/onboarding-tutorial`.**
   **technology jobs**, gives the cards three distinct user benefits, makes the three steps the
   curate → fetch/diff/verify → extract/match/deliver pipeline, and uses Hayden's new founder
   description with a direct email link.
-- **Résumé-reupload abuse guard (separate backend/security PR):** first upload stays allowed;
-  identical-content reuploads return success without scheduling another backfill; a changed
-  résumé is limited to one reupload per user per rolling 24 hours, server-enforced with 429 +
-  `Retry-After`.
+- **Résumé-reupload abuse guard ✅ (built on `fix/resume-reupload-abuse-guard`; awaiting Hayden's
+  commit/PR):** first upload stays allowed; identical extracted content returns the same 202 profile
+  response without refreshing progress or scheduling another backfill; a changed résumé is limited
+  to one reupload per user per rolling 24 hours, atomically persisted on the user row and enforced
+  with 429 + integer-seconds `Retry-After`. **Neon migration `c4e8a7d9132f` applied and verified
+  2026-07-15.**
 - **LLM-cost Block 2:** diagnose the observed posting new/closed identity churn before building
   Anthropic Message Batches. If steady-state extraction remains material after the correctness
   fix, batch extraction first; matching is already highly cache-efficient.

@@ -15,7 +15,7 @@ from sqlalchemy.sql import Insert
 
 from tests.conftest import alembic_config
 from vja.db.engine import begin, get_engine
-from vja.db.schema import employers, matches, postings, profiles
+from vja.db.schema import employers, matches, postings, profiles, users
 
 _EXPECTED_TABLES = {
     "employers",
@@ -30,6 +30,7 @@ _EXPECTED_TABLES = {
 
 # The revision immediately before the 9.2 users/user_id migration (7d5b69c46786).
 _PRE_USER_ID_REVISION = "d30501b4c8ab"
+_PRE_REUPLOAD_GUARD_REVISION = "a06b99424c4c"
 _NOW = datetime(2026, 6, 26, tzinfo=UTC)
 
 
@@ -128,5 +129,76 @@ def test_add_user_id_on_populated_db(tmp_path: Path, monkeypatch: pytest.MonkeyP
                 select(matches.c.id).where(matches.c.id == match_id)
             ).scalar_one()
             assert survived == match_id
+    finally:
+        engine.dispose()
+
+
+def test_resume_reupload_clock_upgrade_and_downgrade_preserve_users(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-085's users-table rebuild works with a linked profile and is reversible on SQLite."""
+    url = f"sqlite:///{tmp_path / 'reupload-clock.db'}"
+    monkeypatch.setenv("VJA_DATABASE_URL", url)
+    cfg = alembic_config()
+    command.upgrade(cfg, _PRE_REUPLOAD_GUARD_REVISION)
+
+    engine = get_engine(url)
+    try:
+        with begin(engine) as conn:
+            user_id = _insert(
+                conn,
+                users.insert().values(
+                    google_sub="g-me@example.com",
+                    email="me@example.com",
+                    name="Me",
+                    created_at=_NOW,
+                ),
+            )
+            profile_id = _insert(
+                conn,
+                profiles.insert().values(
+                    user_id=user_id,
+                    user_email="me@example.com",
+                    vertical="grid_power_software",
+                    resume_version="v1",
+                    resume_text="r",
+                    active=1,
+                    created_at=_NOW,
+                ),
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = get_engine(url)
+    try:
+        assert "last_resume_reupload_at" in {
+            column["name"] for column in inspect(engine).get_columns("users")
+        }
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    select(users.c.last_resume_reupload_at).where(users.c.id == user_id)
+                ).scalar_one()
+                is None
+            )
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, _PRE_REUPLOAD_GUARD_REVISION)
+    engine = get_engine(url)
+    try:
+        assert "last_resume_reupload_at" not in {
+            column["name"] for column in inspect(engine).get_columns("users")
+        }
+        with engine.connect() as conn:
+            assert (
+                conn.execute(select(users.c.id).where(users.c.id == user_id)).scalar_one()
+                == user_id
+            )
+            assert (
+                conn.execute(select(profiles.c.id).where(profiles.c.id == profile_id)).scalar_one()
+                == profile_id
+            )
     finally:
         engine.dispose()

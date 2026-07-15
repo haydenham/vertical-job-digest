@@ -214,6 +214,9 @@ users = Table(
     Column("email", String, nullable=False, unique=True),
     Column("name", String),
     Column("created_at", UTCDateTime(), nullable=False),
+    # D-085: the first profile upload does not consume this clock. Each accepted changed-résumé
+    # upload advances it atomically, enforcing one reupload per user per rolling 24 hours.
+    Column("last_resume_reupload_at", UTCDateTime()),
 )
 
 

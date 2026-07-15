@@ -89,9 +89,12 @@ Not solved now. Listed so the cutover is a checklist, not a discovery exercise. 
       global daily spend ceiling (`VJA_DAILY_LLM_BUDGET_USD`, checked pre-kickoff → 429; estimated from the
       day's match count, no per-match ledger). (The read-only dashboard never drives matching — D-005/D-041 —
       so it adds no cost surface here.)
-- [ ] Rate limiting on the API + write endpoints. *(9.3 ships the cost ceilings above; per-IP/per-user
-      request rate-limiting + captcha + email-verify are deferred to the 9.5 edge — Cloudflare/managed —
-      since OAuth already bounds signup to real Google accounts. D-057.)*
+- [x] **Résumé reupload abuse guard (D-085):** identical extracted content returns the existing 202
+      profile response with no backfill; an accepted changed résumé atomically claims
+      `users.last_resume_reupload_at`, limiting each user to one changed reupload per rolling 24 hours.
+      Blocked changes return 429 + integer-seconds `Retry-After`; first upload remains allowed.
+- [ ] Broad request rate limiting on the API + other write endpoints. *(The targeted D-085 paid-work guard
+      is built; per-IP edge throttling/captcha beyond Google OAuth remains deferred.)*
 
 ### 3.4 Email deliverability
 - [x] **Verified sending domain provisioned** (D-061, Phase 9.5c): `role-feed.com` verified in Resend

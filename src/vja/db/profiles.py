@@ -9,19 +9,24 @@ resume again is idempotent. Recipient/identity migrates off env to here at Phase
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from typing import Literal, cast
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Connection, Engine, select
 
 from vja.db.engine import begin
-from vja.db.schema import profiles
+from vja.db.schema import profiles, users
 
 # A "running" stamp older than this reads as done — the crash guard (D-082): a killed container
 # must not strand the dashboard's "matching in progress" banner forever.
 BACKFILL_STALE_AFTER = timedelta(minutes=10)
+
+# D-085: first upload is free of this clock; each accepted changed-résumé upload consumes one
+# rolling window. Kept as a timedelta so the comparison and Retry-After derive from one value.
+RESUME_REUPLOAD_COOLDOWN = timedelta(hours=24)
 
 BackfillStatus = Literal["running", "done"]
 
@@ -45,6 +50,30 @@ class Profile:
     domain_vocabulary: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ProfileUpload:
+    """The committed upload result and whether it needs a new background backfill."""
+
+    profile: Profile
+    backfill_required: bool
+
+
+class ProfileVerticalConflict(RuntimeError):
+    """The upload tried to cross the user's immutable one-vertical boundary (D-064)."""
+
+    def __init__(self, vertical: str) -> None:
+        self.vertical = vertical
+        super().__init__(vertical)
+
+
+class ResumeReuploadLimited(RuntimeError):
+    """A changed résumé arrived before the user's rolling D-085 window reopened."""
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+        super().__init__(retry_after)
+
+
 def _row_to_profile(row: dict[str, object]) -> Profile:
     return Profile(
         id=cast("int", row["id"]),
@@ -59,6 +88,57 @@ def _row_to_profile(row: dict[str, object]) -> Profile:
 def resume_version(resume_text: str) -> str:
     """A stable short content hash of the resume — auto-bumps whenever the resume changes."""
     return hashlib.sha256(resume_text.encode("utf-8")).hexdigest()[:12]
+
+
+def _upsert_profile(
+    conn: Connection,
+    *,
+    user_email: str,
+    vertical: str,
+    version: str,
+    resume_text: str,
+    domain_vocabulary: Sequence[str],
+    user_id: int | None,
+    stamp: datetime,
+) -> int:
+    """Connection-scoped profile upsert shared by CLI loading and the atomic upload path."""
+    existing = conn.execute(
+        select(profiles.c.id).where(
+            profiles.c.user_email == user_email,
+            profiles.c.vertical == vertical,
+            profiles.c.resume_version == version,
+        )
+    ).scalar_one_or_none()
+
+    # Any other version for this (user, vertical) is no longer the active one.
+    conn.execute(
+        profiles.update()
+        .where(profiles.c.user_email == user_email, profiles.c.vertical == vertical)
+        .values(active=0)
+    )
+
+    # Only set user_id when supplied (don't clobber an existing link via the CLI path).
+    link = {"user_id": user_id} if user_id is not None else {}
+
+    if existing is not None:
+        conn.execute(profiles.update().where(profiles.c.id == existing).values(active=1, **link))
+        return int(existing)
+
+    result = conn.execute(
+        profiles.insert().values(
+            user_email=user_email,
+            vertical=vertical,
+            resume_version=version,
+            resume_text=resume_text,
+            domain_vocabulary=list(domain_vocabulary),
+            active=1,
+            created_at=stamp,
+            **link,
+        )
+    )
+    pk = result.inserted_primary_key
+    assert pk is not None
+    return int(pk[0])
 
 
 def upsert_profile(
@@ -84,45 +164,96 @@ def upsert_profile(
     stamp = now or datetime.now(UTC)
 
     with begin(engine) as conn:
-        existing = conn.execute(
-            select(profiles.c.id).where(
-                profiles.c.user_email == user_email,
-                profiles.c.vertical == vertical,
-                profiles.c.resume_version == version,
-            )
-        ).scalar_one_or_none()
-
-        # Any other version for this (user, vertical) is no longer the active one.
-        conn.execute(
-            profiles.update()
-            .where(profiles.c.user_email == user_email, profiles.c.vertical == vertical)
-            .values(active=0)
+        return _upsert_profile(
+            conn,
+            user_email=user_email,
+            vertical=vertical,
+            version=version,
+            resume_text=resume_text,
+            domain_vocabulary=domain_vocabulary,
+            user_id=user_id,
+            stamp=stamp,
         )
 
-        # Only set user_id when supplied (don't clobber an existing link via the CLI path).
-        link = {"user_id": user_id} if user_id is not None else {}
 
-        if existing is not None:
+def upload_profile(
+    engine: Engine,
+    *,
+    user_id: int,
+    user_email: str,
+    vertical: str,
+    resume_text: str,
+    domain_vocabulary: Sequence[str],
+    before_backfill: Callable[[], None],
+    now: datetime | None = None,
+    cooldown: timedelta = RESUME_REUPLOAD_COOLDOWN,
+) -> ProfileUpload:
+    """Atomically apply the authenticated upload policy (D-064/D-085).
+
+    The user's row is the serialization boundary. Identical extracted text returns the active
+    profile unchanged and never calls `before_backfill`. The first changed reupload claims the
+    persistent rolling clock; another changed upload before it expires raises with the exact
+    Retry-After. Profile versioning, the cooldown claim, and the progress start stamp commit in
+    one transaction, including when the upload reactivates a previously used content version.
+
+    `before_backfill` lets the API apply D-057's global budget only after this transaction has
+    established that real work is needed, but before any write is made. Raising rolls back cleanly.
+    """
+    stamp = now or datetime.now(UTC)
+    version = resume_version(resume_text)
+
+    with begin(engine) as conn:
+        user_row = conn.execute(
+            select(users.c.last_resume_reupload_at).where(users.c.id == user_id).with_for_update()
+        ).one()
+        active_row = (
             conn.execute(
-                profiles.update().where(profiles.c.id == existing).values(active=1, **link)
+                select(*_PROFILE_COLS)
+                .where(profiles.c.user_email == user_email, profiles.c.active == 1)
+                .order_by(profiles.c.vertical)
+                .with_for_update()
             )
-            return int(existing)
-
-        result = conn.execute(
-            profiles.insert().values(
-                user_email=user_email,
-                vertical=vertical,
-                resume_version=version,
-                resume_text=resume_text,
-                domain_vocabulary=list(domain_vocabulary),
-                active=1,
-                created_at=stamp,
-                **link,
-            )
+            .mappings()
+            .first()
         )
-        pk = result.inserted_primary_key
-        assert pk is not None
-        return int(pk[0])
+
+        if active_row is not None:
+            active = _row_to_profile(dict(active_row))
+            if active.vertical != vertical:
+                raise ProfileVerticalConflict(active.vertical)
+            if active.resume_version == version:
+                return ProfileUpload(profile=active, backfill_required=False)
+
+            last_reupload = cast("datetime | None", user_row.last_resume_reupload_at)
+            if last_reupload is not None:
+                retry_at = last_reupload + cooldown
+                if stamp < retry_at:
+                    raise ResumeReuploadLimited(ceil((retry_at - stamp).total_seconds()))
+
+        before_backfill()
+
+        if active_row is not None:
+            conn.execute(
+                users.update().where(users.c.id == user_id).values(last_resume_reupload_at=stamp)
+            )
+
+        profile_id = _upsert_profile(
+            conn,
+            user_email=user_email,
+            vertical=vertical,
+            version=version,
+            resume_text=resume_text,
+            domain_vocabulary=domain_vocabulary,
+            user_id=user_id,
+            stamp=stamp,
+        )
+        conn.execute(
+            profiles.update().where(profiles.c.id == profile_id).values(backfill_started_at=stamp)
+        )
+        row = (
+            conn.execute(select(*_PROFILE_COLS).where(profiles.c.id == profile_id)).mappings().one()
+        )
+        return ProfileUpload(profile=_row_to_profile(dict(row)), backfill_required=True)
 
 
 def get_profile(engine: Engine, profile_id: int) -> Profile | None:
