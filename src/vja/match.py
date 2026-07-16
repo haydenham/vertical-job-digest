@@ -27,7 +27,7 @@ from typing import Any, cast
 from anthropic import Anthropic
 from anthropic.types import OutputConfigParam, TextBlockParam
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Engine
 
 from vja.db.engine import begin
@@ -93,6 +93,23 @@ class MatchResult(BaseModel):
     fits: list[str] = Field(description="Concrete reasons this candidate fits. Non-empty.")
     gaps: list[str] = Field(description="Concrete reasons this candidate does not fit. Non-empty.")
     rationale: str = Field(description="One or two sentences justifying the verdict.")
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def normalize_score_boundary(cls, value: object) -> object:
+        """Keep one numeric boundary miss from discarding an otherwise valid paid result.
+
+        Anthropic's schema transform preserves ``integer`` but moves unsupported JSON-Schema
+        minimum/maximum constraints into descriptive text. The model can therefore emit an
+        integer outside 0–100 even though our final domain contract is strict. Normalize only
+        real integers; wrong types and every other malformed field still fail validation.
+        """
+        if type(value) is not int:
+            return value
+        normalized = min(100, max(0, value))
+        if normalized != value:
+            logger.warning("normalized match score %d → %d", value, normalized)
+        return normalized
 
 
 @dataclass(frozen=True)

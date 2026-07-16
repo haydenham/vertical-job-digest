@@ -115,25 +115,30 @@ test** (D-021).
 
 **Accepted follow-up queue (D-085; separate reviewable PRs after onboarding PR 3):**
 
-1. **Landing copy de-duplication ✅ (built on `feat/landing-copy`; awaiting Hayden's commit/PR):** outward
+1. **Landing copy de-duplication ✅ (merged #86):** outward
    *software/engineering → technology* language; cards = benefits, How it works = mechanics, founder story =
    Hayden's recruiting problem and thesis. The Robotics promise remains by Hayden's explicit choice; its
    config is still a separate beta-exit item.
-2. **Résumé-reupload abuse guard ✅ (built on `fix/resume-reupload-abuse-guard`; awaiting Hayden's
-   commit/PR):** identical extracted content keeps the 202 contract without a progress-stamp refresh or
-   backfill; changed content is limited to one accepted reupload per user per rolling 24 hours through an
-   atomic user-row clock (server-side 429 + integer-seconds `Retry-After`). **Neon migration
+2. **Résumé-reupload abuse guard ✅ (merged #87):** identical extracted content keeps the 202 contract
+   without a progress-stamp refresh or backfill; changed content is limited to one accepted reupload per
+   user per rolling 24 hours through an atomic user-row clock (server-side 429 + integer-seconds
+   `Retry-After`). **Neon migration
    `c4e8a7d9132f` applied and verified 2026-07-15.**
-3. **Snapshot-integrity churn guard ✅ (built on `fix/snapshot-completeness-churn`, D-088):** stable
+3. **Snapshot-integrity churn guard ✅ (merged #88, D-088):** stable
    44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings. The code
    audit found a concrete completeness gap: five paginated providers trusted only the first total,
    accepted over-counts, and the shared sync silently collapsed duplicate external IDs before
    diffing. Paginated totals are now stable+exact, and duplicate IDs fail before any DB mutation;
    changed/failed employer outcomes are logged for attribution. This closes the known vulnerability,
-   not the entire causal diagnosis: observe two production nights after merge and compare employer-
-   level churn before deciding whether a full-board bookend/anomaly-confirmation pass is warranted.
+   not the entire causal diagnosis. The July 16 run started before #88 merged, so it is a pre-fix
+   baseline; July 17 and 18 are observation nights 1 and 2. Compare employer-level churn before
+   deciding whether a full-board bookend/anomaly-confirmation pass is warranted.
    *(This item gates intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
-4. Minimum cloud observability: alert when the scheduled nightly does not start/fails at the platform level,
+4. **Match-score boundary guard ✅ (D-089, built on `fix/match-score-boundary`):** the July 16
+   shakeout found 26 otherwise-valid match results discarded for negative scores, with 56 occurrences
+   across seven execution dates. Integers outside 0–100 now clamp to the nearest boundary and log;
+   malformed/non-integer results still fail, and no paid corrective retry is added.
+5. Minimum cloud observability: alert when the scheduled nightly does not start/fails at the platform level,
    and make partial coverage degradation + LLM-spend trends visible. The existing in-process hard-failure and
    digest-send email remains useful but cannot alert if the Job never starts.
 
@@ -207,10 +212,9 @@ does not block broader beta by itself.
 
 ## Beta exit line (accepted 2026-07-13, D-085)
 
-- Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard is built on its separate branch.
+- Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard merged #87.
 - Resolve the live robotics promise mismatch (ship the config or remove the public claim).
-- Land remaining user-facing beta fixes and minimum Cloud Job monitoring (reupload guard built and Neon
-  migrated; review/merge remain).
+- Land remaining user-facing beta fixes and minimum Cloud Job monitoring.
 - Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
 - Execute already-validated no-code employer activations.
 

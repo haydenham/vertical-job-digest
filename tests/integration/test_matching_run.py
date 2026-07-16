@@ -35,14 +35,22 @@ _CONFIG = VerticalConfig(
 
 
 class _FakeMessages:
-    def __init__(self, fail_titles: frozenset[str]) -> None:
+    def __init__(
+        self, fail_titles: frozenset[str], result_payload: dict[str, Any] | None = None
+    ) -> None:
         self._fail_titles = fail_titles
+        self._result_payload = result_payload
         self.calls = 0
 
     def parse(self, **kwargs: Any) -> Any:
         self.calls += 1
         content = kwargs["messages"][0]["content"]
-        parsed = None if any(t in content for t in self._fail_titles) else _RESULT
+        if any(t in content for t in self._fail_titles):
+            parsed = None
+        elif self._result_payload is not None:
+            parsed = kwargs["output_format"].model_validate(self._result_payload)
+        else:
+            parsed = _RESULT
 
         class _U:
             input_tokens = 900
@@ -58,8 +66,12 @@ class _FakeMessages:
 
 
 class _FakeClient:
-    def __init__(self, fail_titles: frozenset[str] = frozenset()) -> None:
-        self.messages = _FakeMessages(fail_titles)
+    def __init__(
+        self,
+        fail_titles: frozenset[str] = frozenset(),
+        result_payload: dict[str, Any] | None = None,
+    ) -> None:
+        self.messages = _FakeMessages(fail_titles, result_payload)
 
 
 def _employer(engine: Engine, *, vertical: str, name: str) -> int:
@@ -181,6 +193,20 @@ def test_per_posting_failure_is_isolated(migrated_engine: Engine) -> None:
     assert summary.total == 2
     assert summary.matched == 1 and summary.failed == 1  # one parsed, one isolated
     assert _match_count(migrated_engine) == 1
+
+
+def test_out_of_range_score_is_saved_once_at_boundary(migrated_engine: Engine) -> None:
+    _seed(migrated_engine)
+    payload = _RESULT.model_dump()
+
+    first = _run(migrated_engine, _FakeClient(result_payload={**payload, "score": -1}))
+    second = _run(migrated_engine)
+
+    assert (first.total, first.matched, first.failed) == (1, 1, 0)
+    assert second.total == 0  # persisted result is not billed/retried on the next run
+    with migrated_engine.connect() as conn:
+        row = conn.execute(select(matches.c.score)).one()
+    assert row.score == 0
 
 
 def test_multiple_active_profiles_each_match(migrated_engine: Engine) -> None:

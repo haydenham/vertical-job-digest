@@ -190,11 +190,12 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   foundation → landing → auth pages → dashboard; frontend-only, **all 4 PRs merged #74–77, live in
   prod**) · **onboarding overhaul (D-082/D-085 → `docs/17`: PR 1 upload fixes #78 ✅ → PR 2
   backfill status #79 ✅ → D-083 hotfix #80 ✅ → PR 3 welcome tutorial + toggle clarity #82 ✅ →
-  D-085 landing-copy follow-up merged #86 ✅ → résumé-reupload abuse guard built ✅)** ·
+  D-085 landing-copy follow-up merged #86 ✅ → résumé-reupload abuse guard merged #87 ✅)** ·
   discovery-agent live run/ledger/pruning **✅ (D-084; manual/on-demand permanently, no scheduled Job)** ·
-  nightly timeout/retry duplicate guard **✅ (D-086; 6h, zero automatic task retries)** · bug shakeout ·
+  nightly timeout/retry duplicate guard **✅ (D-086; 6h, zero automatic task retries)** · bug shakeout
+  (**D-089 match-score boundary guard built ✅ — clamp/log integer outliers, no paid retry**) ·
   scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; D-088 snapshot-integrity churn
-  guard built ✅, observe two production nights; Message Batches deferred for freshness) · more
+  guard merged #88 ✅, observe July 17–18 production nights; Message Batches deferred for freshness) · more
   fetchers/company-database growth
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅

@@ -7,9 +7,11 @@ The live model runs only in the eval.
 
 import json
 from typing import Any, cast
+from unittest.mock import call, patch
 
 import pytest
 from anthropic import Anthropic
+from pydantic import ValidationError
 
 from vja.match import (
     MatchResult,
@@ -65,6 +67,28 @@ def test_fields_to_columns_maps_lists_to_json_and_enum_to_value() -> None:
     assert json.loads(cols["gaps"]) == _RESULT.gaps
     assert cols["rationale"].startswith("Strong domain overlap")
     assert "model_version" not in cols  # stamped by save_match, not here
+
+
+def test_match_result_normalizes_out_of_range_scores_and_logs() -> None:
+    payload = _RESULT.model_dump()
+    with patch("vja.match.logger.warning") as warning:
+        below = MatchResult.model_validate({**payload, "score": -5})
+        unchanged = MatchResult.model_validate({**payload, "score": 72})
+        above = MatchResult.model_validate({**payload, "score": 105})
+
+    assert below.score == 0
+    assert unchanged.score == 72
+    assert above.score == 100
+    assert warning.call_args_list == [
+        call("normalized match score %d → %d", -5, 0),
+        call("normalized match score %d → %d", 105, 100),
+    ]
+
+
+def test_match_result_does_not_repair_wrong_score_type() -> None:
+    payload = _RESULT.model_dump()
+    with pytest.raises(ValidationError):
+        MatchResult.model_validate({**payload, "score": "not-a-score"})
 
 
 def test_match_posting_returns_result_and_real_token_usage() -> None:
