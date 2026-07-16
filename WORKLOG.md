@@ -5,6 +5,23 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-16 — PR #90 merged/deployed; LLM observation handoff reconciled
+
+**Status-only/docs follow-up on `docs/litellm-post-merge-handoff` (uncommitted; Hayden owns commit/PR):** PR
+#90 merged at `07ed265` and CD deployed that image to both `rolefeed` (revision `rolefeed-00043-qlh`, Ready)
+and `vja-nightly` (generation 42, Ready). The Job retains `ANTHROPIC_API_KEY`, no model-route overrides,
+`timeoutSeconds=21600`, and `maxRetries=0`; therefore extraction remains Haiku 4.5 and matching remains Sonnet
+4.6 at medium effort. Post-deploy `/api/health` returned 200 and anonymous `/api/postings` returned 401. No
+manual Job run was started—the once-daily fetch invariant and July 17 observation baseline remain intact.
+
+**Clear-chat handoff:** freeze production changes and audit the July 17 scheduled run read-only for D-088
+snapshot/churn behavior, D-089 score clamps + persistence/no rebilling, D-090 LiteLLM model/usage/cache/catalog
+cost/errors, and D-086 runtime/one-attempt/digest delivery. Prefer keeping the freeze through July 18's second
+D-088 night. `docs/19` is the plan of record. Exactly **three new-model steps** remain: Block 2 expanded eval +
+CI repair → Block 3 extraction selection/cutover → Block 4 matching selection/cutover. Block 5 `no`-output is a
+separate post-selection optimization. Block 2 begins only after Hayden approves fixtures, rubric, thresholds,
+candidates, repetitions, and spend cap.
+
 ## 2026-07-16 — D-090 LiteLLM provider boundary built at Anthropic parity
 
 **Built on `feat/litellm-provider-boundary` (uncommitted; Hayden owns commit/PR):** Layer-2 extraction

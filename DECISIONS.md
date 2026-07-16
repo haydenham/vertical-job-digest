@@ -1673,3 +1673,7 @@ target, but the current CI workflow has no eval job; Block 2 must restore it wit
 model cutover. This supersedes D-011's direct-Anthropic-SDK implementation choice and amends D-035/D-036's
 fixed model names into eval-gated configured defaults, without changing today's models. References D-005,
 D-007, D-020, D-021, D-035, D-036, D-069, D-088, D-089.
+
+**Implementation status:** Block 1 merged as PR #90 and deployed to the Cloud Run service + nightly Job as
+image `07ed265` on 2026-07-16. Health returned 200, the anonymous postings guard returned 401, and the Job is
+Ready with the existing Anthropic secret, six-hour timeout, zero retries, and no model-route overrides.
