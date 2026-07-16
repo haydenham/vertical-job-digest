@@ -5,6 +5,37 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-15 — D-088 snapshot-integrity churn guard built; Message Batches deferred
+
+**Built on `fix/snapshot-completeness-churn` (uncommitted; Hayden owns commit/PR):** the
+cost/churn audit found a concrete completeness vulnerability without overclaiming it as the sole
+cause of production churn. Workday, iCIMS, Oracle, SmartRecruiters, and Radancy now read the source
+total on every page, fail on total drift, and require an exact final mapped count. The shared
+`sync_employer` guard rejects duplicate ATS `external_id` values before opening the DB transaction,
+so an inconsistent employer snapshot makes zero posting mutations. Changed employers now log
+fetched/new/reopened/updated/closed/unchanged counts; failures log vertical/employer/provider +
+reason. No schema, migration, fuzzy identity, production repair, bookend/double-fetch, or Batch API
+was added. D-088 defers Anthropic Message Batches because the up-to-24-hour latency conflicts with
+time-sensitive postings; re-measure after two production nights and reconsider extraction-first
+batching only if spend remains material.
+
+**Radancy live defect exposed and corrected:** the existing `CurrentPage`/`RecordsPerPage` request
+was ignored by NextEra's board, silently repeating page 1 until 300 mapped rows crossed a reported
+290 total. The new exact-count guard caught it in the live gate. The board's own `startrow` offsets
+returned disjoint pages (0/25/50/275) and an exact 290-row snapshot, so the fetcher now follows that
+contract. Regression-first coverage pins total drift and under/over-count failures across all five
+providers, `startrow` pagination, duplicate-ID zero-mutation behavior, and employer-level logging.
+
+**Verification + docs:** full default suite **540 passed, 20 opt-in deselected**; ruff format/check,
+mypy (130 source files), import-linter (1 kept / 0 broken), `uv lock --check`, and
+`git diff --check` green after the final one-line lint correction. Targeted live smoke is **8/8**:
+Workday/PJM, iCIMS/Garmin, Oracle/Southern Company list+detail, SmartRecruiters/Vitol list+detail,
+and Radancy/NextEra list+detail. D-088, INVARIANTS, docs/05, docs/08, docs/15, docs/17, and CLAUDE
+are current. **Next:** Hayden reviews, commits, and PRs; after deploy, observe two nightly runs using
+the new employer-level churn lines before deciding whether any anomaly-confirmation follow-up is
+needed. The user-supplied cost CSVs under untracked `private/` remain untouched and must not be
+staged.
+
 ## 2026-07-15 — D-085 résumé-reupload abuse guard built
 
 **Built on `fix/resume-reupload-abuse-guard` (uncommitted; Hayden owns commit/PR):** identical

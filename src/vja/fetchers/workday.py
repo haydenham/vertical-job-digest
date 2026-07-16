@@ -95,8 +95,13 @@ def _paginate(
 
     for page in range(_MAX_PAGES):
         payload = _post_page(client, url, page * _PAGE_SIZE, employer)
+        page_total = _read_total(payload, employer)
         if total is None:
-            total = _read_total(payload, employer)
+            total = page_total
+        elif page_total != total:
+            raise FetchError(
+                f"workday total changed during fetch for {employer.name!r}: {total} → {page_total}"
+            )
         page_jobs = payload["jobPostings"]
         for job in page_jobs:
             if not isinstance(job, dict):
@@ -105,11 +110,12 @@ def _paginate(
         if not page_jobs or len(postings) >= total:
             break
 
-    # Completeness guard: a short tally means a truncated fetch — fail loudly rather than
-    # return a partial list the diff would read as mass closures.
-    if total is not None and len(postings) < total:
+    # Completeness guard: only an exact tally is safe. Both a short and an over-counted snapshot
+    # can hide pagination drift that the diff would otherwise interpret as real board churn.
+    if total is None or len(postings) != total:
+        expected = total if total is not None else "unknown"
         raise FetchError(
-            f"workday fetch for {employer.name!r} incomplete: got {len(postings)} of {total}"
+            f"workday fetch for {employer.name!r} incomplete: got {len(postings)} of {expected}"
         )
     return postings
 

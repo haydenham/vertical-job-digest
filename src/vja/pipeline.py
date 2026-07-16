@@ -14,6 +14,8 @@ posting. A transient failure must not be read as "this employer has zero open jo
 from __future__ import annotations
 
 import argparse
+import logging
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,6 +33,8 @@ from vja.fetchers.base import Fetcher, FetchError
 from vja.fetchers.registry import get_fetcher
 from vja.hashing import content_hash
 from vja.models import AtsType, Employer, PipelineRunStatus, RawPosting
+
+logger = logging.getLogger("vja.pipeline")
 
 
 @dataclass(frozen=True)
@@ -65,13 +69,22 @@ def sync_employer(
     """Fetch, diff against stored-open postings, and persist the changes for one employer."""
     stamp = now or datetime.now(UTC)
 
-    # --- THE GUARD: a failed fetch makes zero changes ------------------------------
+    # --- THE GUARD: a failed or internally inconsistent fetch makes zero changes ---
     try:
         fetched = fetcher.fetch(employer)
+        duplicate_ids = sorted(
+            external_id
+            for external_id, count in Counter(posting.external_id for posting in fetched).items()
+            if count > 1
+        )
+        if duplicate_ids:
+            raise FetchError(
+                f"snapshot for {employer.name!r} returned duplicate external_id(s): "
+                f"{', '.join(duplicate_ids)}"
+            )
+        by_id = {posting.external_id: posting for posting in fetched}
     except FetchError as exc:
         return SyncResult(employer_id=employer.id, status="failed", error=str(exc))
-
-    by_id = {posting.external_id: posting for posting in fetched}
 
     with begin(engine) as conn:
         stored = postings_repo.open_index(conn, employer.id)
@@ -197,11 +210,39 @@ def run_pipeline(
         ) as exc:  # deliberate per-employer isolation boundary (recorded, not swallowed)
             results.append(SyncResult(employer_id=employer.id, status="failed", error=repr(exc)))
             errors.append({"employer_id": employer.id, "name": employer.name, "error": repr(exc)})
+            logger.exception(
+                "employer sync [%s/%s/%s] failed unexpectedly",
+                employer.vertical,
+                employer.name,
+                employer.ats_type.value,
+            )
             continue
         results.append(result)
         if result.status == "failed":
             errors.append(
                 {"employer_id": employer.id, "name": employer.name, "error": result.error}
+            )
+            logger.warning(
+                "employer sync [%s/%s/%s] failed: %s",
+                employer.vertical,
+                employer.name,
+                employer.ats_type.value,
+                result.error,
+            )
+        elif result.new or result.reopened or result.updated or result.closed:
+            fetched_count = result.new + result.reopened + result.updated + result.unchanged
+            logger.info(
+                "employer sync [%s/%s/%s]: "
+                "fetched=%d new=%d reopened=%d updated=%d closed=%d unchanged=%d",
+                employer.vertical,
+                employer.name,
+                employer.ats_type.value,
+                fetched_count,
+                result.new,
+                result.reopened,
+                result.updated,
+                result.closed,
+                result.unchanged,
             )
 
     failures = sum(1 for result in results if result.status == "failed")

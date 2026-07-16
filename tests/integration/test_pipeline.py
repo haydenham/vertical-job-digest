@@ -385,3 +385,26 @@ def test_failed_fetch_closes_nothing(migrated_engine: Engine, employer: Employer
     assert len(rows) == 2
     assert all(r["status"] == PostingStatus.OPEN.value for r in rows)
     assert all(r["closed_at"] is None for r in rows)
+
+
+def test_duplicate_external_ids_fail_before_any_db_mutation(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a"), _posting("b")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    before = _by_id(migrated_engine)
+
+    result = sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a"), _posting("a", description="duplicate")]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+
+    assert result.status == "failed"
+    assert result.error and "duplicate external_id" in result.error
+    assert _by_id(migrated_engine) == before

@@ -6,7 +6,7 @@ same markup for every tenant, so this is one generic per-platform fetcher, never
 scraper (D-017/D-004). The visible-portal-is-empty-but-the-product-has-an-endpoint shape mirrors
 the iCIMS lesson (D-048).
 
-``GET {endpoint}/search-jobs/results?CurrentPage={n}&RecordsPerPage={N}&SearchType=5`` →
+``GET {endpoint}/search-jobs/results`` with ``startrow={offset}`` and reference-date sorting →
 an HTML page with a ``<table id="searchresults">`` of ``<tr class="data-row">`` job rows. The
 table's ``aria-label`` carries the grand total ("Results 1 to 25 **of 288**") — the completeness
 anchor. The per-tenant host differs, so the seed ``endpoint`` is **explicit per-tenant** (not
@@ -49,8 +49,7 @@ from vja.models import AtsType, Employer, RawPosting
 
 _USER_AGENT = "vja-job-agent/0.0.1 (+https://github.com/haydenham/vertical-job-digest)"
 _TIMEOUT = 30.0
-_PAGE_SIZE = 100  # requested per page; the server may cap lower (we loop on the total, not size)
-_MAX_PAGES = 200  # safety cap against a bad total (200×any page size is far above any tenant)
+_MAX_PAGES = 200  # safety cap against a bad total (the live board serves 25 rows per page)
 _SEARCH_PATH = "/search-jobs/results"
 _JOB_PREFIX = "/job/"
 _DATE_FORMAT = "%b %d, %Y"  # the TalentBrew jobDate cell, e.g. "Jun 24, 2026"
@@ -117,16 +116,22 @@ def _paginate(
 ) -> list[RawPosting]:
     postings: list[RawPosting] = []
     total: int | None = None
+    offset = 0
 
-    for page in range(1, _MAX_PAGES + 1):
-        soup = _get_page(client, list_url, page, employer)
+    for _page in range(_MAX_PAGES):
+        soup = _get_page(client, list_url, offset, employer)
         table = soup.select_one("table#searchresults")
         if table is None:
-            if page == 1 and _is_empty_board(soup):
+            if offset == 0 and _is_empty_board(soup):
                 return []  # a legitimately empty board, not a breakage
             raise FetchError(f"radancy response for {employer.name!r} has no results table")
+        page_total = _read_total(table, employer)
         if total is None:
-            total = _read_total(table, employer)
+            total = page_total
+        elif page_total != total:
+            raise FetchError(
+                f"radancy total changed during fetch for {employer.name!r}: {total} → {page_total}"
+            )
         rows = table.select("tbody tr.data-row")
         if not rows:
             break
@@ -134,26 +139,35 @@ def _paginate(
             postings.append(_map_row(row, origin, employer))
         if len(postings) >= total:
             break
+        offset += len(rows)
 
-    # Completeness guard: a short tally means a truncated scrape — fail loudly rather than return a
-    # partial list the diff would read as mass closures.
-    if total is not None and len(postings) < total:
+    # Completeness guard: only an exact tally is safe. Both a short and an over-counted scrape can
+    # hide pagination drift that the diff would otherwise interpret as real board churn.
+    if total is None or len(postings) != total:
+        expected = total if total is not None else "unknown"
         raise FetchError(
-            f"radancy fetch for {employer.name!r} incomplete: {len(postings)} of {total}"
+            f"radancy fetch for {employer.name!r} incomplete: {len(postings)} of {expected}"
         )
     return postings
 
 
-def _get_page(client: httpx.Client, list_url: str, page: int, employer: Employer) -> BeautifulSoup:
+def _get_page(
+    client: httpx.Client, list_url: str, offset: int, employer: Employer
+) -> BeautifulSoup:
     try:
         response = client.get(
             list_url,
-            params={"CurrentPage": page, "RecordsPerPage": _PAGE_SIZE, "SearchType": 5},
+            params={
+                "q": "",
+                "sortColumn": "referencedate",
+                "sortDirection": "desc",
+                "startrow": offset,
+            },
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise FetchError(
-            f"radancy fetch failed for {employer.name!r} (page {page}): {exc}"
+            f"radancy fetch failed for {employer.name!r} (offset {offset}): {exc}"
         ) from exc
     return BeautifulSoup(response.text, "html.parser")
 

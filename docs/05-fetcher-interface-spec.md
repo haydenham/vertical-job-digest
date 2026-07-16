@@ -30,6 +30,11 @@ Rules:
 - **`external_id` must be the ATS's own stable id**, not something we synthesize from the title. All three JSON ATSs expose one.
 - The fetcher does **not** extract structured fields (level, stack, comp). That's Layer 2. A fetcher only produces `RawPosting`.
 - On any non-200 / unparseable response, raise `FetchError` — the pipeline records a `fetch_failure` and alerts. Silent decay is the enemy (Memo 02 §8).
+- **A snapshot must be internally consistent before diffing.** Paginated fetchers read the source's
+  total on every page, fail if it changes, and return only when the final mapped count equals it
+  exactly (under- and over-counts both fail). The pipeline independently rejects duplicate
+  `external_id` values from every provider before opening the employer DB transaction. These are
+  failed snapshots with zero posting mutations; no fuzzy identity repair is attempted. (D-088)
 
 ## Per-ATS modules
 
@@ -132,3 +137,6 @@ query options); Workday, Paylocity, and Phenom require explicit endpoint configu
 - Respect `robots.txt` on the long-tail raw-HTML path.
 - **Per-fetcher health check:** an employer that returned N>0 postings yesterday and 0 today is a likely breakage → alert, don't mass-close. The diff's close-detection must not be triggered by a fetch that simply failed.
 - Every run updates `pipeline_runs` (`employers_fetched`, `fetch_failures`).
+- A changed employer emits one structured count line (`fetched`, `new`, `reopened`, `updated`,
+  `closed`, `unchanged`); a failed employer emits its provider and failure reason. This is the
+  operator-visible churn/completeness trail and does not add a second persistence ledger. (D-088)

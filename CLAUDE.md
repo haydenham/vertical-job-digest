@@ -80,8 +80,9 @@ Builder (Hayden) is the first user — actively recruiting into both verticals.
   resume_version, trigger [nightly|backfill|refresh])
 - `digests` (what was sent, when, contents — system behavior is auditable)
 
-Dedup: fuzzy match on normalized title+company+location; LLM adjudicates
-ambiguous pairs during extraction.
+Diff identity is the ATS `external_id`, never fuzzy title/company/location matching. A duplicate
+`external_id` inside one employer snapshot fails the snapshot before any DB mutation; it is never
+silently collapsed or LLM-adjudicated. (D-016, D-088)
 
 ## Stack
 
@@ -192,8 +193,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   D-085 landing-copy follow-up merged #86 ✅ → résumé-reupload abuse guard built ✅)** ·
   discovery-agent live run/ledger/pruning **✅ (D-084; manual/on-demand permanently, no scheduled Job)** ·
   nightly timeout/retry duplicate guard **✅ (D-086; 6h, zero automatic task retries)** · bug shakeout ·
-  scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; diagnose abnormal posting
-  identity churn before D-069 Batch API work) · more fetchers/company-database growth
+  scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; D-088 snapshot-integrity churn
+  guard built ✅, observe two production nights; Message Batches deferred for freshness) · more
+  fetchers/company-database growth
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
   (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo).

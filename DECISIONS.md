@@ -1597,3 +1597,33 @@ lifespan medians. **Sequence (post-beta-exit):** churn diagnosis → F2 Phase A 
 as a parallel data-only track. **Status: planning/docs accepted; nothing is live.** All beta-exit work
 (D-085) precedes this slate. D-005's once-daily-fetch rule remains authoritative in `docs/INVARIANTS.md`
 until F1's own build ADR supersedes it. References D-085, D-005, D-009, D-086, D-035, D-069, D-053.
+
+### D-088 · LLM-cost Block 2 · Conservative snapshot-integrity guard before any batching · accepted · 2026-07-15
+Production cost exports and run logs showed that extraction, not matching input, was the main avoidable
+nightly LLM expense, but also exposed abnormal posting churn: stable 44-employer runs on July 8–10 reported
+343–654 new and 384–592 closed postings per night. The exports do not prove one root cause. The code audit did
+prove a concrete completeness vulnerability: Workday, iCIMS, Oracle, SmartRecruiters, and Radancy read only the
+first pagination total and accepted any final count at or above it; then `sync_employer` silently collapsed
+duplicate `external_id` rows into a dict before diffing. A drifting/duplicated snapshot could therefore look
+complete while omitting real postings, producing false closures and unnecessary re-extraction when they return.
+
+**Decision (Hayden): correctness-first, conservative scope.** Every affected paginated fetcher reads the total
+on every page, fails if it changes, and requires an exact final mapped count. Independently, the shared pipeline
+rejects duplicate ATS `external_id` values before opening the employer transaction, so the whole employer
+snapshot fails with zero posting mutations. Identity remains exact ATS ID (D-016): no fuzzy title/location
+dedupe, schema change, repair job, full-board double-fetch/bookend, or anomaly-confirmation heuristic is added.
+Changed employers log fetched/new/reopened/updated/closed/unchanged counts and failures log employer/provider +
+reason, providing attribution without a new persistence ledger.
+
+Live verification found the concrete Radancy instance behind that risk: its board ignores the previously
+documented `CurrentPage`/`RecordsPerPage` parameters, so the old fetcher repeated page 1 until its accumulated
+row count crossed the total. The board's rendered pagination links use `startrow`; offsets 0/25/50/275 returned
+disjoint pages and an exact 290-row snapshot. D-088 therefore corrects Radancy to advance by mapped-row offset
+and supersedes D-052's `CurrentPage` implementation detail while leaving D-052's platform/mapping decision intact.
+
+**Cost decision:** do not implement Anthropic Message Batches now. Rolefeed is time-sensitive and the Batch API's
+up-to-24-hour completion window conflicts with timely delivery. Keep synchronous extraction/matching, observe
+two production nights after this fix, and re-measure steady-state spend/churn. If extraction remains material,
+reconsider extraction-first batching; matching is already highly prompt-cache-efficient. This fix closes a
+demonstrated vulnerability, not the entire churn diagnosis; only the observation window decides whether a
+bookend/anomaly-confirmation follow-up is justified. References D-016, D-021, D-035, D-069, D-085, D-087.

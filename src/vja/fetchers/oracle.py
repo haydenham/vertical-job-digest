@@ -111,19 +111,25 @@ def _paginate(
 
     for page in range(_MAX_PAGES):
         item = _get_page(client, url, page * _PAGE_SIZE, employer)
+        page_total = _read_total(item, employer)
         if total is None:
-            total = _read_total(item, employer)
+            total = page_total
+        elif page_total != total:
+            raise FetchError(
+                f"oracle total changed during fetch for {employer.name!r}: {total} → {page_total}"
+            )
         reqs = item["requisitionList"]
         for req in reqs:
             postings.append(_map_req(req, apply_base, employer))
         if not reqs or len(postings) >= total:
             break
 
-    # Completeness guard: a short tally means a truncated fetch — fail loudly rather than return a
-    # partial list the diff would read as mass closures.
-    if total is not None and len(postings) < total:
+    # Completeness guard: only an exact tally is safe. Both a short and an over-counted snapshot
+    # can hide pagination drift that the diff would otherwise interpret as real board churn.
+    if total is None or len(postings) != total:
+        expected = total if total is not None else "unknown"
         raise FetchError(
-            f"oracle fetch for {employer.name!r} incomplete: got {len(postings)} of {total}"
+            f"oracle fetch for {employer.name!r} incomplete: got {len(postings)} of {expected}"
         )
     return postings
 
