@@ -119,13 +119,13 @@ def test_fetch_maps_single_page() -> None:
 
 @respx.mock
 def test_pagination_assembles_every_page() -> None:
-    pages = {1: _row(0) + _row(1), 2: _row(2) + _row(3), 3: _row(4)}
+    pages = {0: _row(0) + _row(1), 2: _row(2) + _row(3), 4: _row(4)}
 
-    def by_page(request: httpx.Request) -> httpx.Response:
-        page = int(request.url.params["CurrentPage"])
-        return _page(pages.get(page, ""), total=5)
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["startrow"])
+        return _page(pages.get(offset, ""), total=5)
 
-    route = respx.get(_LIST_URL).mock(side_effect=by_page)
+    route = respx.get(_LIST_URL).mock(side_effect=by_offset)
 
     postings = RadancyFetcher().fetch(_employer())
 
@@ -136,25 +136,47 @@ def test_pagination_assembles_every_page() -> None:
 @respx.mock
 def test_incomplete_fetch_raises_not_partial() -> None:
     # total says 5 but the board yields 3 then an empty page → truncated, must fail loudly.
-    def by_page(request: httpx.Request) -> httpx.Response:
-        page = int(request.url.params["CurrentPage"])
-        return _page(_row(0) + _row(1) + _row(2) if page == 1 else "", total=5)
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["startrow"])
+        return _page(_row(0) + _row(1) + _row(2) if offset == 0 else "", total=5)
 
-    respx.get(_LIST_URL).mock(side_effect=by_page)
+    respx.get(_LIST_URL).mock(side_effect=by_offset)
 
     with pytest.raises(FetchError, match="incomplete"):
         RadancyFetcher().fetch(_employer())
 
 
 @respx.mock
+def test_overcount_fetch_raises_not_partial() -> None:
+    respx.get(_LIST_URL).mock(return_value=_page(_row(0) + _row(1), total=1))
+
+    with pytest.raises(FetchError, match="incomplete"):
+        RadancyFetcher().fetch(_employer())
+
+
+@respx.mock
+def test_total_change_midfetch_fails_loudly() -> None:
+    pages = {0: _row(0) + _row(1), 2: _row(2) + _row(3), 4: _row(4)}
+
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["startrow"])
+        return _page(pages.get(offset, ""), total=5 if offset == 0 else 6)
+
+    respx.get(_LIST_URL).mock(side_effect=by_offset)
+
+    with pytest.raises(FetchError, match="total changed"):
+        RadancyFetcher().fetch(_employer())
+
+
+@respx.mock
 def test_midpagination_error_raises() -> None:
-    def by_page(request: httpx.Request) -> httpx.Response:
-        page = int(request.url.params["CurrentPage"])
-        if page == 2:
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["startrow"])
+        if offset == 2:
             raise httpx.ConnectError("boom")
         return _page(_row(0) + _row(1), total=5)
 
-    respx.get(_LIST_URL).mock(side_effect=by_page)
+    respx.get(_LIST_URL).mock(side_effect=by_offset)
 
     with pytest.raises(FetchError):
         RadancyFetcher().fetch(_employer())

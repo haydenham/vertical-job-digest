@@ -49,3 +49,6 @@ frontend/*.tsbuildinfo
 
 # Layer-3 discovery report checkpoints
 data/discovery_reports/
+
+# Anthropic private cost data
+/private/tmp/anthropic-costs/

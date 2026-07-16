@@ -103,6 +103,29 @@ def test_incomplete_fetch_raises_not_partial(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @respx.mock
+def test_overcount_fetch_raises_not_partial() -> None:
+    respx.post(_ENDPOINT).mock(return_value=_page([_job(0), _job(1)], total=1))
+
+    with pytest.raises(FetchError, match="incomplete"):
+        WorkdayFetcher().fetch(_employer())
+
+
+@respx.mock
+def test_total_change_midfetch_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    jobs = [_job(i) for i in range(5)]
+
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        return _page(jobs[offset : offset + 2], total=5 if offset == 0 else 6)
+
+    respx.post(_ENDPOINT).mock(side_effect=by_offset)
+
+    with pytest.raises(FetchError, match="total changed"):
+        WorkdayFetcher().fetch(_employer())
+
+
+@respx.mock
 def test_midpagination_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
     jobs = [_job(i) for i in range(5)]

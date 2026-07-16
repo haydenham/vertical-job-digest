@@ -114,6 +114,30 @@ def test_incomplete_fetch_raises_not_partial(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @respx.mock
+def test_overcount_fetch_raises_not_partial() -> None:
+    respx.get(_ENDPOINT).mock(return_value=_page([_job(0), _job(1)], total=1))
+
+    with pytest.raises(FetchError, match="incomplete"):
+        IcimsFetcher().fetch(_employer())
+
+
+@respx.mock
+def test_total_change_midfetch_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(icims, "_PAGE_SIZE", 2)
+    jobs = [_job(i) for i in range(5)]
+
+    def by_page(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        start = (page - 1) * 2
+        return _page(jobs[start : start + 2], total=5 if page == 1 else 6)
+
+    respx.get(_ENDPOINT).mock(side_effect=by_page)
+
+    with pytest.raises(FetchError, match="total changed"):
+        IcimsFetcher().fetch(_employer())
+
+
+@respx.mock
 def test_midpagination_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(icims, "_PAGE_SIZE", 2)
     jobs = [_job(i) for i in range(5)]

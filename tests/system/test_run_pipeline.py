@@ -6,8 +6,10 @@ correct status (ok/partial/failed), per-employer failure isolation (incl. unexpe
 exceptions), the run-level no-mass-close guard, idempotency, and the pipeline_runs record.
 """
 
+import logging
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
@@ -188,3 +190,27 @@ def test_rerun_is_idempotent(migrated_engine: Engine) -> None:
     assert summary.postings_closed == 0
     assert len(_posting_rows(migrated_engine)) == 2
     assert _run_count(migrated_engine) == 2  # two runs recorded
+
+
+def test_changed_and_failed_employer_outcomes_are_logged(
+    migrated_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    e1 = _seed_employer(migrated_engine, "Alpha", "alpha")
+    e2 = _seed_employer(migrated_engine, "Beta", "beta")
+    # Alembic's test-only fileConfig disables loggers imported before migrations run.
+    logging.getLogger("vja.pipeline").disabled = False
+
+    with caplog.at_level(logging.INFO, logger="vja.pipeline"):
+        run_pipeline(
+            migrated_engine,
+            now=datetime(2026, 6, 16, tzinfo=UTC),
+            resolve_fetcher=_resolver(
+                FakeFetcher({e1.id: [_posting("a")], e2.id: FetchError("outage")})
+            ),
+        )
+
+    assert (
+        "Alpha" in caplog.text
+        and "fetched=1 new=1 reopened=0 updated=0 closed=0 unchanged=0" in caplog.text
+    )
+    assert "Beta" in caplog.text and "failed: outage" in caplog.text

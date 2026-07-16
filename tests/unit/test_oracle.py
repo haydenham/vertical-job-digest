@@ -118,6 +118,29 @@ def test_incomplete_fetch_raises_not_partial(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @respx.mock
+def test_overcount_fetch_raises_not_partial() -> None:
+    respx.get(url__startswith=_ENDPOINT).mock(return_value=_page([_req(0), _req(1)], total=1))
+
+    with pytest.raises(FetchError, match="incomplete"):
+        OracleFetcher().fetch(_employer())
+
+
+@respx.mock
+def test_total_change_midfetch_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(oracle, "_PAGE_SIZE", 2)
+    reqs = [_req(i) for i in range(5)]
+
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        start = _offset(request)
+        return _page(reqs[start : start + 2], total=5 if start == 0 else 6)
+
+    respx.get(url__startswith=_ENDPOINT).mock(side_effect=by_offset)
+
+    with pytest.raises(FetchError, match="total changed"):
+        OracleFetcher().fetch(_employer())
+
+
+@respx.mock
 def test_midpagination_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(oracle, "_PAGE_SIZE", 2)
     reqs = [_req(i) for i in range(5)]

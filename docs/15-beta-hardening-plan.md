@@ -124,10 +124,15 @@ test** (D-021).
    backfill; changed content is limited to one accepted reupload per user per rolling 24 hours through an
    atomic user-row clock (server-side 429 + integer-seconds `Retry-After`). **Neon migration
    `c4e8a7d9132f` applied and verified 2026-07-15.**
-3. Diagnose the posting identity/diff churn exposed by the D-069 production metrics before building Batch
-   API support. Stable 44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings;
-   that is a correctness/coverage problem before it is a cost problem. *(This item now also gates two
-   post-beta roadmap features — intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
+3. **Snapshot-integrity churn guard ✅ (built on `fix/snapshot-completeness-churn`, D-088):** stable
+   44-employer runs on July 8–10 still reported 343–654 new and 384–592 closed postings. The code
+   audit found a concrete completeness gap: five paginated providers trusted only the first total,
+   accepted over-counts, and the shared sync silently collapsed duplicate external IDs before
+   diffing. Paginated totals are now stable+exact, and duplicate IDs fail before any DB mutation;
+   changed/failed employer outcomes are logged for attribution. This closes the known vulnerability,
+   not the entire causal diagnosis: observe two production nights after merge and compare employer-
+   level churn before deciding whether a full-board bookend/anomaly-confirmation pass is warranted.
+   *(This item gates intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
 4. Minimum cloud observability: alert when the scheduled nightly does not start/fails at the platform level,
    and make partial coverage degradation + LLM-spend trends visible. The existing in-process hard-failure and
    digest-send email remains useful but cannot alert if the Job never starts.
@@ -145,10 +150,12 @@ pillar** (Hayden's call — folded in rather than a separate day).
   4. **Google OAuth** — consent-screen/verification status, user cap, quota.
   5. **Anthropic / LLM spend** — read the **real nightly token numbers** now persisted to `pipeline_runs`
      (D-069's four token columns). **D-085 sequencing:** first explain/fix the abnormal new/closed identity
-     churn; then re-measure steady state. If extraction remains material, implement **extraction batching
-     first** (input-bound and uncacheable; batching is the lever, not more prompt caching). Matching already
-     showed roughly 84–93% cache hits on most measured nights and is not the first target. Set spend
-     guardrails beyond the existing backfill cap + daily ceiling (D-057).
+     churn; D-088 lands the conservative snapshot-integrity fix and adds the attribution logs. **Message
+     Batches are deferred** because a batch may take up to 24 hours and postings are time-sensitive. Observe
+     two production nights and re-measure steady state; if extraction remains material, reconsider
+     **extraction batching first** (input-bound and uncacheable). Matching already showed roughly 84–93%
+     cache hits on most measured nights and is not the first target. Set spend guardrails beyond the
+     existing backfill cap + daily ceiling (D-057, D-088).
 - **DoD:** a written scaling doc (thresholds + "what breaks first" + the Block-2 decision); any guardrail
   config that's cheap to land now. Reads `docs/11` (portability ledger) as the baseline.
 

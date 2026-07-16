@@ -42,6 +42,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   cloud cutover swaps it. (D-031)
 - **Every pipeline run writes a `pipeline_runs` summary; per-fetcher failures isolate** and
   alert loudly rather than aborting the run. A digest that fails to send is itself an alert.
+- **An employer snapshot is validated before its DB transaction.** Every paginated response must
+  report the same total on every page and the final mapped row count must equal that total exactly;
+  every fetcher snapshot must also contain unique ATS `external_id` values. Any violation is a
+  failed employer fetch with zero posting mutations. Changed employers log fetched/new/reopened/
+  updated/closed/unchanged counts; failures log the employer/provider and reason. (D-088)
 
 ## Matching & extraction
 
@@ -224,6 +229,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (four token columns) + logged as a per-stage nightly line with the matching cache-hit %. The
   `$0.01`-per-match figure survives **only** as the backfill budget-guard proxy (below), not as the spend
   meter. (D-035, D-036, D-069)
+- **Anthropic Message Batches are deferred.** Job delivery is time-sensitive, so extraction and
+  matching remain synchronous while the D-088 snapshot-integrity fix is observed and steady-state
+  spend is re-measured; batching is reconsidered only if extraction remains material. (D-069,
+  D-085, D-088)
 - **Signup backfill is guarded by a per-backfill cap + a global daily ceiling.** The cap
   (`VJA_BACKFILL_MAX_POSTINGS`, default 100) bounds one signup's candidate set inside `run_backfill`
   (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) refuses a backfill
@@ -301,10 +310,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Radancy/TalentBrew fetcher targets the server-rendered `GET {endpoint}/search-jobs/results` HTML, not the
   JS landing page.** The repo's first **HTML-parse** fetcher (`beautifulsoup4`); one generic per-platform parser of
   the uniform `<table id="searchresults">` markup. **List-only + paginate-or-fail** on the table `aria-label` total
-  ("Results 1 to 25 of N"), pages by `CurrentPage`; description is a lazy `fetch_detail` (`div.jobdescription`).
+  ("Results 1 to 25 of N"), pages by the board's own `startrow` offset links; description is a lazy
+  `fetch_detail` (`div.jobdescription`). (`CurrentPage` is ignored by the live board and must not be used.)
   `external_id` = the `/job/{slug}/{id}` **path** (Workday `externalPath` parity — the detail URL needs the slug;
   the id alone 404s); `apply_url` is that path absolute; `updated_at` from the `jobDate` cell. Endpoint is
-  **explicit per-tenant** (not slug-derived). (D-052)
+  **explicit per-tenant** (not slug-derived). (D-052, D-088)
 - **Paylocity fetcher targets the server-rendered tenant listing whose `window.pageData.Jobs` is the complete
   set.** Explicit per-tenant UUID/name endpoint; single-response false-closure guard; `external_id = JobId`;
   `apply_url` constructed as `/Recruiting/jobs/Apply/{JobId}`; description lazily fetched from the public detail

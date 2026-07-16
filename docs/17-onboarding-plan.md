@@ -168,9 +168,13 @@ then built on `feat/onboarding-tutorial`.**
   to one reupload per user per rolling 24 hours, atomically persisted on the user row and enforced
   with 429 + integer-seconds `Retry-After`. **Neon migration `c4e8a7d9132f` applied and verified
   2026-07-15.**
-- **LLM-cost Block 2:** diagnose the observed posting new/closed identity churn before building
-  Anthropic Message Batches. If steady-state extraction remains material after the correctness
-  fix, batch extraction first; matching is already highly cache-efficient.
+- **LLM-cost Block 2 — conservative correctness pass ✅ (D-088, built on
+  `fix/snapshot-completeness-churn`):** paginated providers now require a stable per-page total and
+  exact final count; the shared pipeline rejects duplicate ATS IDs before any posting mutation and
+  logs per-employer churn/failure detail. This fixes the demonstrated completeness vulnerability
+  without claiming it explains every observed close/reopen. Anthropic Message Batches remain
+  deferred because the product is time-sensitive; observe two production nights, re-measure, and
+  reconsider extraction-first batching only if spend remains material.
 
 ---
 

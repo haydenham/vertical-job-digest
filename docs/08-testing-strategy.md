@@ -36,6 +36,9 @@ prompt/matching/extraction code (path-filtered; see the eval section + `09`).
 **What lives here in this project:**
 - **Fetcher field-mapping** — given a fixture payload dict, does `map()` produce the right `RawPosting`?
   (`external_id`, `title`, `apply_url`, `location`). One test per ATS module against `tests/fixtures/{ats}.json`.
+- **Paginated snapshot integrity** — for every paginated provider, a changing total between pages,
+  a short final count, and an over-count all raise `FetchError`; only an exact stable snapshot may
+  reach the diff. (D-088)
 - **`content_hash` canonicalization** — deterministic over the stable fields; **invariant** under volatile junk
   (view counts, "updated X ago", tracking params, key ordering). Same content ⇒ same hash; reorder keys ⇒ same hash;
   change description ⇒ different hash. This is the cache's correctness; test it hard. (Spec: `04` §3.)
@@ -61,6 +64,9 @@ that stamps `*_at`.
 - **The "never mass-close on fetch failure" guard** (the single highest-stakes integration test): a fetch that
   raises `FetchError` must **not** close yesterday's postings — it records a `fetch_failure` and leaves rows
   `open`. (Spec: `05` health check.) Mass-closing on a transient 500 would ship a digest claiming every job died.
+- **The duplicate-id form of the same guard:** if one fetched employer snapshot repeats an ATS
+  `external_id`, the sync fails before its DB transaction and every prior row/timestamp remains
+  byte-for-byte unchanged. The pipeline never silently collapses duplicate rows. (D-088)
 - **Extraction cache reuse:** unchanged `content_hash` ⇒ extraction is **not** re-invoked (assert the faked LLM
   was called zero times); changed hash ⇒ it is. This is D-005 cost discipline, made testable.
 - **`matches` versioning:** re-matching a new `resume_version` inserts a new row, never overwrites
@@ -86,6 +92,8 @@ link-verifier). Deterministic and free; this is the closest we get to "a real ni
   **not** appear in `digests.contents`. One fake posting must never ship.
 - **Partial-failure handling:** one fetcher throws, the rest of the pipeline still completes and sends; the run is
   marked `partial`, not `failed`, and the failure is in `pipeline_runs.errors`.
+- **Per-employer observability:** changed snapshots log fetched/new/reopened/updated/closed/unchanged
+  counts, while failed snapshots log the employer/provider and reason. (D-088)
 - **A failed digest send leaves a loud `failed` record** (spec `04` §6) — silence is the bug.
 
 **Rules:** still no real I/O. The point is orchestration correctness — wiring, ordering, summary records, the
