@@ -10,25 +10,49 @@ Rolefeed must be able to evaluate and change extraction/matching models without 
 changes, then choose both models from measured quality, latency, and catalog cost. This work is a
 beta/Robotics prerequisite, but it must not erase the production evidence from D-088/D-089.
 
-1. **Block 0 — observe:** July 17 is D-088 production observation night 1 (July 16 began before
+1. **Block 0 — observe (ACTIVE):** July 17 is D-088 production observation night 1 (July 16 began before
    #88 merged). Compare employer-level churn, stage tokens, cost, failures, and runtime before
    attributing savings to any model change. July 18 remains observation night 2.
-2. **Block 1 — provider boundary (this branch):** embed LiteLLM, preserve the current Anthropic
-   models and behavior, and replace provider-specific types/rates with a typed local contract.
-3. **Block 2 — evaluation harness:** expand the small synthetic extraction/matching set, collect
+2. **Block 1 — provider boundary (COMPLETE):** embedded LiteLLM preserves the current Anthropic
+   models and behavior and replaces provider-specific types/rates with a typed local contract.
+   Merged as PR #90 and deployed as image `07ed265` on 2026-07-16.
+3. **Block 2 — evaluation harness (new-model step 1/3):** expand the small synthetic extraction/matching set, collect
    quality/latency/token/catalog-cost evidence across candidate models, and restore the missing
    path-filtered eval CI job documented by D-020/D-021.
-4. **Block 3 — extraction cutover:** choose and deploy the lowest-cost extraction model that clears
+4. **Block 3 — extraction cutover (new-model step 2/3):** choose and deploy the lowest-cost extraction model that clears
    the accepted extraction threshold. DeepSeek is a candidate, not a decision.
-5. **Block 4 — matching cutover:** choose and deploy the best value matching model that clears the
+5. **Block 4 — matching cutover (new-model step 3/3):** choose and deploy the best value matching model that clears the
    trust threshold. Sonnet, Grok, Muse, and the proposed GPT route are candidates, not decisions;
    exact available model identifiers and prices are verified in Block 2.
-6. **Block 5 — NO-output optimization:** against the chosen matching model, test and implement the
+6. **Block 5 — NO-output optimization (separate follow-on):** against the chosen matching model, test and implement the
    approved contract that a `no` verdict stores no user-facing reasoning fields, if the eval shows
    the shorter schema/prompt preserves rejection quality and produces material output-token savings.
 
 No candidate wins from a benchmark headline or vendor claim. Extraction and matching are separate
 choices because their quality/cost requirements differ.
+
+Put differently: **three steps remain for testing/selecting new models** (evaluation harness → extraction
+choice → matching choice). The `no`-output work is a fourth, separate optimization performed only after the
+matching model is selected.
+
+## Immediate handoff — observe before changing anything
+
+Do not merge/deploy another model, prompt, provider, seed, fetcher, or environment change before reviewing the
+July 17 run. The read-only morning audit covers four recently landed behaviors together:
+
+1. **D-088 snapshot integrity:** employer-level fetched/new/reopened/updated/closed/unchanged counts; total-drift,
+   exact-count, duplicate-ID, and recurring GE Vernova failures. Keep production frozen through July 18 when
+   practical so the promised second observation night remains comparable.
+2. **D-089 score normalization:** clamp-warning count and values; no remaining out-of-range validation failures;
+   repaired matches persist and do not return as paid retries.
+3. **D-090 LiteLLM:** actual upstream model IDs remain Haiku 4.5/Sonnet 4.6; no unsupported-parameter, parsing,
+   missing-usage/pricing, or false-zero errors; input/output/cache buckets and catalog cost look plausible against
+   the prior Anthropic baseline.
+4. **D-086 operations:** one scheduled execution/attempt, completion within six hours, expected digest delivery,
+   and no duplicates. Reconfirm service health and anonymous-postings `401`.
+
+Block 2 starts only after Hayden reviews that evidence and approves its fixtures, rubric, pass thresholds,
+candidate list, repetition count, and maximum eval spend.
 
 ## Block 1 — LiteLLM provider boundary
 
