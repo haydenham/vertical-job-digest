@@ -87,7 +87,8 @@ silently collapsed or LLM-adjudicated. (D-016, D-088)
 ## Stack
 
 Python pipeline, FastAPI (serves the dashboard's read-only API), SQLite → Postgres
-migration path, Anthropic SDK for all model calls, APScheduler or cron, React
+migration path, embedded LiteLLM behind the typed `vja.llm` boundary for Layer-2 model calls
+(Anthropic defaults today), direct OpenAI SDK for discovery, APScheduler or cron, React
 dashboard.
 
 ## Delivery surfaces (decided)
@@ -233,8 +234,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   summary record. A digest that fails to send is itself an alert.
 - API keys in env config, never in the repo. DB never publicly exposed. Application CLIs auto-load
   a git-ignored `.env` (python-dotenv); **Alembic does not**, so migrations require an explicit
-  `VJA_DATABASE_URL` export (D-083). Provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`,
-  `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
+  `VJA_DATABASE_URL` export (D-083). Layer-2 routes = `VJA_EXTRACT_MODEL` (default
+  `anthropic/claude-haiku-4-5`) + `VJA_MATCH_MODEL` (default `anthropic/claude-sonnet-4-6`), through
+  embedded LiteLLM; provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
   (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
   **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's
   `user_email` (D-027/D-037). Nightly job = **`vja-nightly`** (composes run → extract → match → digest
@@ -281,6 +283,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing, the churn-fix prerequisite, and the rejected-features record. Planning only; nothing live.
+- `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090): observe D-088 → LiteLLM provider boundary → multi-model eval/CI repair → extraction cutover → matching cutover → chosen-model `no`-output optimization.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

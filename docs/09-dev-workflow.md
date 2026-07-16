@@ -56,15 +56,15 @@ merge red.
 | Secrets | a secret-scan (e.g. `gitleaks`) | no findings |
 | Lockfile | `uv lock --check` | lock in sync with `pyproject.toml` (D-014) |
 | **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
-| **LLM evals** (path-filtered) | `pytest -m eval` | green — **but only triggered when the PR touches prompts / matching / extraction code** |
+| **LLM evals** (path-filtered policy; CI repair pending D-090 Block 2) | `pytest -m eval` | green manually for Block 1; automated before any model cutover |
 
 Pre-commit mirrors CI so failures surface in seconds, not after a push. CI is the gate that can't be bypassed.
 
-**The eval gate is conditional on purpose.** Evals hit the real Anthropic API, so making them an unconditional
-check would tax every PR (a docs typo) with tokens and flake risk. Instead CI runs them **only when the diff touches
-the prompt/matching/extraction paths** — exactly the PRs that can regress match quality, which ships straight into the
-digest (the one trust-critical surface, D-007/D-008). On those PRs the gate blocks; on every other PR it doesn't run.
-Non-determinism is handled in the suite itself, not by weakening the gate — see `08`.
+**The eval gate is conditional on purpose.** Evals hit the real configured provider, so an unconditional check
+would tax a docs typo with tokens and flake risk. D-020 requires the gate only for prompt/matching/extraction
+paths. The repository currently drifted from that policy: `ci.yml` has no eval job (D-090). Block 1 therefore
+requires a documented manual parity run; Block 2 restores and expands the conditional job before any cutover.
+Non-determinism is handled in the suite itself, not by weakening the target gate — see `08`.
 
 ## Conventions that keep generated code consistent
 

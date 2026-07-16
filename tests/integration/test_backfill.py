@@ -10,13 +10,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
-from anthropic import Anthropic
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
 from vja.db.matches import postings_needing_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import employers, matches, postings
+from vja.llm import StructuredLLM, StructuredResult
 from vja.match import (
     BackfillBudgetExceeded,
     MatchResult,
@@ -24,7 +24,7 @@ from vja.match import (
     estimate_daily_spend,
     run_backfill,
 )
-from vja.models import Verdict
+from vja.models import TokenUsage, Verdict
 from vja.scope import ScopeConfig
 from vja.verticals import VerticalConfig
 
@@ -42,24 +42,15 @@ _CONFIG = VerticalConfig(
 )
 
 
-class _FakeMessages:
-    def parse(self, **kwargs: Any) -> Any:
-        class _U:
-            input_tokens = 900
-            output_tokens = 150
-            cache_creation_input_tokens = 0
-            cache_read_input_tokens = 0
-
-        class _R:
-            parsed_output = _RESULT
-            usage = _U()
-
-        return _R()
-
-
 class _FakeClient:
-    def __init__(self) -> None:
-        self.messages = _FakeMessages()
+    def parse(self, **kwargs: Any) -> StructuredResult[MatchResult]:
+        return StructuredResult(
+            value=_RESULT,
+            usage=TokenUsage(input=900, output=150),
+            cost_usd=0.00495,
+            model="claude-sonnet-4-6",
+            latency_seconds=0.1,
+        )
 
 
 def _employer(engine: Engine) -> int:
@@ -154,7 +145,7 @@ def _run(engine: Engine, profile: Profile):  # type: ignore[no-untyped-def]
         _VERTICAL,
         profile,
         config=_CONFIG,
-        client=cast("Anthropic", _FakeClient()),
+        client=cast("StructuredLLM", _FakeClient()),
         now=_NOW,
     )
 
@@ -292,12 +283,9 @@ def test_backfill_stamps_completed_even_when_every_match_fails(migrated_engine: 
     completion stamp must land so the banner doesn't strand on running (D-082)."""
     from vja.db.profiles import backfill_stamps
 
-    class _RaisingMessages:
+    class _RaisingClient:
         def parse(self, **kwargs: Any) -> Any:
             raise RuntimeError("api down")
-
-    class _RaisingClient:
-        messages = _RaisingMessages()
 
     profile = _seed(migrated_engine)
     summary = run_backfill(
@@ -305,7 +293,7 @@ def test_backfill_stamps_completed_even_when_every_match_fails(migrated_engine: 
         _VERTICAL,
         profile,
         config=_CONFIG,
-        client=cast("Anthropic", _RaisingClient()),
+        client=cast("StructuredLLM", _RaisingClient()),
         now=_NOW,
     )
     assert (summary.matched, summary.failed) == (0, summary.total)

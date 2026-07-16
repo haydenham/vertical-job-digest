@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
 
-from anthropic import Anthropic
 from sqlalchemy import Engine
 
 from vja.db.engine import begin, get_engine
@@ -40,6 +39,7 @@ from vja.digest.send import (
 from vja.extract import run_extraction
 from vja.fetchers.base import Fetcher
 from vja.fetchers.registry import get_fetcher
+from vja.llm import LiteLLMClient, StructuredLLM
 from vja.match import run_matching
 from vja.models import AtsType, TokenUsage
 from vja.pipeline import RunSummary, run_pipeline
@@ -65,10 +65,10 @@ Layer2Runner = Callable[..., Layer2Summary]
 
 
 def _default_layer2(
-    engine: Engine, vertical: str, *, client: Anthropic | None, now: datetime
+    engine: Engine, vertical: str, *, client: StructuredLLM | None, now: datetime
 ) -> Layer2Summary:
     """Extract then match one vertical against its config; one client shared across both passes."""
-    cli = client or Anthropic()  # auth resolves at construction — the real path needs a key
+    cli = client or LiteLLMClient()
     vcfg = load_vertical_config(vertical)
     ext = run_extraction(
         engine,
@@ -118,7 +118,7 @@ def run_nightly(
     config: DigestConfig | None = None,
     resolve_fetcher: Callable[[AtsType], Fetcher] = get_fetcher,
     verify: Callable[[str], bool] | None = None,
-    client: Anthropic | None = None,
+    client: StructuredLLM | None = None,
     run_layer2: Layer2Runner = _default_layer2,
 ) -> NightlyResult:
     """Run the nightly loop once: pipeline → (extract → match → send per profile) per vertical."""

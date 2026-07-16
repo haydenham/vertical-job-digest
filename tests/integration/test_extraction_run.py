@@ -8,14 +8,14 @@ detail resolver; fields persist; the run is idempotent; a content change re-open
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from anthropic import Anthropic
 from sqlalchemy import Engine, select
 
 from vja.db import postings as postings_repo
 from vja.db.engine import begin
 from vja.db.schema import employers, postings
 from vja.extract import ExtractedFields, run_extraction
-from vja.models import Level, RemoteType
+from vja.llm import StructuredLLM, StructuredResult
+from vja.models import Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig
 from vja.scope import ScopeConfig
 
@@ -27,22 +27,19 @@ _FIELDS = ExtractedFields(
 )
 
 
-class _FakeMessages:
-    def parse(self, **kwargs: Any) -> Any:
-        class _U:
-            input_tokens = 800
-            output_tokens = 120
-
-        class _R:
-            parsed_output = _FIELDS
-            usage = _U()
-
-        return _R()
-
-
 class _FakeClient:
-    def __init__(self) -> None:
-        self.messages = _FakeMessages()
+    def parse(self, **kwargs: Any) -> StructuredResult[ExtractedFields]:
+        return _structured(_FIELDS)
+
+
+def _structured(fields: ExtractedFields) -> StructuredResult[ExtractedFields]:
+    return StructuredResult(
+        value=fields,
+        usage=TokenUsage(input=800, output=120),
+        cost_usd=0.0014,
+        model="claude-haiku-4-5-actual",
+        latency_seconds=0.1,
+    )
 
 
 def _detail_resolver_factory() -> tuple[Any, list[str]]:
@@ -122,7 +119,7 @@ def _run(engine: Engine):  # type: ignore[no-untyped-def]
         "grid_power_software",
         scope=_SCOPE,
         prefilter=_PREFILTER,
-        client=cast("Anthropic", _FakeClient()),
+        client=cast("StructuredLLM", _FakeClient()),
         resolve_detail=resolver,
         now=_NOW,
     )
@@ -151,7 +148,8 @@ def test_extracts_only_in_scope_unextracted(migrated_engine: Engine) -> None:
 
     swe = _row(migrated_engine, "swe")
     assert swe["level"] == "new_grad" and swe["remote"] == "hybrid" and swe["stack"] == ["Python"]
-    assert swe["extracted_at"] is not None and swe["extraction_model"] == "claude-haiku-4-5"
+    assert swe["extracted_at"] is not None
+    assert swe["extraction_model"] == "claude-haiku-4-5-actual"  # upstream response, not route
 
     assert _row(migrated_engine, "/job/data-eng")["extracted_at"] is not None  # workday extracted
 
@@ -168,22 +166,13 @@ def test_rerun_is_idempotent(migrated_engine: Engine) -> None:
 
 
 class _ClientReturning:
-    """A fake Anthropic whose extraction always returns the given fields (with a `posted_at`)."""
+    """A fake LLM whose extraction always returns the given fields (with a `posted_at`)."""
 
     def __init__(self, fields: ExtractedFields) -> None:
-        class _Messages:
-            def parse(self, **kwargs: Any) -> Any:
-                class _U:
-                    input_tokens = 800
-                    output_tokens = 120
+        self._fields = fields
 
-                class _R:
-                    parsed_output = fields
-                    usage = _U()
-
-                return _R()
-
-        self.messages = _Messages()
+    def parse(self, **kwargs: Any) -> StructuredResult[ExtractedFields]:
+        return _structured(self._fields)
 
 
 def test_extraction_fills_source_updated_at_only_when_null(migrated_engine: Engine) -> None:
@@ -204,7 +193,7 @@ def test_extraction_fills_source_updated_at_only_when_null(migrated_engine: Engi
         "grid_power_software",
         scope=_SCOPE,
         prefilter=_PREFILTER,
-        client=cast("Anthropic", _ClientReturning(fields)),
+        client=cast("StructuredLLM", _ClientReturning(fields)),
         resolve_detail=_detail_resolver_factory()[0],
         now=_NOW,
     )
@@ -227,7 +216,7 @@ def test_extraction_fills_location_only_when_null(migrated_engine: Engine) -> No
         "grid_power_software",
         scope=_SCOPE,
         prefilter=_PREFILTER,
-        client=cast("Anthropic", _ClientReturning(fields)),
+        client=cast("StructuredLLM", _ClientReturning(fields)),
         resolve_detail=_detail_resolver_factory()[0],
         now=_NOW,
     )
@@ -251,7 +240,7 @@ def test_extraction_stamps_in_scope_on_effective_location(migrated_engine: Engin
         "grid_power_software",
         scope=_SCOPE,
         prefilter=_PREFILTER,
-        client=cast("Anthropic", _ClientReturning(fields)),
+        client=cast("StructuredLLM", _ClientReturning(fields)),
         resolve_detail=_detail_resolver_factory()[0],
         now=_NOW,
     )

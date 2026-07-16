@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-16 — D-090 LiteLLM provider boundary built at Anthropic parity
+
+**Built on `feat/litellm-provider-boundary` (uncommitted; Hayden owns commit/PR):** Layer-2 extraction
+and matching now depend on the typed `vja.llm` boundary rather than Anthropic SDK response types.
+Embedded LiteLLM owns request transport, Pydantic parsing, mutually-exclusive uncached/cache token
+normalization, catalog cost, actual upstream model, latency, and request ID. Call-time routes default to
+`VJA_EXTRACT_MODEL=anthropic/claude-haiku-4-5` and
+`VJA_MATCH_MODEL=anthropic/claude-sonnet-4-6`; matching keeps `VJA_MATCH_EFFORT=medium`, which LiteLLM
+maps to Anthropic adaptive thinking + output effort. Prompts, schemas, max tokens, cache breakpoint,
+D-089 score clamp, per-posting isolation, idempotency, DB schema, credentials, and production models are
+unchanged. The direct Anthropic dependency and hardcoded Sonnet/Haiku price tables are gone; stage totals
+use returned catalog cost, persist the response's actual model, and fail on absent usage/pricing, false `$0`,
+or unsupported/dropped parameters. No router, fallback, proxy, or new retry policy was added.
+
+**Plan/docs + verification:** D-090 and new `docs/19` record the accepted pre-beta/Robotics sequence:
+observe D-088 July 17/18 → provider boundary → expanded multi-model eval + missing CI eval repair →
+extraction cutover → matching cutover → chosen-model `no`-output optimization. The existing CI/eval policy
+drift is now explicit rather than falsely documented as live. Offline suite **552 passed, 20 opt-in
+deselected**; the real Anthropic parity eval through LiteLLM passed **3/3**; ruff format/check, mypy (132
+source files), import-linter (1 kept / 0 broken), `uv lock --check`, `git diff --check`, and the production
+`linux/amd64` Docker image build are green. Docs: INVARIANTS, CLAUDE, `.env.example`, docs/08/09/12/15/17,
+GCP runbook, beta ledger, and the doc map. **Next:** Hayden reviews/commits/PRs Block 1; observe the July 17
+D-088 run; Block 2 starts only after Hayden approves its fixtures, rubric, thresholds, candidates, run count,
+and spend cap.
+
 ## 2026-07-16 — D-089 match-score boundary guard built after read-only production shakeout
 
 **Read-only shakeout on clean `main`:** the July 16 Cloud Run execution succeeded once in 1h57m54s under

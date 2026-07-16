@@ -207,16 +207,6 @@ class TokenUsage:
     cache_read: int = 0
     cache_write: int = 0
 
-    @classmethod
-    def from_response(cls, usage: Any) -> TokenUsage:
-        """Read a message's ``usage`` object (attrs absent on some SDK/mocks → 0)."""
-        return cls(
-            input=getattr(usage, "input_tokens", 0) or 0,
-            output=getattr(usage, "output_tokens", 0) or 0,
-            cache_read=getattr(usage, "cache_read_input_tokens", 0) or 0,
-            cache_write=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-        )
-
     def __add__(self, other: TokenUsage) -> TokenUsage:
         return TokenUsage(
             input=self.input + other.input,

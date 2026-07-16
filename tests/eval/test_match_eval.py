@@ -11,9 +11,9 @@ prompt/schema; a regression here blocks the merge.
 import os
 
 import pytest
-from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from vja.llm import LiteLLMClient
 from vja.match import match_posting
 from vja.models import Verdict
 
@@ -48,7 +48,8 @@ Stack: Eclipse reservoir simulation, Fortran
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
 def test_match_structural_and_obvious_yes() -> None:
-    result, usage = match_posting(Anthropic(), _RESUME, _VOCAB, _GOOD_POSTING)
+    call = match_posting(LiteLLMClient(), _RESUME, _VOCAB, _GOOD_POSTING)
+    result, usage = call.value, call.usage
 
     # Structural (D-007): valid verdict, score in range, non-empty fits AND gaps.
     assert isinstance(result.verdict, Verdict)
@@ -63,7 +64,7 @@ def test_match_structural_and_obvious_yes() -> None:
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
 def test_match_says_no_to_obvious_mismatch() -> None:
-    result, _ = match_posting(Anthropic(), _RESUME, _VOCAB, _BAD_POSTING)
+    result = match_posting(LiteLLMClient(), _RESUME, _VOCAB, _BAD_POSTING).value
 
     # Willingness to say no is a product requirement (D-007): a senior non-software UK role.
     assert result.verdict in (Verdict.NO, Verdict.MAYBE), result.verdict

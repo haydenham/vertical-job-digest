@@ -1,4 +1,4 @@
-"""Unit tests for LLM extraction (P5.2) — fully offline (the Anthropic client is faked).
+"""Unit tests for LLM extraction (P5.2) — fully offline (the LLM boundary is faked).
 
 Pins the pure pieces: field→column mapping, cost math from token usage, the Workday-vs-other
 source selection, and the no-parsed-output failure path. The live model runs only in the eval.
@@ -7,7 +7,6 @@ source selection, and the no-parsed-output failure path. The live model runs onl
 from typing import Any, cast
 
 import pytest
-from anthropic import Anthropic
 
 from vja.db.postings import ExtractionCandidate
 from vja.extract import (
@@ -16,7 +15,8 @@ from vja.extract import (
     extract_posting,
     fields_to_columns,
 )
-from vja.models import AtsType, Employer, Level, RemoteType
+from vja.llm import StructuredLLM, StructuredResult
+from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 
 _FIELDS = ExtractedFields(
     level=Level.NEW_GRAD,
@@ -31,31 +31,23 @@ _FIELDS = ExtractedFields(
 )
 
 
-class _FakeUsage:
-    def __init__(self, input_tokens: int, output_tokens: int) -> None:
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens
-
-
-class _FakeResponse:
-    def __init__(self, parsed: ExtractedFields | None, usage: _FakeUsage) -> None:
-        self.parsed_output = parsed
-        self.usage = usage
-
-
-class _FakeMessages:
+class _FakeClient:
     def __init__(self, parsed: ExtractedFields | None) -> None:
         self._parsed = parsed
         self.calls: list[dict[str, Any]] = []
 
-    def parse(self, **kwargs: Any) -> _FakeResponse:
+    def parse(self, **kwargs: Any) -> StructuredResult[ExtractedFields]:
         self.calls.append(kwargs)
-        return _FakeResponse(self._parsed, _FakeUsage(1000, 150))
-
-
-class _FakeClient:
-    def __init__(self, parsed: ExtractedFields | None = _FIELDS) -> None:
-        self.messages = _FakeMessages(parsed)
+        if self._parsed is None:
+            raise ValueError("LLM returned no structured content")
+        return StructuredResult(
+            value=self._parsed,
+            usage=TokenUsage(input=1000, output=150),
+            cost_usd=0.00175,
+            model="claude-haiku-4-5",
+            latency_seconds=0.25,
+            request_id="req-extract",
+        )
 
 
 def _candidate(
@@ -82,25 +74,32 @@ def test_fields_to_columns_maps_enums_to_values() -> None:
 
 
 def test_extract_posting_returns_fields_and_real_token_usage() -> None:
-    client = cast("Anthropic", _FakeClient())
-    fields, usage = extract_posting(client, "some posting text")
-    assert fields is _FIELDS
-    assert (usage.input, usage.output) == (1000, 150)  # the meter reads raw usage (D-069)
-    # 1000 input × $1/MTok + 150 output × $5/MTok = 0.001 + 0.00075
-    assert usage.cost(1e-6, 5e-6) == pytest.approx(0.00175)
+    call = extract_posting(cast("StructuredLLM", _FakeClient(_FIELDS)), "some posting text")
+    assert call.value is _FIELDS
+    assert (call.usage.input, call.usage.output) == (1000, 150)  # real normalized usage
+    assert call.cost_usd == pytest.approx(0.00175)  # catalog cost crosses the boundary unchanged
 
 
 def test_extract_system_prompt_carries_cache_control() -> None:
-    client = _FakeClient()
-    extract_posting(cast("Anthropic", client), "some posting text")
-    system = client.messages.calls[0]["system"]
-    assert system[0]["cache_control"] == {"type": "ephemeral"}  # stable instruction prefix (D-069)
+    client = _FakeClient(_FIELDS)
+    extract_posting(cast("StructuredLLM", client), "some posting text")
+    call = client.calls[0]
+    assert call["model"] == "anthropic/claude-haiku-4-5"
+    assert call["cache_system"] is True  # stable instruction prefix (D-069)
+    assert "You extract structured fields" in call["system"]
+
+
+def test_extract_posting_model_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VJA_EXTRACT_MODEL", "deepseek/test-extract")
+    client = _FakeClient(_FIELDS)
+    extract_posting(cast("StructuredLLM", client), "some posting text")
+    assert client.calls[0]["model"] == "deepseek/test-extract"
 
 
 def test_extract_posting_raises_on_no_parsed_output() -> None:
-    client = cast("Anthropic", _FakeClient(parsed=None))
-    with pytest.raises(ValueError, match="no parsed output"):
-        extract_posting(client, "text")
+    client = _FakeClient(parsed=None)
+    with pytest.raises(ValueError, match="no structured content"):
+        extract_posting(cast("StructuredLLM", client), "text")
 
 
 def test_source_text_uses_raw_payload_for_rich_list_ats() -> None:

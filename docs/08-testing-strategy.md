@@ -23,9 +23,10 @@ Fast tests are run constantly and so stay green; slow/flaky tests get skipped an
 as possible **down** the pyramid. If a thing *can* be tested as a pure function, it must be.
 
 The default test command (`pytest`) runs **unit + integration + system** — all deterministic, offline, free, seconds
-to run. The `live` and `e2e` tiers are opt-in markers that never run in the inner loop or block a merge. The `eval`
-tier is also out of the local inner loop, but **does** block a merge in CI — *only* on PRs that touch the
-prompt/matching/extraction code (path-filtered; see the eval section + `09`).
+to run. The `live` and `e2e` tiers are opt-in markers that never run in the inner loop or block a merge. D-020's
+policy is that `eval` also stays out of the inner loop but blocks prompt/matching/extraction PRs. **Current drift
+(D-090):** `.github/workflows/ci.yml` has no eval job. Block 1 manually runs the Anthropic-parity eval; Block 2
+expands the harness and restores the path-filtered CI gate before any model cutover.
 
 ---
 
@@ -48,14 +49,14 @@ prompt/matching/extraction code (path-filtered; see the eval section + `09`).
 - **Cheap pre-filter** — level/location/work-auth gating logic that runs before the strong model.
 - Any normalizer: level mapping, comp-string parsing, location cleanup.
 
-**Rules:** network and the Anthropic SDK are **never** touched here — if a function needs them, it isn't a unit and
-belongs one level up (or should be refactored so its pure core *is* unit-testable). Freeze the clock for anything
-that stamps `*_at`.
+**Rules:** network and the real LiteLLM/provider transport are **never** touched here — inject the completion/cost
+functions or fake the typed `StructuredLLM` boundary. If a function needs real I/O, it is not a unit (or its pure
+core should be extracted). Freeze the clock for anything that stamps `*_at`.
 
 ## Level 2 — Integration
 
 **Scope:** two or more real components talking across a real boundary — **almost always the database**. Real SQLite
-(in-memory or a temp file), real SQL, real schema. External services (ATS HTTP, Anthropic, Resend) are **stubbed/faked**.
+(in-memory or a temp file), real SQL, real schema. External services (ATS HTTP, LLM providers, Resend) are **stubbed/faked**.
 
 **What lives here:**
 - **fetch → diff → persist:** feed a fetcher a fixture, run the diff, assert the rows in `postings` — new rows
@@ -101,7 +102,8 @@ link-verifier). Deterministic and free; this is the closest we get to "a real ni
 
 ## Level 4 — E2E / live (opt-in, never in the inner loop)
 
-**Scope:** the real outside world. Real network, real ATS endpoints, real Anthropic calls, real (sandbox) email.
+**Scope:** the real outside world. Real network, real ATS endpoints, real configured-provider calls, real
+(sandbox) email.
 Slow, flaky by nature, costs tokens. Gated behind pytest markers (`-m live`, `-m e2e`); excluded from the default
 run and from the merge gate. Run **before a weekly milestone**, when **ATS drift is suspected**, or after touching
 a fetcher/the SDK integration — not per-commit.
@@ -135,9 +137,9 @@ Two sub-tiers, split by determinism so the gate is robust to the model flapping:
   **threshold/majority over the small golden set** (e.g. sample an "obvious no" a few times, require the majority to
   say `no`) rather than demanding one perfect run — a single flaky sample warns, a real regression (the model now
   says `yes` to junk) fails the set.
-- **This is a merge gate, not just a signal — but a *path-filtered* one.** CI runs `-m eval` **only when the PR
-  touches the prompt / matching / extraction code** (`09`), exactly the changes that can degrade what ships in the
-  digest. Other PRs never trigger it, so unrelated work pays neither tokens nor flake risk.
+- **This is the required merge policy, not just a signal — and it is path-filtered.** Block 2 of D-090 must make
+  CI run `-m eval` only when the PR touches prompt/matching/extraction/provider-boundary code. Until that repair,
+  those changes require a documented manual eval; no model cutover is allowed.
 - **Metered + small.** Every eval run counts toward LLM spend, but the golden set is a handful of cases and only the
   prompt-touching PRs trigger it, so the bill is cents — cheap insurance on the one trust-critical output. Keep the
   set small and curated; grade structure/coverage against a rubric (optionally LLM-as-judge) where wording matters.
