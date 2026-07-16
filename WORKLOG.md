@@ -5,6 +5,35 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-16 — D-089 match-score boundary guard built after read-only production shakeout
+
+**Read-only shakeout on clean `main`:** the July 16 Cloud Run execution succeeded once in 1h57m54s under
+the D-086 six-hour/zero-retry policy; all seven digests sent, the Scheduler is enabled for 06:00 America/
+Chicago, `/api/health` returned 200, and anonymous `/api/postings` returned the required 401. It was **not**
+a D-088 validation run: execution `vja-nightly-8wdb2` started at 06:00 CT and PR #88 merged at 06:41 CT.
+The Job now points at `rolefeed:54181f8`, so July 17 and 18 are D-088 observation nights 1 and 2. The one
+isolated fetch failure was GE Vernova (`missing 'title'`); fail-closed behavior preserved its prior rows.
+
+**Concrete bug found and fixed on `fix/match-score-boundary` (uncommitted; Hayden owns commit/PR):** Sonnet
+returned an otherwise-valid structured match with a negative score 26 times that morning (`-1` ×25, `-5`
+×1), and the same signature appeared 56 times across seven execution dates since July 7. The installed
+Anthropic SDK explains the contract gap: it preserves `integer` in the server schema but moves unsupported
+numeric bounds into descriptive text; local Pydantic then rejected the paid response, so no match or usage
+was saved and the pair retried nightly. D-089 implements Hayden's approved policy: real integers outside
+0–100 clamp to the nearest boundary with a warning before strict final validation; wrong types and every
+other malformed output still fail, with no corrective LLM call. Regression tests were observed red first
+(unit validation + pipeline persistence/idempotency), then green.
+
+**Adjacent evidence, deliberately not folded into this fix:** recent Workday snapshots intermittently fail
+closed on source rows missing `title`/`externalPath`; do not re-hit a board after the nightly's once-daily
+fetch. `pipeline_runs.started_at == finished_at` under the injected nightly timestamp, and the killed July 14
+attempt persisted $0 despite logs showing $3.4071 before termination; both feed the already-planned minimum
+Job monitoring/scaling work. **Verification:** focused suite 12/12; full default suite **543 passed, 20 opt-in
+deselected** after hardening one logging assertion against Alembic's test-only logger disabling; ruff format/
+check, mypy (130 source files), import-linter (1 kept / 0 broken), `uv lock --check`, and `git diff --check` are
+green. Docs: D-089, INVARIANTS, docs/15, docs/17, and CLAUDE reconciled. **Next:** Hayden reviews/commits/PRs,
+then observe the July 17 D-088 production run.
+
 ## 2026-07-15 — D-088 snapshot-integrity churn guard built; Message Batches deferred
 
 **Built on `fix/snapshot-completeness-churn` (uncommitted; Hayden owns commit/PR):** the

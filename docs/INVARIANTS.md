@@ -64,6 +64,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   never overwrites a non-null L1 value (mirrors `source_updated_at`, D-038). (D-043)
 - **Matching is reasoning, not similarity.** Every rationale must state fits, gaps, and a
   verdict + score. Willingness to say *no* is a product requirement. (D-007, D-036)
+- **A match score is always 0–100, including at the model boundary.** Anthropic structured output
+  guarantees an integer but not JSON-Schema numeric bounds; a returned integer outside the range is
+  clamped to the nearest boundary and logged before strict final validation. Wrong types and every
+  other malformed result still fail per posting; no corrective LLM retry is made. (D-089, D-007)
 - **Model tiering:** Haiku for extraction, Sonnet for match rationale. Extraction is cached
   by `content_hash`; match prompts are prompt-cached; matching is eval-gated. Sonnet matching runs at
   **`effort=medium`** (env-overridable `VJA_MATCH_EFFORT`; the lowest eval-passing effort — `high` overspends

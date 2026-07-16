@@ -1540,11 +1540,11 @@ feedback.** Status: planning/docs accepted; only D-084's scheduling rule is live
 reupload guard, churn fix/Batch work, monitoring, and scaling assessment become live only when their own tested
 PRs land. References D-069, D-072, D-078, D-080, D-082, D-083, D-084, D-021.
 
-**Implementation update · 2026-07-15:** PR-3 is live via #82 and landing copy via #86. The reupload
-guard is built on `fix/resume-reupload-abuse-guard` with an atomic per-user timestamp migration.
-Neon was explicitly verified as `PostgresqlImpl` and advanced to `c4e8a7d9132f (head)` on 2026-07-15;
-the behavior becomes live when the tested PR merges. Churn fix/Batch work, monitoring, and scaling
-assessment remain planned.
+**Implementation update · 2026-07-16:** PR-3 is live via #82, landing copy via #86, the reupload guard
+via #87, and the D-088 snapshot-integrity guard via #88. Neon was explicitly verified as
+`PostgresqlImpl` and advanced to `c4e8a7d9132f (head)` before #87 merged. The July 16 nightly started
+before #88 merged, so July 17 and 18 are its two production observation nights. Monitoring and the
+scaling assessment remain planned.
 
 ### D-086 · Beta hardening · Nightly task timeout/retry guard prevents duplicate digest delivery · accepted · 2026-07-14
 The first nightly after another beta signup exposed an attempt-level delivery defect. Cloud Run execution
@@ -1627,3 +1627,23 @@ two production nights after this fix, and re-measure steady-state spend/churn. I
 reconsider extraction-first batching; matching is already highly prompt-cache-efficient. This fix closes a
 demonstrated vulnerability, not the entire churn diagnosis; only the observation window decides whether a
 bookend/anomaly-confirmation follow-up is justified. References D-016, D-021, D-035, D-069, D-085, D-087.
+
+### D-089 · Beta hardening · Normalize out-of-range integer match scores without an LLM retry · accepted · 2026-07-16
+A read-only production shakeout found **26** match calls on the July 16 nightly rejected solely because Sonnet
+returned a score below the required 0–100 range (`-1` in 25 cases, `-5` once); the same signature occurred 56
+times across seven execution dates since July 7. The otherwise structured result was discarded, no match row
+was saved, the pair remained eligible for another paid nightly attempt, and the call's usage never reached the
+meter because `messages.parse` raised during its response post-parser. The prompt and Pydantic field already
+state 0–100. Inspection of the locked Anthropic SDK identified the seam: its schema transform preserves the
+integer type but moves unsupported JSON-Schema `minimum`/`maximum` constraints into descriptive text, so the
+API can return an integer that local Pydantic then rejects.
+
+**Decision (Hayden): deterministic boundary repair, no second model call.** Before the strict field constraints
+run, a real integer below 0 clamps to 0 and one above 100 clamps to 100; every repair emits a warning with the
+original and normalized value. The final `ge=0`/`le=100` contract remains in force. Wrong types, malformed JSON,
+missing fields, and every non-boundary validation failure still fail and isolate at the posting boundary. No
+prompt, model, schema, migration, frontend, or retry policy changes. This preserves the paid fits/gaps/verdict/
+rationale, records the call's normal usage, saves the match once, and prevents the same pair from being billed
+again merely because its score missed the boundary. Regression coverage pins both boundaries, logging, strict
+wrong-type failure, persistence, and next-run idempotency. **Status:** built on
+`fix/match-score-boundary`; Hayden owns commit/PR. References D-007, D-021, D-035, D-069, D-085.

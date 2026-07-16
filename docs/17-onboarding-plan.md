@@ -153,7 +153,7 @@ then built on `feat/onboarding-tutorial`.**
 
 ## Accepted follow-ups after PR 3 (D-085)
 
-- **Landing-page copy pass ✅ (built on `feat/landing-copy`; awaiting Hayden's commit/PR):** stop the
+- **Landing-page copy pass ✅ (merged #86):** stop the
   three thesis cards, How it works, and
   Why I built this from repeating the same claim. Cards = user benefits; How it works = actual
   pipeline mechanics; founder story = Hayden's recruiting problem and product thesis. Broaden
@@ -162,19 +162,19 @@ then built on `feat/onboarding-tutorial`.**
   **technology jobs**, gives the cards three distinct user benefits, makes the three steps the
   curate → fetch/diff/verify → extract/match/deliver pipeline, and uses Hayden's new founder
   description with a direct email link.
-- **Résumé-reupload abuse guard ✅ (built on `fix/resume-reupload-abuse-guard`; awaiting Hayden's
-  commit/PR):** first upload stays allowed; identical extracted content returns the same 202 profile
-  response without refreshing progress or scheduling another backfill; a changed résumé is limited
+- **Résumé-reupload abuse guard ✅ (merged #87):** first upload stays allowed; identical extracted
+  content returns the same 202 profile response without refreshing progress or scheduling another
+  backfill; a changed résumé is limited
   to one reupload per user per rolling 24 hours, atomically persisted on the user row and enforced
   with 429 + integer-seconds `Retry-After`. **Neon migration `c4e8a7d9132f` applied and verified
   2026-07-15.**
-- **LLM-cost Block 2 — conservative correctness pass ✅ (D-088, built on
-  `fix/snapshot-completeness-churn`):** paginated providers now require a stable per-page total and
+- **LLM-cost Block 2 — conservative correctness pass ✅ (D-088, merged #88):** paginated providers now require a stable per-page total and
   exact final count; the shared pipeline rejects duplicate ATS IDs before any posting mutation and
   logs per-employer churn/failure detail. This fixes the demonstrated completeness vulnerability
   without claiming it explains every observed close/reopen. Anthropic Message Batches remain
-  deferred because the product is time-sensitive; observe two production nights, re-measure, and
-  reconsider extraction-first batching only if spend remains material.
+  deferred because the product is time-sensitive. The July 16 run started before #88 merged; use
+  July 17 and 18 as the two production observation nights, then re-measure and reconsider
+  extraction-first batching only if spend remains material.
 
 ---
 
