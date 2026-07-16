@@ -22,10 +22,8 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
-from anthropic import Anthropic
-from anthropic.types import OutputConfigParam, TextBlockParam
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Engine
@@ -38,6 +36,7 @@ from vja.db.matches import (
     save_match,
 )
 from vja.db.profiles import Profile, active_profiles, mark_backfill_completed
+from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult
 from vja.models import MatchTrigger, TokenUsage, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import in_scope
@@ -45,7 +44,7 @@ from vja.verticals import VerticalConfig
 
 logger = logging.getLogger("vja.match")
 
-_MODEL = "claude-sonnet-4-6"  # strong tier for the user-visible rationale (D-005); eval-gated
+_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
 _BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
 _MAX_TOKENS = 4096  # room for adaptive thinking + the structured rationale
 # Sonnet effort (adaptive thinking depth). Matching is a bounded, schema-constrained judgment task,
@@ -64,8 +63,12 @@ def _match_effort() -> str:
 _DEFAULT_BACKFILL_MAX_POSTINGS = 100  # hard cap on candidates matched per signup
 _DEFAULT_DAILY_LLM_BUDGET_USD = 5.0  # global daily spend ceiling before a backfill may start
 _NOMINAL_MATCH_USD = 0.01  # spend proxy per match (no per-match ledger; see count_matches_since)
-_SONNET_IN_PER_TOKEN = 3.0 / 1_000_000  # $3 / MTok input
-_SONNET_OUT_PER_TOKEN = 15.0 / 1_000_000  # $15 / MTok output
+
+
+def _match_model() -> str:
+    """LiteLLM model route, read at call time so deployments can switch without code changes."""
+    return os.environ.get("VJA_MATCH_MODEL") or _DEFAULT_MODEL
+
 
 _SYSTEM_PROMPT = """\
 You are matching one early-career candidate against one job posting. You are given the candidate's
@@ -197,41 +200,32 @@ def _comp_range(comp_min: int | None, comp_max: int | None) -> str | None:
     return f"${comp_min:,}" if comp_min else (f"${comp_max:,}" if comp_max else None)
 
 
-def _cached_system(resume_text: str, domain_vocabulary: tuple[str, ...]) -> list[TextBlockParam]:
+def _cached_system(resume_text: str, domain_vocabulary: tuple[str, ...]) -> str:
     """The stable, cached prefix: instructions + resume + domain vocabulary (one breakpoint)."""
     vocab = ", ".join(domain_vocabulary)
     text = (
         _SYSTEM_PROMPT
         + f"\n\nDomain vocabulary (steers relevance): {vocab}\n\nCANDIDATE RESUME:\n{resume_text}"
     )
-    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
-
-
-def _usage_cost(usage: TokenUsage) -> float:
-    """USD cost for a matching call/run at Sonnet rates (cache-aware; see `TokenUsage.cost`)."""
-    return usage.cost(_SONNET_IN_PER_TOKEN, _SONNET_OUT_PER_TOKEN)
+    return text
 
 
 def match_posting(
-    client: Anthropic,
+    client: StructuredLLM,
     resume_text: str,
     domain_vocabulary: tuple[str, ...],
     posting_text: str,
-) -> tuple[MatchResult, TokenUsage]:
-    """One match call → (validated rationale, real token usage). Cost derives from the usage."""
-    response = client.messages.parse(
-        model=_MODEL,
+) -> StructuredResult[MatchResult]:
+    """One match call → validated judgment plus catalog-priced, normalized metadata."""
+    return client.parse(
+        model=_match_model(),
         max_tokens=_MAX_TOKENS,
-        thinking={"type": "adaptive"},
-        output_config=cast(OutputConfigParam, {"effort": _match_effort()}),
         system=_cached_system(resume_text, domain_vocabulary),
-        messages=[{"role": "user", "content": posting_text}],
-        output_format=MatchResult,
+        user=posting_text,
+        response_model=MatchResult,
+        reasoning_effort=_match_effort(),
+        cache_system=True,
     )
-    result = response.parsed_output
-    if result is None:  # refusal / unparseable — surface as a failure for this posting
-        raise ValueError("match returned no parsed output")
-    return result, TokenUsage.from_response(response.usage)
 
 
 def _match_profile(
@@ -240,12 +234,12 @@ def _match_profile(
     profile: Profile,
     *,
     config: VerticalConfig,
-    client: Anthropic,
+    client: StructuredLLM,
     since: datetime | None,
     trigger: MatchTrigger,
     now: datetime,
     max_postings: int | None = None,
-) -> tuple[int, int, TokenUsage]:
+) -> tuple[int, int, TokenUsage, float]:
     """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, usage).
 
     The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
@@ -269,28 +263,30 @@ def _match_profile(
         candidates = candidates[:max_postings]
     matched = 0
     usage = TokenUsage()
+    cost_usd = 0.0
     for candidate in candidates:
         try:
-            result, call_usage = match_posting(
+            call = match_posting(
                 client, profile.resume_text, config.domain_vocabulary, _posting_text(candidate)
             )
         except Exception as exc:  # deliberate per-posting isolation boundary (logged)
             logger.warning("match failed for posting %s: %r", candidate.posting_id, exc)
             continue
-        usage = usage + call_usage
+        usage = usage + call.usage
+        cost_usd += call.cost_usd
         with begin(engine) as conn:
             save_match(
                 conn,
                 candidate.posting_id,
                 profile.id,
                 profile.resume_version,
-                fields_to_columns(result),
-                model=_MODEL,
+                fields_to_columns(call.value),
+                model=call.model,
                 trigger=trigger.value,
                 now=now,
             )
         matched += 1
-    return len(candidates), matched, usage
+    return len(candidates), matched, usage, cost_usd
 
 
 def run_matching(
@@ -298,7 +294,7 @@ def run_matching(
     vertical: str,
     *,
     config: VerticalConfig,
-    client: Anthropic | None = None,
+    client: StructuredLLM | None = None,
     now: datetime | None = None,
 ) -> MatchingSummary:
     """Match every Stage-A/B-surviving, unmatched posting for `vertical` against each active resume.
@@ -307,12 +303,13 @@ def run_matching(
     the 5-day cap is the backfill's job (`run_backfill`). `client` is injected for offline tests.
     """
     stamp = now or datetime.now(UTC)
-    cli = client or Anthropic()
+    cli = client or LiteLLMClient()
     profiles = active_profiles(engine, vertical)
     total = matched = 0
     usage = TokenUsage()
+    cost_usd = 0.0
     for profile in profiles:
-        prof_total, prof_matched, prof_usage = _match_profile(
+        prof_total, prof_matched, prof_usage, prof_cost = _match_profile(
             engine,
             vertical,
             profile,
@@ -325,6 +322,7 @@ def run_matching(
         total += prof_total
         matched += prof_matched
         usage = usage + prof_usage
+        cost_usd += prof_cost
 
     return MatchingSummary(
         vertical=vertical,
@@ -332,7 +330,7 @@ def run_matching(
         total=total,
         matched=matched,
         failed=total - matched,
-        est_cost_usd=_usage_cost(usage),
+        est_cost_usd=cost_usd,
         usage=usage,
     )
 
@@ -343,7 +341,7 @@ def run_backfill(
     profile: Profile,
     *,
     config: VerticalConfig,
-    client: Anthropic | None = None,
+    client: StructuredLLM | None = None,
     now: datetime | None = None,
 ) -> MatchingSummary:
     """Signup catch-up (D-024/D-039): match one new profile against the *recent* open set.
@@ -356,10 +354,10 @@ def run_backfill(
     offline tests. Intended caller: the signup upload flow (one profile); nightly stays uncapped.
     """
     stamp = now or datetime.now(UTC)
-    cli = client or Anthropic()
+    cli = client or LiteLLMClient()
     since = stamp - timedelta(days=_BACKFILL_WINDOW_DAYS)
     try:
-        total, matched, usage = _match_profile(
+        total, matched, usage, cost_usd = _match_profile(
             engine,
             vertical,
             profile,
@@ -381,7 +379,7 @@ def run_backfill(
         total=total,
         matched=matched,
         failed=total - matched,
-        est_cost_usd=_usage_cost(usage),
+        est_cost_usd=cost_usd,
         usage=usage,
     )
 
@@ -400,7 +398,7 @@ def match_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    load_dotenv()  # load `.env` (ANTHROPIC_API_KEY) before constructing the Anthropic client
+    load_dotenv()  # load provider credentials + model routes before constructing the LLM client
     engine = get_engine()
     verticals = [args.vertical] if args.vertical else available_verticals()
     for vertical in verticals:
@@ -435,7 +433,7 @@ def backfill_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    load_dotenv()  # load `.env` (ANTHROPIC_API_KEY) before constructing the Anthropic client
+    load_dotenv()  # load provider credentials + model routes before constructing the LLM client
     engine = get_engine()
     cfg = load_vertical_config(args.vertical)
     profiles = [

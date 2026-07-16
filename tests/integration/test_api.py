@@ -270,7 +270,7 @@ def test_auth_required_blocks_anonymous(
 
 # --- résumé upload + signup backfill (Phase 9.3, D-057) --------------------------------------
 # The first write endpoint. require_user is overridden (the OAuth dance is pinned in test_auth.py)
-# and run_backfill is patched out so the BackgroundTask doesn't reach the real Anthropic client
+# and run_backfill is patched out so the BackgroundTask doesn't reach the real provider client
 # (TestClient runs background tasks synchronously after the response).
 
 _TEXT_FILE = {"file": ("resume.txt", b"Jane Engineer. Python, grid software.", "text/plain")}

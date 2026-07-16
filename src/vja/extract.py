@@ -1,10 +1,10 @@
 """Layer-2 LLM extraction (P5.2) — the first model code in the system.
 
 Turns the unstructured postings Stage A kept in-scope into the structured fields matching needs,
-using the cheap tier (Haiku 4.5 — D-005 cost discipline) and `client.messages.parse` for a
-schema-validated result. Runs only on open postings with `extracted_at IS NULL` that pass the free
-Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once, then pennies a
-night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
+using the configured cheap tier (Haiku 4.5 by default — D-005) through the provider-neutral LLM
+boundary for a schema-validated result. Runs only on open postings with `extracted_at IS NULL` that
+pass the free Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once,
+then pennies a night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
 
 Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy,
 Paylocity, Phenom, BambooHR —
@@ -19,13 +19,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from anthropic import Anthropic
-from anthropic.types import TextBlockParam
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
@@ -44,19 +43,22 @@ from vja.fetchers.phenom import PhenomFetcher
 from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
+from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult
 from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
 
 logger = logging.getLogger("vja.extract")
 
-_MODEL = (
-    "claude-haiku-4-5"  # cheap tier (D-005); bump to Sonnet only if evals show it underperforms
-)
+_DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 _MAX_TOKENS = 1024
 _MAX_SOURCE_CHARS = 12_000  # ~3-4k tokens; caps a pathologically large payload
-_HAIKU_IN_PER_TOKEN = 1.0 / 1_000_000  # $1 / MTok input
-_HAIKU_OUT_PER_TOKEN = 5.0 / 1_000_000  # $5 / MTok output
+
+
+def _extract_model() -> str:
+    """LiteLLM model route, read at call time so deployments can switch without code changes."""
+    return os.environ.get("VJA_EXTRACT_MODEL") or _DEFAULT_MODEL
+
 
 _SYSTEM_PROMPT = """\
 You extract structured fields from a single job posting (given as the raw ATS payload). Report
@@ -75,10 +77,6 @@ only what the posting states; use the unknown/empty value when a field is absent
 # 4.5's minimum cacheable prefix is 4096 tokens and this prompt is well under that, so it likely
 # won't trigger today — kept as the correct pattern (the token meter now shows whether it caches).
 # The real extraction lever (unique descriptions are uncacheable) is the Batch API, not caching.
-_SYSTEM: list[TextBlockParam] = [
-    {"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
-]
-
 DetailResolver = Callable[[Employer, str], dict[str, Any]]
 
 #: The **list-only** ATSs whose list endpoint omits the job description, keyed to the fetcher method
@@ -154,19 +152,16 @@ def _source_text(candidate: ExtractionCandidate, resolve_detail: DetailResolver)
     return f"Title: {candidate.title}\n\n{blob}"
 
 
-def extract_posting(client: Anthropic, source_text: str) -> tuple[ExtractedFields, TokenUsage]:
-    """One extraction call → (validated fields, real token usage). Cost derives from the usage."""
-    response = client.messages.parse(
-        model=_MODEL,
+def extract_posting(client: StructuredLLM, source_text: str) -> StructuredResult[ExtractedFields]:
+    """One extraction call → validated fields plus catalog-priced, normalized metadata."""
+    return client.parse(
+        model=_extract_model(),
         max_tokens=_MAX_TOKENS,
-        system=_SYSTEM,
-        messages=[{"role": "user", "content": source_text}],
-        output_format=ExtractedFields,
+        system=_SYSTEM_PROMPT,
+        user=source_text,
+        response_model=ExtractedFields,
+        cache_system=True,
     )
-    fields = response.parsed_output
-    if fields is None:  # refusal / unparseable — surface as a failure for this posting
-        raise ValueError("extraction returned no parsed output")
-    return fields, TokenUsage.from_response(response.usage)
 
 
 def run_extraction(
@@ -175,7 +170,7 @@ def run_extraction(
     *,
     scope: ScopeConfig,
     prefilter: PrefilterConfig,
-    client: Anthropic | None = None,
+    client: StructuredLLM | None = None,
     resolve_detail: DetailResolver | None = None,
     now: datetime | None = None,
 ) -> ExtractionSummary:
@@ -190,7 +185,7 @@ def run_extraction(
     tests run fully offline.
     """
     stamp = now or datetime.now(UTC)
-    cli = client or Anthropic()
+    cli = client or LiteLLMClient()
     detail = resolve_detail or _default_detail_resolver
 
     candidates = [
@@ -199,16 +194,19 @@ def run_extraction(
     extracted = 0
     failed = 0
     usage = TokenUsage()
+    cost_usd = 0.0
     for candidate in candidates:
         try:
-            fields, call_usage = extract_posting(cli, _source_text(candidate, detail))
+            call = extract_posting(cli, _source_text(candidate, detail))
         except (
             Exception
         ) as exc:  # deliberate per-posting isolation boundary (logged, not swallowed)
             logger.warning("extraction failed for posting %s: %r", candidate.posting_id, exc)
             failed += 1
             continue
-        usage = usage + call_usage
+        fields = call.value
+        usage = usage + call.usage
+        cost_usd += call.cost_usd
         columns = fields_to_columns(fields)
         # Compute the durable in_scope gate on the effective (L1-authoritative) location: the stored
         # L1 value wins when present, else the model's read — matching what save_extraction writes.
@@ -221,7 +219,7 @@ def run_extraction(
                 conn,
                 candidate.posting_id,
                 columns,
-                model=_MODEL,
+                model=call.model,
                 now=stamp,
                 source_updated_at=normalize_ats_date(fields.posted_at),
             )
@@ -232,7 +230,7 @@ def run_extraction(
         total=len(candidates),
         extracted=extracted,
         failed=failed,
-        est_cost_usd=usage.cost(_HAIKU_IN_PER_TOKEN, _HAIKU_OUT_PER_TOKEN),
+        est_cost_usd=cost_usd,
         usage=usage,
     )
 
@@ -251,7 +249,7 @@ def extract_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    load_dotenv()  # load `.env` (ANTHROPIC_API_KEY) before constructing the Anthropic client
+    load_dotenv()  # load provider credentials + model routes before constructing the LLM client
     engine = get_engine()
     verticals = [args.vertical] if args.vertical else available_verticals()
     for vertical in verticals:

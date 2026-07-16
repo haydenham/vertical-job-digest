@@ -109,7 +109,7 @@ Values to load:
 
 | Secret | Source |
 |---|---|
-| `ANTHROPIC_API_KEY` | existing (Layer-2 extraction + matching) |
+| `ANTHROPIC_API_KEY` | existing (current LiteLLM Layer-2 default routes) |
 | `OPENAI_API_KEY` | GPT-5.6 Terra (ready-but-off Layer-3 discovery Job) |
 | `RESEND_API_KEY` | existing (digest + alert email) |
 | `VJA_DATABASE_URL` | Neon, `+psycopg` rewritten (§3) |
@@ -123,6 +123,11 @@ Values to load:
 `VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`, `VJA_PUBLIC_BASE_URL=https://role-feed.com`,
 `VJA_FRONTEND_DIST=/app/frontend/dist` (already the image default, D-060). `VJA_CORS_ORIGINS` stays unset
 (SPA is same-origin in prod).
+
+Layer-2 routes default in code to `anthropic/claude-haiku-4-5` (extraction) and
+`anthropic/claude-sonnet-4-6` (matching), so D-090 Block 1 adds no Cloud Run env or secret. A later cutover must
+mount its provider key in both complete `ship.sh` secret lists and set `VJA_EXTRACT_MODEL` and/or
+`VJA_MATCH_MODEL` as preserved non-secret env; do not switch a route before its eval block is approved.
 
 > Cloud Run's runtime service account needs `roles/secretmanager.secretAccessor` to read these — granted
 > at the 9.5d deploy when the service account is known.

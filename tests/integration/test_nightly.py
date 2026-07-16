@@ -2,7 +2,7 @@
 
 Real migrated SQLite; fetchers faked via the injected `resolve_fetcher` (as in
 `tests/system/test_run_pipeline.py`); the Layer-2 LLM pass faked via the injected `run_layer2`
-(so no Anthropic client is constructed); Resend stubbed by respx; verification faked. Pins the
+(so no real provider client is constructed); Resend stubbed by respx; verification faked. Pins the
 composition contracts: a happy run extracts+matches, sends the per-profile digest with rationale
 and does NOT alert; the LLM totals land on the run row; a failed digest send flips the run to
 `failed` and fires an alert email; a pipeline failure alerts even when the digest skips; an empty
@@ -54,8 +54,8 @@ def _resolver(fetcher: FakeFetcher):  # type: ignore[no-untyped-def]
 def _fake_layer2(engine: Engine, vertical: str, *, client: object, now: datetime) -> Layer2Summary:
     """Stand in for extraction+matching: write a relevant match for every unmatched open posting.
 
-    Mirrors what the real Layer-2 pass yields (a `matches` row per surviving posting), without an
-    Anthropic call — so the digest has rationale to render and the run records non-zero LLM totals.
+    Mirrors what the real Layer-2 pass yields (a `matches` row per surviving posting), without a
+    provider call — so the digest has rationale to render and the run records non-zero LLM totals.
     """
     open_ids_stmt = (
         select(postings.c.id)

@@ -9,14 +9,14 @@ posting's failure is isolated; cost is summed; multiple active profiles are each
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from anthropic import Anthropic
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
 from vja.db.profiles import upsert_profile
 from vja.db.schema import employers, matches, postings
+from vja.llm import StructuredLLM, StructuredResult
 from vja.match import MatchResult, run_matching
-from vja.models import Verdict
+from vja.models import TokenUsage, Verdict
 from vja.scope import ScopeConfig
 from vja.verticals import VerticalConfig
 
@@ -34,44 +34,32 @@ _CONFIG = VerticalConfig(
 )
 
 
-class _FakeMessages:
-    def __init__(
-        self, fail_titles: frozenset[str], result_payload: dict[str, Any] | None = None
-    ) -> None:
-        self._fail_titles = fail_titles
-        self._result_payload = result_payload
-        self.calls = 0
-
-    def parse(self, **kwargs: Any) -> Any:
-        self.calls += 1
-        content = kwargs["messages"][0]["content"]
-        if any(t in content for t in self._fail_titles):
-            parsed = None
-        elif self._result_payload is not None:
-            parsed = kwargs["output_format"].model_validate(self._result_payload)
-        else:
-            parsed = _RESULT
-
-        class _U:
-            input_tokens = 900
-            output_tokens = 150
-            cache_creation_input_tokens = 0
-            cache_read_input_tokens = 0
-
-        class _R:
-            parsed_output = parsed
-            usage = _U()
-
-        return _R()
-
-
 class _FakeClient:
     def __init__(
         self,
         fail_titles: frozenset[str] = frozenset(),
         result_payload: dict[str, Any] | None = None,
     ) -> None:
-        self.messages = _FakeMessages(fail_titles, result_payload)
+        self._fail_titles = fail_titles
+        self._result_payload = result_payload
+        self.calls = 0
+
+    def parse(self, **kwargs: Any) -> StructuredResult[MatchResult]:
+        self.calls += 1
+        content = kwargs["user"]
+        if any(t in content for t in self._fail_titles):
+            raise ValueError("LLM returned no structured content")
+        elif self._result_payload is not None:
+            parsed = kwargs["response_model"].model_validate(self._result_payload)
+        else:
+            parsed = _RESULT
+        return StructuredResult(
+            value=parsed,
+            usage=TokenUsage(input=900, output=150),
+            cost_usd=0.00495,
+            model="claude-sonnet-4-6-actual",
+            latency_seconds=0.1,
+        )
 
 
 def _employer(engine: Engine, *, vertical: str, name: str) -> int:
@@ -151,7 +139,7 @@ def _run(engine: Engine, client: _FakeClient | None = None):  # type: ignore[no-
         engine,
         _VERTICAL,
         config=_CONFIG,
-        client=cast("Anthropic", client or _FakeClient()),
+        client=cast("StructuredLLM", client or _FakeClient()),
         now=_NOW,
     )
 
@@ -169,7 +157,8 @@ def test_matches_only_in_scope_stage_b_survivors(migrated_engine: Engine) -> Non
         row = conn.execute(select(matches)).mappings().one()
     assert row["profile_id"] == profile_id
     assert row["verdict"] == "yes" and row["score"] == 70
-    assert row["trigger"] == "nightly" and row["model_version"] == "claude-sonnet-4-6"
+    assert row["trigger"] == "nightly"
+    assert row["model_version"] == "claude-sonnet-4-6-actual"  # upstream response, not route
 
 
 def test_rerun_is_idempotent(migrated_engine: Engine) -> None:

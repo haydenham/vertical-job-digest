@@ -153,7 +153,7 @@ pillar** (Hayden's call — folded in rather than a separate day).
   3. **Resend / deliverability** — sending volume limits, domain reputation, bounce handling on the verified
      `role-feed.com` sender.
   4. **Google OAuth** — consent-screen/verification status, user cap, quota.
-  5. **Anthropic / LLM spend** — read the **real nightly token numbers** now persisted to `pipeline_runs`
+  5. **Provider-neutral LLM spend** — read the **real nightly token numbers** now persisted to `pipeline_runs`
      (D-069's four token columns). **D-085 sequencing:** first explain/fix the abnormal new/closed identity
      churn; D-088 lands the conservative snapshot-integrity fix and adds the attribution logs. **Message
      Batches are deferred** because a batch may take up to 24 hours and postings are time-sensitive. Observe
@@ -161,6 +161,10 @@ pillar** (Hayden's call — folded in rather than a separate day).
      **extraction batching first** (input-bound and uncacheable). Matching already showed roughly 84–93%
      cache hits on most measured nights and is not the first target. Set spend guardrails beyond the
      existing backfill cap + daily ceiling (D-057, D-088).
+- **Accepted pre-beta/Robotics optimization program (D-090, `docs/19`):** July 17/18 observation → embedded
+  LiteLLM boundary at Anthropic parity → expanded multi-model eval + missing CI eval repair → separately
+  approved extraction cutover → matching cutover → chosen-model `no`-output optimization. Candidate names and
+  vendor benchmark claims are not decisions; exact availability, price, latency, and task quality are measured.
 - **DoD:** a written scaling doc (thresholds + "what breaks first" + the Block-2 decision); any guardrail
   config that's cheap to land now. Reads `docs/11` (portability ledger) as the baseline.
 
@@ -216,6 +220,8 @@ does not block broader beta by itself.
 - Resolve the live robotics promise mismatch (ship the config or remove the public claim).
 - Land remaining user-facing beta fixes and minimum Cloud Job monitoring.
 - Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
+- Complete D-090's LLM optimization blocks through the chosen-model `no`-output decision; this precedes both
+  broader beta launch and the Robotics vertical.
 - Execute already-validated no-code employer activations.
 
 Scheduled discovery and the remaining generic-fetcher roadmap are explicitly outside this exit gate.

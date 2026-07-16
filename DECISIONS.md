@@ -1647,3 +1647,29 @@ rationale, records the call's normal usage, saves the match once, and prevents t
 again merely because its score missed the boundary. Regression coverage pins both boundaries, logging, strict
 wrong-type failure, persistence, and next-run idempotency. **Status:** built on
 `fix/match-score-boundary`; Hayden owns commit/PR. References D-007, D-021, D-035, D-069, D-085.
+
+### D-090 · LLM optimization · Embedded LiteLLM boundary first; model cutovers require separate eval gates · accepted · 2026-07-16
+Claude Sonnet and Haiku currently produce trusted output, but their fixed provider-specific integration and
+hardcoded prices make it costly to test whether a cheaper model can preserve quality. Hayden approved a
+sequenced pre-beta/Robotics optimization program (plan of record: `docs/19-llm-optimization-plan.md`): observe
+the D-088 production fix first; build a provider-neutral boundary at Anthropic parity; expand the synthetic
+multi-model eval and repair its missing path-filtered CI job; then decide extraction, matching, and `no`-output
+cutovers as separate reviewed blocks.
+
+**Block-1 decision:** embed the LiteLLM Python SDK (no proxy/router). `vja.llm` owns transport, structured
+parsing, mutually exclusive token/cache normalization, LiteLLM catalog cost, actual upstream model, latency,
+and request ID. Extraction and matching depend only on its typed local contract. Call-time routes default to
+`VJA_EXTRACT_MODEL=anthropic/claude-haiku-4-5` and
+`VJA_MATCH_MODEL=anthropic/claude-sonnet-4-6`; Sonnet keeps `VJA_MATCH_EFFORT=medium`, which LiteLLM maps to
+Anthropic adaptive thinking plus output effort. The current prompts, schemas, cache breakpoint, max tokens,
+D-089 clamp, isolation, idempotency, and existing DB schema remain unchanged. The actual response model is
+persisted and returned catalog costs are aggregated into the existing nightly ledger.
+
+Unsupported parameters or missing pricing/usage fail loudly: parameter dropping is disabled, a nonempty paid
+response may not become `$0`, and there is no automatic routing, fallback, or new retry policy. No model,
+prompt, schema, secret, provider, database, discovery-agent, or `no`-verdict behavior changes in Block 1.
+The existing Anthropic eval is a manual parity gate here. D-020/D-021's path-filtered eval policy remains the
+target, but the current CI workflow has no eval job; Block 2 must restore it with the expanded harness before a
+model cutover. This supersedes D-011's direct-Anthropic-SDK implementation choice and amends D-035/D-036's
+fixed model names into eval-gated configured defaults, without changing today's models. References D-005,
+D-007, D-020, D-021, D-035, D-036, D-069, D-088, D-089.

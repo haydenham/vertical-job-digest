@@ -1,4 +1,4 @@
-"""Unit tests for LLM matching (P5.3) — fully offline (the Anthropic client is faked).
+"""Unit tests for LLM matching (P5.3) — fully offline (the LLM boundary is faked).
 
 Pins the pure pieces: the result→column mapping (lists → JSON text, enum → value), cache-aware
 cost math from token usage, the cached-prefix prompt shape, and the no-parsed-output failure path.
@@ -10,16 +10,15 @@ from typing import Any, cast
 from unittest.mock import call, patch
 
 import pytest
-from anthropic import Anthropic
 from pydantic import ValidationError
 
+from vja.llm import StructuredLLM, StructuredResult
 from vja.match import (
     MatchResult,
-    _usage_cost,
     fields_to_columns,
     match_posting,
 )
-from vja.models import Verdict
+from vja.models import TokenUsage, Verdict
 
 _RESULT = MatchResult(
     verdict=Verdict.YES,
@@ -30,33 +29,23 @@ _RESULT = MatchResult(
 )
 
 
-class _FakeUsage:
-    def __init__(self) -> None:
-        self.input_tokens = 1000
-        self.output_tokens = 200
-        self.cache_creation_input_tokens = 0
-        self.cache_read_input_tokens = 4000
-
-
-class _FakeResponse:
-    def __init__(self, parsed: MatchResult | None) -> None:
-        self.parsed_output = parsed
-        self.usage = _FakeUsage()
-
-
-class _FakeMessages:
+class _FakeClient:
     def __init__(self, parsed: MatchResult | None) -> None:
         self._parsed = parsed
         self.calls: list[dict[str, Any]] = []
 
-    def parse(self, **kwargs: Any) -> _FakeResponse:
+    def parse(self, **kwargs: Any) -> StructuredResult[MatchResult]:
         self.calls.append(kwargs)
-        return _FakeResponse(self._parsed)
-
-
-class _FakeClient:
-    def __init__(self, parsed: MatchResult | None = _RESULT) -> None:
-        self.messages = _FakeMessages(parsed)
+        if self._parsed is None:
+            raise ValueError("LLM returned no structured content")
+        return StructuredResult(
+            value=self._parsed,
+            usage=TokenUsage(input=1000, output=200, cache_read=4000),
+            cost_usd=0.0072,
+            model="claude-sonnet-4-6",
+            latency_seconds=0.5,
+            request_id="req-match",
+        )
 
 
 def test_fields_to_columns_maps_lists_to_json_and_enum_to_value() -> None:
@@ -92,41 +81,51 @@ def test_match_result_does_not_repair_wrong_score_type() -> None:
 
 
 def test_match_posting_returns_result_and_real_token_usage() -> None:
-    client = cast("Anthropic", _FakeClient())
-    result, usage = match_posting(client, "resume", ("power markets",), "Title: SWE")
-    assert result is _RESULT
+    call = match_posting(
+        cast("StructuredLLM", _FakeClient(_RESULT)),
+        "resume",
+        ("power markets",),
+        "Title: SWE",
+    )
+    assert call.value is _RESULT
     # The meter reads the raw usage fields (D-069), not a proxy.
-    assert (usage.input, usage.output, usage.cache_read, usage.cache_write) == (1000, 200, 4000, 0)
-    # 1000 in × $3/MTok + 200 out × $15/MTok + 4000 cache_read × 0.1 × $3/MTok
-    expected = 1000 * 3e-6 + 200 * 15e-6 + 4000 * 0.1 * 3e-6
-    assert _usage_cost(usage) == pytest.approx(expected)
+    assert (call.usage.input, call.usage.output, call.usage.cache_read) == (1000, 200, 4000)
+    assert call.cost_usd == pytest.approx(0.0072)  # catalog cost crosses the boundary unchanged
 
 
 def test_match_posting_passes_effort_default_and_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = _FakeClient()
-    match_posting(cast("Anthropic", client), "resume", (), "Title: SWE")
-    assert client.messages.calls[0]["output_config"] == {"effort": "medium"}  # D-069 default
+    client = _FakeClient(_RESULT)
+    match_posting(cast("StructuredLLM", client), "resume", (), "Title: SWE")
+    assert client.calls[0]["model"] == "anthropic/claude-sonnet-4-6"
+    assert client.calls[0]["reasoning_effort"] == "medium"  # D-069 default
 
     monkeypatch.setenv("VJA_MATCH_EFFORT", "low")
-    client2 = _FakeClient()
-    match_posting(cast("Anthropic", client2), "resume", (), "Title: SWE")
-    assert client2.messages.calls[0]["output_config"] == {"effort": "low"}  # env-overridable knob
+    client2 = _FakeClient(_RESULT)
+    match_posting(cast("StructuredLLM", client2), "resume", (), "Title: SWE")
+    assert client2.calls[0]["reasoning_effort"] == "low"  # env-overridable knob
+
+
+def test_match_posting_model_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VJA_MATCH_MODEL", "openai/test-match")
+    client = _FakeClient(_RESULT)
+    match_posting(cast("StructuredLLM", client), "resume", (), "Title: SWE")
+    assert client.calls[0]["model"] == "openai/test-match"
 
 
 def test_cached_system_carries_resume_and_cache_control() -> None:
-    client = _FakeClient()
-    match_posting(cast("Anthropic", client), "MY RESUME TEXT", ("dispatch",), "Title: SWE")
-    call = client.messages.calls[0]
+    client = _FakeClient(_RESULT)
+    match_posting(cast("StructuredLLM", client), "MY RESUME TEXT", ("dispatch",), "Title: SWE")
+    call = client.calls[0]
     system = call["system"]
-    assert system[0]["cache_control"] == {"type": "ephemeral"}  # the cached stable prefix
-    assert "MY RESUME TEXT" in system[0]["text"]
-    assert "dispatch" in system[0]["text"]  # domain vocabulary steers relevance
-    assert call["messages"][0]["content"] == "Title: SWE"  # per-posting text is the volatile half
+    assert call["cache_system"] is True  # boundary applies one provider cache breakpoint
+    assert "MY RESUME TEXT" in system
+    assert "dispatch" in system  # domain vocabulary steers relevance
+    assert call["user"] == "Title: SWE"  # per-posting text is the volatile half
 
 
 def test_match_posting_raises_on_no_parsed_output() -> None:
-    client = cast("Anthropic", _FakeClient(parsed=None))
-    with pytest.raises(ValueError, match="no parsed output"):
-        match_posting(client, "resume", (), "Title: SWE")
+    client = _FakeClient(parsed=None)
+    with pytest.raises(ValueError, match="no structured content"):
+        match_posting(cast("StructuredLLM", client), "resume", (), "Title: SWE")

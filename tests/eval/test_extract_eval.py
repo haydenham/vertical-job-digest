@@ -10,10 +10,10 @@ touches the extraction prompt/schema; a regression here blocks the merge.
 import os
 
 import pytest
-from anthropic import Anthropic
 from dotenv import load_dotenv
 
 from vja.extract import extract_posting
+from vja.llm import LiteLLMClient
 from vja.models import Level, RemoteType
 
 load_dotenv()
@@ -32,7 +32,8 @@ requires US work authorization; we are unable to provide visa sponsorship.
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
 def test_extract_obvious_senior_us_role() -> None:
-    fields, usage = extract_posting(Anthropic(), _POSTING)
+    call = extract_posting(LiteLLMClient(), _POSTING)
+    fields, usage = call.value, call.usage
 
     # Structural: a schema-valid result with real metered tokens (D-069).
     assert isinstance(fields.level, Level)

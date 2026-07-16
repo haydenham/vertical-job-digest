@@ -175,6 +175,10 @@ then built on `feat/onboarding-tutorial`.**
   deferred because the product is time-sensitive. The July 16 run started before #88 merged; use
   July 17 and 18 as the two production observation nights, then re-measure and reconsider
   extraction-first batching only if spend remains material.
+- **LLM optimization follow-on (D-090, active; plan `docs/19`):** keep the July 17/18 D-088 observation
+  window, then sequence provider boundary → multi-model eval/CI repair → extraction choice → matching choice
+  → chosen-model `no`-output optimization. Block 1 preserves Anthropic behavior and adds no provider secret;
+  no candidate model or output-schema change is preselected.
 
 ---
 

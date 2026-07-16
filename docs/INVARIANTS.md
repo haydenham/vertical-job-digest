@@ -19,7 +19,7 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 ## Architecture & code structure
 
 - **Layered imports: lower layers must not import higher ones.** The stack, top→bottom:
-  `nightly` → `pipeline`/`extract`/`match`/`digest`/`discover` → `fetchers`/`verticals` → `db` →
+  `nightly` → `pipeline`/`extract`/`match`/`digest`/`discover` → `fetchers`/`verticals`/`llm` → `db` →
   `prefilter`/`scope`/`dates`/`diff`/`hashing` → `models`. **Machine-enforced** by
   `import-linter` (`uv run lint-imports`; pre-commit + CI). `models` imports nothing.
   *One grandfathered back-edge:* `db.employers → fetchers.registry` (see `pyproject.toml`).
@@ -68,10 +68,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   guarantees an integer but not JSON-Schema numeric bounds; a returned integer outside the range is
   clamped to the nearest boundary and logged before strict final validation. Wrong types and every
   other malformed result still fail per posting; no corrective LLM retry is made. (D-089, D-007)
-- **Model tiering:** Haiku for extraction, Sonnet for match rationale. Extraction is cached
-  by `content_hash`; match prompts are prompt-cached; matching is eval-gated. Sonnet matching runs at
-  **`effort=medium`** (env-overridable `VJA_MATCH_EFFORT`; the lowest eval-passing effort — `high` overspends
-  since thinking bills as output), not the API default `high`. (D-035, D-036, D-069)
+- **Layer-2 model access is provider-neutral and configured, but today's models are unchanged.**
+  `vja.llm` is the sole embedded-LiteLLM boundary; extraction/matching import its typed contract, never a
+  provider SDK. `VJA_EXTRACT_MODEL` defaults to `anthropic/claude-haiku-4-5` and `VJA_MATCH_MODEL` to
+  `anthropic/claude-sonnet-4-6`. Extraction is cached by `content_hash`; matching's stable system prefix is
+  prompt-cached and runs at **`VJA_MATCH_EFFORT=medium`** by default (LiteLLM maps it to Sonnet adaptive
+  thinking + output effort). Any cutover is eval-gated in a separate block. (D-035, D-036, D-069, D-090)
 - **Resume input abstracts to `resume_text`;** non-text formats are a signup-time adapter,
   not pipeline concern. (D-033)
 
@@ -232,7 +234,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (input/output/cache_read/cache_write) is summed per stage and **persisted to `pipeline_runs`**
   (four token columns) + logged as a per-stage nightly line with the matching cache-hit %. The
   `$0.01`-per-match figure survives **only** as the backfill budget-guard proxy (below), not as the spend
-  meter. (D-035, D-036, D-069)
+  meter. Layer 2 uses LiteLLM's catalog cost for the actual response model; missing pricing/usage and a
+  false zero-dollar paid call fail at the per-posting boundary. The actual upstream model is persisted.
+  Parameter dropping, automatic routing/fallback, and a new retry policy are forbidden. (D-035, D-036,
+  D-069, D-090)
 - **Anthropic Message Batches are deferred.** Job delivery is time-sensitive, so extraction and
   matching remain synchronous while the D-088 snapshot-integrity fix is observed and steady-state
   spend is re-measured; batching is reconsidered only if extraction remains material. (D-069,
@@ -259,7 +264,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (D-021)
 - **Default `pytest` suite is fast/offline/free** (unit + integration + system). `live` /
   `e2e` / `eval` are opt-in markers; tests run against captured fixtures, not live ATS.
-  LLM evals are a path-filtered CI merge gate. (D-019, D-020)
+  LLM evals remain the required path-filtered merge policy, but the current CI workflow has drifted and
+  contains no eval job; provider-boundary parity is manually eval-gated in D-090 Block 1 and Block 2 must
+  restore the automated job before any model cutover. (D-019, D-020, D-090)
 - **Definition of Done:** green tests + ruff/format/mypy + import-linter + a human-read
   diff + updated docs, before merge. CI and pre-commit run the same checks. (D-021)
 - **Toolchain is `uv`; the lockfile must stay in sync** (`uv lock --check` in CI). (D-014)
