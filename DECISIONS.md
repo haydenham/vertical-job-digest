@@ -1677,3 +1677,24 @@ D-007, D-020, D-021, D-035, D-036, D-069, D-088, D-089.
 **Implementation status:** Block 1 merged as PR #90 and deployed to the Cloud Run service + nightly Job as
 image `07ed265` on 2026-07-16. Health returned 200, the anonymous postings guard returned 401, and the Job is
 Ready with the existing Anthropic secret, six-hour timeout, zero retries, and no model-route overrides.
+
+### D-091 · Workday incident · Quarantined pagination trace before changing the completeness contract · accepted · 2026-07-17
+The first D-088 production run succeeded once in 33m35s, but 14 otherwise-healthy Workday tenants failed on
+page two with the same HTTP-200 shape: page one reported a nonzero total and page two reported `total=0`.
+GE Vernova's separate missing-title failure remained unchanged. Existing logs preserved the two totals but
+discarded the page rows before the exception, so they could not distinguish valid disjoint pagination from an
+ignored offset, a premature empty page, or malformed rows. Hayden explicitly chose evidence before a contract
+change: do not guess that later zero totals are safe, and do not re-hit a board after the once-daily run.
+
+**Decision:** on the first Workday total mismatch, permanently quarantine that employer snapshot, then finish
+one bounded diagnostic pagination walk against page one's total before raising the original `FetchError`.
+The trace records page/offset/limit, expected and reported totals, row/cumulative/unique counts, overlap and
+malformed-ID counts, a hash of ordered public external IDs, HTTP status/latency/response size/content type,
+safe request-ID headers, and a final `would_complete` summary. It never logs raw payloads, job identities,
+titles, locations, or descriptions. The fetcher has no DB connection; the invalid snapshot is never returned,
+so diffing and posting mutation remain impossible. Stable-total snapshots retain their existing behavior.
+
+The July 18 scheduled run is the live evidence gate; no manual duplicate fetch is added. If zero-total pages
+are complete and disjoint, a later decision can safely define page one as authoritative. Repeats, empties,
+short/over counts, or malformed rows instead point to the corresponding request/mapping defect. This is
+diagnostic instrumentation, not the Workday contract fix. References D-005, D-016, D-021, D-032, D-088.

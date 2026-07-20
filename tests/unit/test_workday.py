@@ -7,6 +7,7 @@ transport/parse/shape failures raise `FetchError`; the apply URL is derived from
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,12 @@ def _page(jobs: list[dict[str, Any]], total: int) -> httpx.Response:
     return httpx.Response(200, json={"total": total, "jobPostings": jobs})
 
 
+def _capture_workday_logs(caplog: pytest.LogCaptureFixture) -> None:
+    # Alembic's test-only fileConfig disables loggers imported before migration tests run.
+    logging.getLogger("vja.fetchers.workday").disabled = False
+    caplog.set_level(logging.INFO, logger="vja.fetchers.workday")
+
+
 @respx.mock
 def test_maps_fixture_jobs() -> None:
     route = respx.post(_ENDPOINT).mock(return_value=_page(_JOBS, total=len(_JOBS)))
@@ -70,8 +77,11 @@ def test_maps_fixture_jobs() -> None:
 
 
 @respx.mock
-def test_pagination_assembles_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pagination_assembles_every_page(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    _capture_workday_logs(caplog)
     jobs = [_job(i) for i in range(5)]
 
     def by_offset(request: httpx.Request) -> httpx.Response:
@@ -84,6 +94,9 @@ def test_pagination_assembles_every_page(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert [p.external_id for p in postings] == [j["externalPath"] for j in jobs]
     assert route.call_count == 3  # offsets 0, 2, 4
+    assert "reported_totals=5,5,5" in caplog.text
+    assert "page_sizes=2,2,1" in caplog.text
+    assert "would_complete=True diagnostic_only=False" in caplog.text
 
 
 @respx.mock
@@ -111,18 +124,98 @@ def test_overcount_fetch_raises_not_partial() -> None:
 
 
 @respx.mock
-def test_total_change_midfetch_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_total_change_midfetch_finishes_quarantined_diagnostic_walk(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    _capture_workday_logs(caplog)
     jobs = [_job(i) for i in range(5)]
 
     def by_offset(request: httpx.Request) -> httpx.Response:
         offset = json.loads(request.content)["offset"]
         return _page(jobs[offset : offset + 2], total=5 if offset == 0 else 6)
 
-    respx.post(_ENDPOINT).mock(side_effect=by_offset)
+    route = respx.post(_ENDPOINT).mock(side_effect=by_offset)
 
     with pytest.raises(FetchError, match="total changed"):
         WorkdayFetcher().fetch(_employer())
+
+    assert route.call_count == 3  # the invalid snapshot still walks to page one's target
+    assert "action=diagnostic_shadow" in caplog.text
+    assert "reported_totals=5,6,6" in caplog.text
+    assert "would_complete=True diagnostic_only=True" in caplog.text
+
+
+@respx.mock
+def test_zero_later_totals_capture_complete_disjoint_shadow_walk(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The July-17 production shape: later totals are zero but rows may still be usable."""
+    monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    _capture_workday_logs(caplog)
+    jobs = [_job(i) for i in range(5)]
+
+    def by_offset(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        return _page(jobs[offset : offset + 2], total=5 if offset == 0 else 0)
+
+    route = respx.post(_ENDPOINT).mock(side_effect=by_offset)
+
+    with pytest.raises(FetchError, match="5 → 0"):
+        WorkdayFetcher().fetch(_employer())
+
+    assert route.call_count == 3
+    assert "reported_totals=5,0,0" in caplog.text
+    assert "page_sizes=2,2,1" in caplog.text
+    assert "collected_rows=5 unique_ids=5 overlap=0" in caplog.text
+    assert "would_complete=True diagnostic_only=True" in caplog.text
+    assert jobs[0]["externalPath"] not in caplog.text  # identities are fingerprinted, not logged
+
+
+@respx.mock
+def test_shadow_walk_identifies_repeated_pages(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    _capture_workday_logs(caplog)
+    first_page = [_job(0), _job(1)]
+
+    def repeats_first_page(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        return _page(first_page, total=5 if offset == 0 else 0)
+
+    route = respx.post(_ENDPOINT).mock(side_effect=repeats_first_page)
+
+    with pytest.raises(FetchError, match="5 → 0"):
+        WorkdayFetcher().fetch(_employer())
+
+    assert route.call_count == 3
+    assert "collected_rows=6 unique_ids=2 overlap=4" in caplog.text
+    assert "would_complete=False diagnostic_only=True" in caplog.text
+
+
+@respx.mock
+def test_shadow_walk_identifies_empty_page_before_target(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(workday, "_PAGE_SIZE", 2)
+    _capture_workday_logs(caplog)
+    first_page = [_job(0), _job(1)]
+
+    def empty_second_page(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        return _page(first_page if offset == 0 else [], total=5 if offset == 0 else 0)
+
+    route = respx.post(_ENDPOINT).mock(side_effect=empty_second_page)
+
+    with pytest.raises(FetchError, match="5 → 0"):
+        WorkdayFetcher().fetch(_employer())
+
+    assert route.call_count == 2
+    assert "reported_totals=5,0" in caplog.text
+    assert "page_sizes=2,0" in caplog.text
+    assert "collected_rows=2 unique_ids=2 overlap=0" in caplog.text
+    assert "would_complete=False diagnostic_only=True" in caplog.text
 
 
 @respx.mock

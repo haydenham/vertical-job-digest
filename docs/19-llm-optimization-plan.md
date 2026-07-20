@@ -10,9 +10,10 @@ Rolefeed must be able to evaluate and change extraction/matching models without 
 changes, then choose both models from measured quality, latency, and catalog cost. This work is a
 beta/Robotics prerequisite, but it must not erase the production evidence from D-088/D-089.
 
-1. **Block 0 — observe (ACTIVE):** July 17 is D-088 production observation night 1 (July 16 began before
-   #88 merged). Compare employer-level churn, stage tokens, cost, failures, and runtime before
-   attributing savings to any model change. July 18 remains observation night 2.
+1. **Block 0 — observe (ACTIVE):** the July 17 audit passed D-086/D-089/D-090, confirmed NextEra's
+   Radancy surge was expected DB catch-up, and exposed 14 Workday tenants reporting `total=0` after a
+   nonzero first page. D-091 adds diagnostic-only shadow pagination; July 18 classifies those responses
+   and remains the NextEra/D-089 second observation. Do not attribute fewer calls to model savings.
 2. **Block 1 — provider boundary (COMPLETE):** embedded LiteLLM preserves the current Anthropic
    models and behavior and replaces provider-specific types/rates with a typed local contract.
    Merged as PR #90 and deployed as image `07ed265` on 2026-07-16.
@@ -35,21 +36,20 @@ Put differently: **three steps remain for testing/selecting new models** (evalua
 choice → matching choice). The `no`-output work is a fourth, separate optimization performed only after the
 matching model is selected.
 
-## Immediate handoff — observe before changing anything
+## Immediate handoff — diagnose Workday before changing its contract
 
-Do not merge/deploy another model, prompt, provider, seed, fetcher, or environment change before reviewing the
-July 17 run. The read-only morning audit covers four recently landed behaviors together:
+The July 17 scheduled run completed once in 33m35s under the D-086 policy; all seven digest sends appeared once,
+health/401 were correct, five `-1` scores clamped without match failures, and LiteLLM stayed on Haiku 4.5/Sonnet
+4.6 with plausible token/cache/catalog cost. Its partial pipeline had 15 failures: GE Vernova's known malformed
+row plus 14 Workday boards whose first nonzero total became zero on page two. Failed boards made no mutations.
+NextEra's 145 new + 121 reopened rows were confirmed as the expected full-board catch-up after D-088 fixed
+Radancy pagination, not fresh hiring churn.
 
-1. **D-088 snapshot integrity:** employer-level fetched/new/reopened/updated/closed/unchanged counts; total-drift,
-   exact-count, duplicate-ID, and recurring GE Vernova failures. Keep production frozen through July 18 when
-   practical so the promised second observation night remains comparable.
-2. **D-089 score normalization:** clamp-warning count and values; no remaining out-of-range validation failures;
-   repaired matches persist and do not return as paid retries.
-3. **D-090 LiteLLM:** actual upstream model IDs remain Haiku 4.5/Sonnet 4.6; no unsupported-parameter, parsing,
-   missing-usage/pricing, or false-zero errors; input/output/cache buckets and catalog cost look plausible against
-   the prior Anthropic baseline.
-4. **D-086 operations:** one scheduled execution/attempt, completion within six hours, expected digest delivery,
-   and no duplicates. Reconfirm service health and anonymous-postings `401`.
+**D-091 diagnostic block:** do not assume the Workday fix. On a total mismatch, the snapshot remains invalid,
+but the fetcher completes one bounded shadow walk and logs page totals/sizes, unique/overlap/malformed counts,
+identity fingerprints, response metadata, and `would_complete`; it then raises before diffing. Deploy this
+instrumentation before July 18 and use only the scheduled run—no manual duplicate board fetch. The next audit
+maps complete/disjoint vs repeated vs empty vs malformed pages to a separately reviewed contract correction.
 
 Block 2 starts only after Hayden reviews that evidence and approves its fixtures, rubric, pass thresholds,
 candidate list, repetition count, and maximum eval spend.

@@ -5,6 +5,32 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-17 — D-091 Workday pagination diagnostics built after morning audit
+
+**Read-only production audit:** July 17 execution `vja-nightly-qcw5d` completed once in 33m35s with zero
+retries; all seven digest sends logged once, health/anonymous-401 passed, five `-1` match scores normalized,
+and LiteLLM stayed on Haiku 4.5/Sonnet 4.6 with plausible `$1.2168` catalog cost. The partial pipeline had
+15/75 fetch failures: GE Vernova's existing missing-title row plus **14 Workday tenants whose first nonzero
+total became zero on page two**. Failed boards made no mutations. Hayden confirmed NextEra's 145 new + 121
+reopened rows were expected old-job DB catch-up from the corrected D-088 Radancy snapshot.
+
+**Built on `fix/workday-pagination-diagnostics` in an isolated worktree (uncommitted; Hayden owns commit/PR):**
+D-091 keeps every changed-total Workday snapshot invalid, but finishes one bounded quarantined pagination walk
+against page one's target before raising the original `FetchError`. Page logs now capture totals/sizes,
+cumulative/unique/overlap/malformed counts, hashed ordered IDs, HTTP/response metadata, and a final
+`would_complete` classification. No raw job identity/payload/content is logged; the invalid list never leaves
+the fetcher, so diff/DB mutation remains impossible. Stable pagination behavior is unchanged. Regression
+coverage distinguishes complete+disjoint zero-total pages, ignored-offset/repeated pages, premature empties,
+and positive total drift; the standing pipeline failure test pins zero mutation.
+
+**Verification + handoff:** focused Workday/pipeline suite **31 passed**; full default suite **555 passed,
+20 opt-in deselected**; ruff format/check, mypy (53 source files), import-linter (1 kept / 0 broken),
+`uv lock --check`, and `git diff --check` are green. D-091, INVARIANTS, docs/05, docs/15, docs/19, and CLAUDE
+are current. No manual board fetch, behavior fix, DB/schema/model/config change, deploy, commit, or PR was
+performed; the separate uncommitted Robotics worktree was untouched. **Next:** Hayden reviews/commits/PRs,
+merge-to-main deploys the trace before July 18, and the normal scheduled run supplies the evidence for a
+separately reviewed Workday contract correction.
+
 ## 2026-07-16 — PR #90 merged/deployed; LLM observation handoff reconciled
 
 **Status-only/docs follow-up on `docs/litellm-post-merge-handoff` (uncommitted; Hayden owns commit/PR):** PR
