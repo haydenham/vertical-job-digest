@@ -1,0 +1,82 @@
+# Vertical config — "a vertical is config" (D-004, docs/06). The employer list lives in
+# data/seed/employers_seed.csv (filtered by `vertical`); this file holds the matching profile,
+# Stage-A scope rules, and Stage-B prefilter knobs.
+key: robotics_software
+
+matching_profile:
+  user_email: haydenham10@gmail.com
+  resume: profiles/hayden_robotics_resume.md   # path relative to config/verticals/
+  domain_vocabulary:                            # steers the match prompt (5.3)
+    - robotics / autonomous systems
+    - ROS / ROS 2
+    - perception / computer vision
+    - localization / SLAM
+    - motion planning
+    - controls
+    - sensor fusion
+    - robot manipulation
+    - embedded systems
+    - real-time systems
+    - simulation
+    - fleet orchestration
+
+# Stage A — free, resume-independent title gate (D-023). Keep a title iff it matches a
+# role_include keyword AND no exclude keyword (whole-word, case-insensitive). The shared
+# software/data baseline is unchanged; the additions catch robotics-specific title families.
+scope:
+  role_include:
+    - software
+    - engineer
+    - developer
+    - data
+    - analyst
+    - scientist
+    - machine learning
+    - programmer
+    - backend
+    - frontend
+    - full stack
+    - fullstack
+    - devops
+    - platform
+    - infrastructure
+    - embedded
+    - firmware
+    - robotics
+    - autonomy
+    - perception
+    - computer vision
+    - controls
+  exclude:
+    # seniority (we target early-career)
+    - senior
+    - sr
+    - staff
+    - principal
+    - lead
+    - manager
+    - director
+    - vp
+    - vice president
+    - head
+    - chief
+    # non-software roles common on robotics / manufacturing whole-company boards
+    - technician
+    - mechanic
+    - machinist
+    - welder
+    - assembler
+    - operator
+    - field service
+    - sales
+    - marketing
+    - recruiter
+    - counsel
+    - attorney
+    - accountant
+    - nurse
+
+# Stage B — cheap deterministic pre-filter before the strong model (D-023; consumed in 5.3).
+prefilter:
+  locations: [US]
+  levels: [intern, new_grad, early_career]

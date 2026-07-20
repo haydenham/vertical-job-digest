@@ -1,7 +1,8 @@
 # Vertical Config Spec
 
-*Build spec for D-004 ("nothing vertical-specific in code"). This is the file the Week-4 energy add must prove:
-spinning up a vertical = one config file + curated seed rows, zero code changes. Any forced code change is a defect.*
+*Build spec for D-004 ("nothing vertical-specific in code"). Aviation proved the architecture test first;
+Robotics repeats it: spinning up a vertical = one config file + curated seed rows + a matching profile, zero
+application-code changes. Any forced application-code change is a defect.*
 
 ## What a vertical is, concretely
 
@@ -11,7 +12,7 @@ A vertical = four data inputs, all outside the code:
 3. **Matching profile** — a resume + a domain vocabulary that steers the match prompt.
 4. **Delivery + pre-filter knobs** — who gets the digest, and the cheap level/location/work-auth filter.
 
-The pipeline iterates over configured verticals; it contains **no** `if vertical == "aviation"` branches.
+The pipeline iterates over configured verticals; it contains **no** per-vertical branches.
 
 ## Directory layout
 
@@ -20,13 +21,15 @@ vertical-job-agent-starter/
   config/
     verticals/
       grid_power_software.yaml
-      aviation_software.yaml        # not yet created
+      aviation_software.yaml
+      robotics_software.yaml
+      profiles/
+        hayden_grid_resume.md
+        hayden_aviation_resume.md
+        hayden_robotics_resume.md
   data/
     seed/
       employers_seed.csv            # all verticals, one file, `vertical` column partitions it
-  profiles/
-    hayden_grid_resume.md           # referenced by a vertical's matching_profile
-    hayden_aviation_resume.md
 ```
 
 ## Vertical config file format
@@ -83,10 +86,11 @@ digest:
 - Nightly loop runs identically per vertical. Cost, diff, extraction, matching, digest are all vertical-agnostic; the
   config is the only thing that differs.
 
-## The Week-4 test (D-002 / D-004)
-Adding aviation must be exactly:
-1. Add aviation rows to `employers_seed.csv` (curation + ATS probe).
-2. Write `config/verticals/aviation_software.yaml`.
-3. Add `profiles/hayden_aviation_resume.md`.
+## The vertical-add test (D-002 / D-004)
+Adding a vertical must be exactly:
+1. Add its rows to `employers_seed.csv` (curation + ATS probe).
+2. Write `config/verticals/<key>.yaml`.
+3. Add the matching profile referenced by that YAML under `config/verticals/profiles/`.
 
-If step 4 ("…and change the code") appears, that's a defect to fix, not a feature to ship.
+Application-code changes are a defect to fix, not part of adding a vertical. Tests and documentation should
+still pin the newly configured input.

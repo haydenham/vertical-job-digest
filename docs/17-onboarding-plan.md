@@ -179,6 +179,10 @@ then built on `feat/onboarding-tutorial`.**
   window, then sequence provider boundary → multi-model eval/CI repair → extraction choice → matching choice
   → chosen-model `no`-output optimization. Block 1 preserves Anthropic behavior and adds no provider secret;
   no candidate model or output-schema change is preselected.
+- **Robotics vertical inputs (branch ready for review):** `robotics_software` adds 30 curated employers, 24 with
+  verified Layer-1 endpoints, plus its YAML and matching profile. This branch does not import Neon data or run
+  discovery. Because `/api/verticals` is config-driven, deploy only with the coordinated seed import/cutover;
+  until then the existing landing promise remains ahead of the picker by design.
 
 ---
 
@@ -190,8 +194,5 @@ then built on `feat/onboarding-tutorial`.**
   ceiling; nightly heals within a day). Revisit only with per-user rate limits + budget rework.
 - **Backend persistence of the tutorial-seen flag** — localStorage is enough for beta.
 - **Mobile pass** — already parked (D-080).
-- **Robotics vertical config** — Hayden's, pre-beta. Hayden reaffirmed 2026-07-14 that the live
-  landing should keep the Robotics promise because the vertical will be added; the picker still
-  cannot offer it until the config lands.
 - Deleting the stale `origin/docs/onboarding-and-shipping-plan` remote branch (its docs/13
   content is on `main`) — Hayden's call.

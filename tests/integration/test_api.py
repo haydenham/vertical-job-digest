@@ -117,7 +117,7 @@ def test_verticals_lists_configured(migrated_engine: Engine) -> None:
     """The picker lists CONFIGURED verticals (config-driven), not ones that already have a profile —
     so a vertical stays joinable with zero profiles in it (the B-4 chicken-and-egg fix, D-064)."""
     got = _client(migrated_engine).get("/api/verticals").json()
-    assert set(got) == {"grid_power_software", "aviation_software"}
+    assert set(got) == {"grid_power_software", "aviation_software", "robotics_software"}
 
 
 def test_default_view_is_matched_only(migrated_engine: Engine) -> None:
