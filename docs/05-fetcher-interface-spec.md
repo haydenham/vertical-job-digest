@@ -63,6 +63,11 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
 - No single public pattern. Each tenant exposes an internal JSON API like
   `POST https://{tenant}.{dc}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs` with a JSON body `{limit, offset, searchText, appliedFacets}`.
 - Requires **per-company config** (tenant, datacenter, site id) stored on the employer row / vertical config, and **loud failure alerts** — these endpoints shift.
+- **D-091 diagnostic mode:** a changed per-page total still invalidates the whole snapshot, but the fetcher
+  finishes a bounded, quarantined walk against page one's target before raising. Per-page logs record counts,
+  identity overlap/fingerprints, response shape, and a final `would_complete` result without raw payloads or
+  job identities. The invalid list is never returned to the pipeline, so this adds evidence but no posting
+  mutation. The July 18 scheduled run decides the later-total contract; no fix is assumed here.
 - `external_id` = Workday's `bulletFields`/`externalPath` job id. Treat as best-effort; verify the apply link survives.
 - Most seed `unverified` rows (the big utilities/banks/exchanges) will land here.
 

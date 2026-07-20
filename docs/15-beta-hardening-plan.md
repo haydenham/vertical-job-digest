@@ -131,8 +131,11 @@ test** (D-021).
    diffing. Paginated totals are now stable+exact, and duplicate IDs fail before any DB mutation;
    changed/failed employer outcomes are logged for attribution. This closes the known vulnerability,
    not the entire causal diagnosis. The July 16 run started before #88 merged, so it is a pre-fix
-   baseline; July 17 and 18 are observation nights 1 and 2. Compare employer-level churn before
-   deciding whether a full-board bookend/anomaly-confirmation pass is warranted.
+   baseline. The July 17 audit confirmed NextEra's large new/reopened count was the corrected Radancy
+   snapshot catching the DB up, but also found **14 Workday tenants failing `nonzero → 0` on page two**.
+   D-091 adds a fail-closed diagnostic shadow walk—no contract change or DB mutation—so July 18 records
+   whether those offset pages are complete/disjoint, repeated, empty, or malformed. Compare that evidence
+   plus NextEra's steady-state churn before choosing the Workday correction or any broader bookend pass.
    *(This item gates intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
 4. **Match-score boundary guard ✅ (D-089, built on `fix/match-score-boundary`):** the July 16
    shakeout found 26 otherwise-valid match results discarded for negative scores, with 56 occurrences
