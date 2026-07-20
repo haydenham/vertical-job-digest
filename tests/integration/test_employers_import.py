@@ -72,6 +72,27 @@ def test_new_curated_employers_are_mapped_correctly(migrated_engine: Engine) -> 
     assert rows["The Brattle Group"]["verification"] == "verified"
 
 
+def test_robotics_employers_are_mapped_correctly(migrated_engine: Engine) -> None:
+    import_employers_from_csv(migrated_engine, _SEED)
+    with migrated_engine.connect() as conn:
+        rows = {
+            row["name"]: row
+            for row in conn.execute(
+                select(employers).where(
+                    employers.c.name.in_(["Boston Dynamics", "Cobot", "iRobot"])
+                )
+            ).mappings()
+        }
+
+    assert rows["Boston Dynamics"]["vertical"] == "robotics_software"
+    assert rows["Boston Dynamics"]["ats_type"] == "workday"
+    assert rows["Boston Dynamics"]["endpoint"].endswith("/Boston_Dynamics/jobs")
+    assert rows["Cobot"]["ats_type"] == "ashby"
+    assert rows["Cobot"]["ats_slug"] == "cobot"
+    assert rows["iRobot"]["ats_type"] == "custom"
+    assert rows["iRobot"]["verification"] == "layer2"
+
+
 def test_reimport_is_idempotent(migrated_engine: Engine) -> None:
     import_employers_from_csv(migrated_engine, _SEED)
     before = count_employers(migrated_engine)
@@ -122,10 +143,12 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # offset cap → Layer 2; iCIMS legacy-portal Alaska/Joby have no Jibe API and Oracle Con Edison
     # fails paginate-or-fail (61 of 62) → Layer 2; Delta/Avature is bot-challenged → Layer 2;
     # NRG/National Grid/L3Harris Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
-    assert len(fetchable) == 51
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 8
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 3
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 22
+    # Robotics adds 24 verified Layer-1 rows: 10 Greenhouse, 5 Lever, 8 Ashby, 1 Workday.
+    assert len(fetchable) == 75
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 18
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 9
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 11
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 23
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
     assert sum(1 for e in fetchable if e.ats_type == AtsType.SMARTRECRUITERS) == 1
@@ -156,3 +179,18 @@ def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Eng
     assert by_type[AtsType.PHENOM] == 1  # United (D-076)
     assert by_type[AtsType.ORACLE_HCM] == 1  # Honeywell (2026-07-12 coverage audit)
     assert all(e.ats_slug or e.endpoint for e in aviation)  # slug-derived or explicit endpoint
+
+
+def test_robotics_vertical_is_fetchable_without_code_change(migrated_engine: Engine) -> None:
+    """D-004: Robotics resolves entirely through the same config/seed path as prior verticals."""
+    import_employers_from_csv(migrated_engine, _SEED)
+
+    robotics = active_fetchable_employers(migrated_engine, vertical="robotics_software")
+    by_type = Counter(e.ats_type for e in robotics)
+
+    assert len(robotics) == 24
+    assert by_type[AtsType.GREENHOUSE] == 10
+    assert by_type[AtsType.LEVER] == 5
+    assert by_type[AtsType.ASHBY] == 8
+    assert by_type[AtsType.WORKDAY] == 1
+    assert all(e.ats_slug or e.endpoint for e in robotics)

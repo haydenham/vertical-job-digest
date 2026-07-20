@@ -31,6 +31,28 @@ performed; the separate uncommitted Robotics worktree was untouched. **Next:** H
 merge-to-main deploys the trace before July 18, and the normal scheduled run supplies the evidence for a
 separately reviewed Workday contract correction.
 
+## 2026-07-16 — Robotics vertical starter inputs built
+
+**Built on `feat/robotics-vertical-seed` (uncommitted; Hayden owns commit/PR):** added the approved
+`robotics_software` starter universe: 30 manually curated employers across humanoid/embodied AI,
+warehouse/logistics, industrial/manufacturing, field/construction/agriculture/inspection, and
+medical/service/consumer robotics. Twenty-four boards were live-verified through existing generic Layer-1
+fetchers (10 Greenhouse, 5 Lever, 8 Ashby, 1 Workday); five unresolved enterprise portals route honestly to
+Layer 2 and Universal Robots remains detected SuccessFactors. Existing Aviation/Grid companies were not
+duplicated. Multi-vertical employer membership remains explicitly out of scope for a separate design PR.
+
+**Config/profile/tests/docs:** added the Robotics YAML using the existing US + early-career prefilter and
+seniority exclusions, with only Robotics-specific Stage-A title vocabulary added; the filtering system itself
+did not change. Added the required Robotics-tilted Hayden profile, real-config loader coverage, API picker
+coverage, and seed-import/fetchable-subset coverage. Updated docs/06, docs/17, and the seed guide. No `src/`,
+schema, migration, frontend, database import, production deploy, LLM call, discovery run, commit, or PR was
+performed. **Cutover remains later:** import the CSV into Neon and establish the initial baseline before the
+config deploy exposes Robotics through config-driven `/api/verticals`. **Verification:** focused config/import/
+API coverage is green; the full default suite is **555 passed, 20 opt-in deselected**; ruff format/check, mypy,
+import-linter (1 kept / 0 broken), `uv lock --check`, and `git diff --check` are green. **Next:** Hayden reviews,
+commits, and opens the PR; run/import/discovery operations wait for the approved LLM-cost work and explicit
+production cutover.
+
 ## 2026-07-16 — PR #90 merged/deployed; LLM observation handoff reconciled
 
 **Status-only/docs follow-up on `docs/litellm-post-merge-handoff` (uncommitted; Hayden owns commit/PR):** PR

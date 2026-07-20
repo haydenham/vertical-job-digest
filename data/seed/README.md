@@ -27,7 +27,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 ## Columns
 | column | who fills | values | notes |
 |---|---|---|---|
-| `vertical` | Hayden | `aviation_software` \| `grid_power_software` | which vertical this employer belongs to |
+| `vertical` | Hayden | `aviation_software` \| `grid_power_software` \| `robotics_software` | which vertical this employer belongs to |
 | `name` | Hayden | free text | company display name |
 | `tier` | Hayden | `Tier 1`…`Tier 5` \| `Bonus` | priority signal; drives crawl ordering / volume estimates |
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
@@ -47,14 +47,14 @@ For Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR/Pinpoint the fetche
 for provider-backed custom domains (Aurora's Pinpoint board). For Workday, Paylocity, and Phenom,
 `endpoint` holds the per-tenant URL/config. Portal-detected and custom rows carry `careers_url`.
 
-## Current seed status (grid/power vertical, 54 employers)
+## Current seed status (grid/power vertical, 56 employers)
 After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8
 iCIMS/Workable/SmartRecruiters/Oracle/Radancy onboards:
-- **34 verified**: Greenhouse (5), Lever (3), Ashby (1), 15 Workday, **2 Workable (Vortexa, Energy
+- **36 verified**: Greenhouse (6), Lever (3), Ashby (2), 15 Workday, **2 Workable (Vortexa, Energy
   Aspects — Phase 8)**, **4 iCIMS/Jibe (Constellation, Exelon, SIG, ICE — Phase 8)**,
   **1 SmartRecruiters (Vitol — Phase 8, D-050)**, **1 Oracle ORC (Southern Company — Phase 8, D-051)**,
   **1 Radancy/TalentBrew (NextEra — Phase 8, D-052)**, **1 Pinpoint (Aurora Energy Research —
-  D-079)**. All 34 are **fetchable today**.
+  D-079)**. All 36 are **fetchable today**.
 - **8 detected** (platform known, no fetchable endpoint yet): Jobvite (2), SuccessFactors, Avature,
   UKG, Eightfold, **+2 Radancy parked (NRG, National Grid — generic fetcher exists but their
   search base isn't live-confirmed yet; onboard config-only once verified, D-052)**.
@@ -89,3 +89,19 @@ eVTOL/autonomy · travel-tech SaaS), ATS resolved by the same live-probing pass 
 The big aerospace Workday boards are whole-company (Collins/RTX 4161, Airbus 2000, Boeing 1168, mostly
 non-US/senior); the Stage-A scope gate + Stage-B US/level pre-filter cut this to the early-career US
 software slice, same as grid's whole-company boards (GE Vernova etc.).
+
+## Current seed status (robotics vertical, 30 employers — pre-beta)
+
+Curated across humanoid/general robotics · embodied AI · warehouse/logistics · industrial/manufacturing ·
+field/construction/agriculture/inspection · medical/service/consumer robotics. Existing aviation employers
+remain owned by Aviation; the seed deliberately does not duplicate companies across verticals.
+
+- **24 verified and fetchable today:** Greenhouse (10), Lever (5), Ashby (8), and Workday (1 — Boston
+  Dynamics).
+- **1 detected:** Universal Robots uses parent Teradyne's SAP SuccessFactors portal, for which there is no
+  generic fetcher today.
+- **5 Layer 2:** Symbotic, Intuitive Surgical, ABB Robotics, FANUC America, and iRobot. Their official career
+  pages are retained without inventing an unsupported or unverified Layer-1 endpoint.
+
+The initial deterministic coverage is **80% (24/30)**. Agent discovery is expected to propose the smaller
+company tail later; it is not part of this curated starter set.

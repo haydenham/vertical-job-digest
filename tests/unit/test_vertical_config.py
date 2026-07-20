@@ -1,6 +1,6 @@
 """Unit tests for the vertical config loader (P5.1, D-004).
 
-Loads the real `config/verticals/grid_power_software.yaml`; uses tmp configs for the error paths.
+Loads the real vertical configs; uses tmp configs for the error paths.
 """
 
 import importlib
@@ -34,6 +34,21 @@ def test_loads_real_aviation_config() -> None:
     assert cfg.domain_vocabulary  # non-empty
     assert "software" in cfg.scope.role_include
     assert "pilot" in cfg.scope.exclude  # aviation-specific non-software exclusion
+    assert cfg.prefilter_locations == ("US",)
+    assert "new_grad" in cfg.prefilter_levels
+
+
+def test_loads_real_robotics_config() -> None:
+    """D-004: Robotics stands up through config + seed/profile data, not application code."""
+    cfg = load_vertical_config("robotics_software")
+    assert cfg.key == "robotics_software"
+    assert cfg.user_email == "haydenham10@gmail.com"
+    assert "Hayden" in cfg.resume_text
+    assert "Robotics & Autonomous Systems" in cfg.resume_text
+    assert "ROS / ROS 2" in cfg.domain_vocabulary
+    assert "robotics" in cfg.scope.role_include
+    assert "firmware" in cfg.scope.role_include
+    assert "technician" in cfg.scope.exclude
     assert cfg.prefilter_locations == ("US",)
     assert "new_grad" in cfg.prefilter_levels
 
