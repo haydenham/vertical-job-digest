@@ -37,9 +37,10 @@ expands the harness and restores the path-filtered CI gate before any model cuto
 **What lives here in this project:**
 - **Fetcher field-mapping** — given a fixture payload dict, does `map()` produce the right `RawPosting`?
   (`external_id`, `title`, `apply_url`, `location`). One test per ATS module against `tests/fixtures/{ats}.json`.
-- **Paginated snapshot integrity** — for every paginated provider, a changing total between pages,
-  a short final count, and an over-count all raise `FetchError`; only an exact stable snapshot may
-  reach the diff. (D-088)
+- **Paginated snapshot integrity** — every provider pins its authoritative-total contract; unexpected
+  drift, short/over counts, duplicate IDs, and malformed pages raise `FetchError`. Workday additionally
+  pins its two observed consistent later-total modes and its ambiguous 2,000-result cap guard. Only an
+  exact provider-valid snapshot may reach the diff. (D-088, D-092)
 - **`content_hash` canonicalization** — deterministic over the stable fields; **invariant** under volatile junk
   (view counts, "updated X ago", tracking params, key ordering). Same content ⇒ same hash; reorder keys ⇒ same hash;
   change description ⇒ different hash. This is the cache's correctness; test it hard. (Spec: `04` §3.)

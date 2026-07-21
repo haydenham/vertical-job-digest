@@ -10,10 +10,12 @@ Rolefeed must be able to evaluate and change extraction/matching models without 
 changes, then choose both models from measured quality, latency, and catalog cost. This work is a
 beta/Robotics prerequisite, but it must not erase the production evidence from D-088/D-089.
 
-1. **Block 0 — observe (ACTIVE):** the July 17 audit passed D-086/D-089/D-090, confirmed NextEra's
-   Radancy surge was expected DB catch-up, and exposed 14 Workday tenants reporting `total=0` after a
-   nonzero first page. D-091 adds diagnostic-only shadow pagination; July 18 classifies those responses
-   and remains the NextEra/D-089 second observation. Do not attribute fewer calls to model savings.
+1. **Block 0 — observe (CONTRACT FIX BUILT; post-deploy gate remains):** the July 17 audit passed
+   D-086/D-089/D-090, confirmed NextEra's Radancy surge was expected DB catch-up, and exposed 14 Workday
+   tenants reporting `total=0` after a nonzero first page. PR #92 merged July 20, so July 21—not the planned
+   July 18 gate—was the first D-091 trace. D-092 accepts the proven zero-sentinel mode without weakening
+   exact/unique guards and keeps two ambiguous 2,000-result boards failed closed. Observe one normal scheduled
+   run after deploy; do not attribute fewer calls to model savings.
 2. **Block 1 — provider boundary (COMPLETE):** embedded LiteLLM preserves the current Anthropic
    models and behavior and replaces provider-specific types/rates with a typed local contract.
    Merged as PR #90 and deployed as image `07ed265` on 2026-07-16.
@@ -36,22 +38,23 @@ Put differently: **three steps remain for testing/selecting new models** (evalua
 choice → matching choice). The `no`-output work is a fourth, separate optimization performed only after the
 matching model is selected.
 
-## Immediate handoff — diagnose Workday before changing its contract
+## Immediate handoff — deploy and observe D-092, then return to Block 2's decision gate
 
-The July 17 scheduled run completed once in 33m35s under the D-086 policy; all seven digest sends appeared once,
-health/401 were correct, five `-1` scores clamped without match failures, and LiteLLM stayed on Haiku 4.5/Sonnet
-4.6 with plausible token/cache/catalog cost. Its partial pipeline had 15 failures: GE Vernova's known malformed
-row plus 14 Workday boards whose first nonzero total became zero on page two. Failed boards made no mutations.
-NextEra's 145 new + 121 reopened rows were confirmed as the expected full-board catch-up after D-088 fixed
-Radancy pagination, not fresh hiring churn.
+The July 21 scheduled execution `vja-nightly-djxjt` was the first run with D-091 instrumentation. It completed
+once in 34m39s under the D-086 policy; its partial pipeline had 15/101 failures, all Workday. Each affected board
+returned consistent later-page zeros, disjoint pages, an exact page-one row/unique-ID count, zero overlap, and
+zero malformed IDs. Four other multi-page Workday boards repeated the original total and completed exactly.
+Thirteen zero-sentinel boards ended on a short page. Airbus and Thales instead each reported exactly 2,000 and
+returned 100 full pages—agreement with the reported target, but not proof that the source was uncapped.
 
-**D-091 diagnostic block:** do not assume the Workday fix. On a total mismatch, the snapshot remains invalid,
-but the fetcher completes one bounded shadow walk and logs page totals/sizes, unique/overlap/malformed counts,
-identity fingerprints, response metadata, and `would_complete`; it then raises before diffing. Deploy this
-instrumentation before July 18 and use only the scheduled run—no manual duplicate board fetch. The next audit
-maps complete/disjoint vs repeated vs empty vs malformed pages to a separately reviewed contract correction.
+**D-092 contract correction:** page one sets the target; later pages must consistently repeat it or consistently
+report zero. Every unexpected/mixed total, incomplete/overlapping/malformed snapshot, and the ambiguous
+first-page-only 2,000/full-page signature still raises before diffing. The D-091 shadow walk is retired in favor
+of debug page evidence plus one compact summary. No manual board fetch, DB/schema/model/config change, or broad
+cap workaround is included. After Hayden's branch review/commit/PR and deploy, one normal scheduled run confirms
+the 13 restored boards and the two explicit cap failures.
 
-Block 2 starts only after Hayden reviews that evidence and approves its fixtures, rubric, pass thresholds,
+Block 2 starts only after that observation and Hayden's approval of its fixtures, rubric, pass thresholds,
 candidate list, repetition count, and maximum eval spend.
 
 ## Block 1 — LiteLLM provider boundary
