@@ -1698,3 +1698,25 @@ The July 18 scheduled run is the live evidence gate; no manual duplicate fetch i
 are complete and disjoint, a later decision can safely define page one as authoritative. Repeats, empties,
 short/over counts, or malformed rows instead point to the corresponding request/mapping defect. This is
 diagnostic instrumentation, not the Workday contract fix. References D-005, D-016, D-021, D-032, D-088.
+
+### D-092 · Workday incident · Two valid later-page total modes; ambiguous 2,000-result boards stay failed closed · accepted · 2026-07-21
+PR #92 did not merge until July 20, so the July 21 scheduled execution `vja-nightly-djxjt` was the first run
+that actually carried D-091's trace (the planned July 18 gate in D-091/docs was stale). It completed once in
+34m39s with zero retries. All 15 fetch failures were Workday boards whose first nonzero total became zero on
+page two. Every one then returned disjoint pages that exactly reached page one's target, with equal collected
+and unique counts, zero overlap, and zero malformed IDs. Four other multi-page Workday tenants repeated the
+original total and also completed exactly. The evidence distinguishes two real cxs tenant contracts rather
+than a broken offset: later pages either repeat page one's total or consistently use zero as a sentinel.
+
+**Decision (Hayden): accept both modes without weakening D-088.** Page one remains the authoritative target.
+Page two selects `stable` (repeat the target) or `first_page_only` (`total=0`), and every remaining page must
+stay in that mode. Any other drift, mixed mode, request/shape/mapping failure, early empty page, short/over
+count, duplicate ID, or malformed ID rejects the employer snapshot before mutation. D-091's quarantined
+shadow walk is retired: page evidence moves to debug and one compact completeness summary remains at info.
+
+**Cap exception:** 13 of the 15 first-page-only boards ended with a short final page and are accepted by this
+contract. Airbus and Thales each reported exactly 2,000 and returned 100 completely full pages. That proves
+agreement with the reported target but not source completeness and strongly matches a result cap, so this
+specific first-page-only/full-page signature raises an explicit cap `FetchError`. Their existing rows remain
+untouched; no broad acceptance, facet-partition strategy, manual refetch, or config/Layer-2 reclassification is
+part of this branch. References D-005, D-016, D-021, D-032, D-046, D-088, D-091.

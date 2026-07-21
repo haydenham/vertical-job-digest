@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-21 — D-092 Workday pagination contract corrected from the first D-091 evidence run
+
+**Read-only production audit:** PR #92 merged July 20, so the July 21 execution `vja-nightly-djxjt`
+was the first scheduled run that actually carried D-091 (the documented July 18 gate was stale). It
+completed once in 34m39s with zero retries; service health and anonymous 401 passed, all seven digests
+sent once, four `-1` match scores normalized without match failures, and the nightly ended `ok` over a
+partial 101-employer pipeline. All 15 fetch failures were Workday `nonzero → 0` boards. Every affected
+walk exactly reached page one's target with equal unique-ID count, zero overlap, and zero malformed IDs;
+four other multi-page Workday boards repeated the original total and also completed exactly. No manual
+board fetch was performed and failed snapshots raised before the sync transaction. Adjacent run evidence:
+the new Robotics baseline accounted for 313/389 extractions and `$1.5682` of `$2.1812` catalog cost; no
+Robotics profile meant zero Robotics matches/digests.
+
+**Built on `fix/workday-pagination-contract` (uncommitted; Hayden owns commit/PR):** D-092 makes page one
+authoritative and accepts exactly two consistent later-page modes: repeat that total or report zero. Mixed/
+other totals, early empty pages, short/over counts, repeated or malformed IDs, and request/shape/mapping
+failures still reject before mutation. Thirteen observed zero-sentinel boards ended on short final pages and
+will be restored. Airbus and Thales remain failed closed: both reported exactly 2,000 and returned 100 full
+pages, an ambiguous cap signature now surfaced by an explicit `FetchError`. No broad cap workaround, config/
+Layer-2 reclassification, DB/schema/model change, production mutation, deploy, commit, or PR was performed.
+D-091's noisy shadow mode is retired; page evidence is debug-only and one compact completeness summary remains.
+
+**Regression + verification:** the focused suite was observed red first (**7 failed / 11 passed**), then the
+approved implementation passed **20 focused Workday/pipeline guard tests**. Full default suite **561 passed,
+20 opt-in deselected**; ruff format/check, mypy (132 source files), import-linter (1 kept / 0 broken),
+`uv lock --check`, and `git diff --check` are green. D-092, INVARIANTS, docs/05, docs/08, docs/15, docs/19,
+and CLAUDE describe the same contract. **Next:** Hayden reviews/commits/PRs; merge deploys the fix, and the
+next normal scheduled run should show 13 restored Workday boards plus only the two explicit cap failures before
+LLM-optimization Block 2 begins.
+
 ## 2026-07-17 — D-091 Workday pagination diagnostics built after morning audit
 
 **Read-only production audit:** July 17 execution `vja-nightly-qcw5d` completed once in 33m35s with zero

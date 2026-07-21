@@ -42,11 +42,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   cloud cutover swaps it. (D-031)
 - **Every pipeline run writes a `pipeline_runs` summary; per-fetcher failures isolate** and
   alert loudly rather than aborting the run. A digest that fails to send is itself an alert.
-- **An employer snapshot is validated before its DB transaction.** Every paginated response must
-  report the same total on every page and the final mapped row count must equal that total exactly;
-  every fetcher snapshot must also contain unique ATS `external_id` values. Any violation is a
-  failed employer fetch with zero posting mutations. Changed employers log fetched/new/reopened/
-  updated/closed/unchanged counts; failures log the employer/provider and reason. (D-088)
+- **An employer snapshot is validated before its DB transaction.** Every paginated fetcher must
+  satisfy its pinned provider completeness contract and the final mapped row count must equal the
+  authoritative target exactly; every snapshot must also contain unique ATS `external_id` values.
+  Any violation is a failed employer fetch with zero posting mutations. Changed employers log
+  fetched/new/reopened/updated/closed/unchanged counts; failures log the employer/provider and reason.
+  (D-088, D-092)
 
 ## Matching & extraction
 
@@ -295,12 +296,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
   reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
   D-049, D-050, D-051, D-052, D-076, D-078, D-079)
-- **Workday `cxs` fetcher is list-only + paginate-or-fail.** A changed page total still fails with zero
-  mutation; temporarily, D-091 finishes a bounded quarantined walk first and logs page counts, identity
-  overlap/fingerprints, response shape, and `would_complete` so the next scheduled run can determine the real
-  tenant contract without a second fetch. `osv-` Workday hosts route to Layer 2; a tenant board exceeding
-  Workday's ~4000 offset cap also routes to Layer 2 (paginate-or-fail rejects the truncated page — RTX,
-  D-046). (D-032, D-046, D-091)
+- **Workday `cxs` fetcher is list-only + paginate-or-fail with two valid later-total modes.** Page one
+  sets the target; every later page must either repeat it (`stable`) or consistently report zero
+  (`first_page_only`). Mixed/other totals, incomplete/overlapping/malformed snapshots, and the observed
+  first-page-only 2,000/full-page cap signature fail with zero mutation. `osv-` hosts and known
+  offset-capped boards route to Layer 2. (D-032, D-046, D-088, D-091, D-092)
 - **iCIMS fetcher targets the Career Sites (Jibe) `GET {careers_base}/api/jobs` JSON API, not the
   legacy portal.** One generic fetcher (uniform payload across tenants); paginate-or-fail; rich list
   (`apply_url` + full `description` + ISO `update_date`, no detail fetch). Legacy-portal / non-Jibe /

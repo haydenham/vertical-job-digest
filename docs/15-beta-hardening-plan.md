@@ -133,9 +133,11 @@ test** (D-021).
    not the entire causal diagnosis. The July 16 run started before #88 merged, so it is a pre-fix
    baseline. The July 17 audit confirmed NextEra's large new/reopened count was the corrected Radancy
    snapshot catching the DB up, but also found **14 Workday tenants failing `nonzero → 0` on page two**.
-   D-091 adds a fail-closed diagnostic shadow walk—no contract change or DB mutation—so July 18 records
-   whether those offset pages are complete/disjoint, repeated, empty, or malformed. Compare that evidence
-   plus NextEra's steady-state churn before choosing the Workday correction or any broader bookend pass.
+   PR #92 merged July 20, so July 21 was the first actual D-091 evidence run: all 15 affected boards' zero-total
+   pages were complete/disjoint against page one's target, with no overlap or malformed IDs. **D-092 correction
+   built:** accept consistent repeated-total or zero-sentinel modes while preserving exact/unique fail-closed
+   guards; Airbus/Thales remain failed closed on the ambiguous 2,000/full-page cap signature. The noisy shadow
+   walk is retired. Post-deploy scheduled observation remains; no manual duplicate board fetch.
    *(This item gates intraday freshness/alerts and lifespan intel; see `docs/18`, D-087.)*
 4. **Match-score boundary guard ✅ (D-089, built on `fix/match-score-boundary`):** the July 16
    shakeout found 26 otherwise-valid match results discarded for negative scores, with 56 occurrences

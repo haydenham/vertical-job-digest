@@ -197,8 +197,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (**D-089 match-score boundary guard built ✅ — clamp/log integer outliers, no paid retry**) ·
   scaling plan (Neon/GCP/Resend/OAuth **+ Anthropic LLM spend**; D-088 snapshot-integrity churn
   guard merged #88 ✅; July 17 confirmed NextEra DB catch-up + exposed 14 Workday later-page zero totals;
-  **D-091 diagnostic-only shadow pagination built for the July 18 scheduled evidence gate**, no contract
-  change or DB mutation; Message Batches deferred for freshness) · more
+  **D-092 Workday contract correction built from the first real D-091 trace on July 21** — consistent
+  repeated-total or zero-sentinel modes are valid, exact/unique guards remain, and ambiguous 2,000/full-page
+  boards stay failed closed; Message Batches deferred for freshness) · more
   fetchers/company-database growth
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅

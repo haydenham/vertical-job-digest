@@ -7,13 +7,13 @@ plus one `jobPostings` page; we page by `offset`.
 
 Two things make Workday unlike the Tier-A fetchers, and both shape this module:
 
-- **It is the one paginated source.** We page until we've collected `total`; **any page failure
-  raises `FetchError` and we return nothing** — a partial list would read as mass closures, the
-  highest-stakes guard (`docs/08`, DECISIONS false-closure note). A short final tally vs. `total`
-  is also a hard failure, never a silent partial. A changed per-page total permanently invalidates
-  the snapshot, but the fetcher finishes a quarantined pagination walk before raising so one
-  scheduled run captures the page counts/identity overlap needed to diagnose tenant behavior
-  (D-091). The fetcher owns no DB connection, so diagnostic rows can never reach the diff.
+- **It is the one paginated source.** We page until we've collected page one's `total`; **any page
+  failure raises `FetchError` and we return nothing** — a partial list would read as mass closures,
+  the highest-stakes guard (`docs/08`, DECISIONS false-closure note). Workday has two observed
+  later-page contracts: a tenant either repeats page one's total or consistently reports zero.
+  Mixing those modes, any other total drift, or a non-exact final snapshot fails closed. A
+  first-page-only response that lands on the observed 2,000-result cap also fails closed because
+  100 full pages do not prove source completeness. (D-091/D-092)
 - **The cxs list omits the job description**, so this is list-only (`description=None`). The full
   description is a Layer-2 concern, fetched lazily per new/changed posting later — fetching it here
   would mean hundreds of needless requests per big tenant for data Layer 1 doesn't use (D-026 era).
@@ -42,7 +42,8 @@ from vja.models import AtsType, Employer, RawPosting
 _USER_AGENT = "vja-job-agent/0.0.1 (+https://github.com/haydenham/vertical-job-digest)"
 _TIMEOUT = 30.0  # some tenants are slow (e.g. BP first page > 20s); generous, not per-company
 _PAGE_SIZE = 20
-_MAX_PAGES = 200  # safety cap against a bad `total` (200×20 = 4000, far above any real tenant)
+_MAX_PAGES = 200  # hard walk bound (200×20 = 4000); an incomplete larger board fails closed
+_FIRST_PAGE_ONLY_RESULT_CAP = 2000  # observed on Airbus + Thales; exact/full is ambiguous
 
 logger = logging.getLogger(__name__)
 
@@ -59,26 +60,45 @@ class _PageResponse:
 
 @dataclass
 class _PaginationTrace:
-    """In-memory evidence for one Workday pagination walk; never persisted with postings."""
+    """Compact in-memory completeness evidence; never persisted with postings."""
 
     employer: Employer
     expected_total: int
-    reported_totals: list[int]
-    page_sizes: list[int]
     seen_ids: set[str]
+    page_count: int = 0
+    final_page_size: int = 0
+    later_total_mode: str | None = None
     overlap_count: int = 0
     malformed_id_count: int = 0
-    invalid_reason: str | None = None
 
     @classmethod
     def start(cls, employer: Employer, expected_total: int) -> _PaginationTrace:
         return cls(
             employer=employer,
             expected_total=expected_total,
-            reported_totals=[],
-            page_sizes=[],
             seen_ids=set(),
         )
+
+    def validate_later_total(self, page_total: int) -> None:
+        """Select and enforce one of the two observed later-page total modes."""
+        if self.later_total_mode is None:
+            if page_total == self.expected_total:
+                self.later_total_mode = "stable"
+                return
+            if page_total == 0:
+                self.later_total_mode = "first_page_only"
+                return
+            raise FetchError(
+                f"workday total changed during fetch for {self.employer.name!r}: "
+                f"{self.expected_total} → {page_total}"
+            )
+
+        expected_later_total = self.expected_total if self.later_total_mode == "stable" else 0
+        if page_total != expected_later_total:
+            raise FetchError(
+                f"workday pagination total mode changed for {self.employer.name!r}: "
+                f"expected later total {expected_later_total}, got {page_total}"
+            )
 
     def observe(
         self,
@@ -105,18 +125,18 @@ class _PaginationTrace:
                 page_overlap += 1
             page_ids.add(external_id)
 
-        self.reported_totals.append(reported_total)
-        self.page_sizes.append(len(jobs))
+        self.page_count += 1
+        self.final_page_size = len(jobs)
         self.seen_ids.update(page_ids)
         self.overlap_count += page_overlap
         self.malformed_id_count += malformed_ids
         page_hash = hashlib.sha256("\n".join(ordered_ids).encode()).hexdigest()[:16]
-        logger.info(
+        logger.debug(
             "workday pagination page employer=%r page=%d offset=%d limit=%d "
             "expected_total=%d reported_total=%d rows=%d cumulative_rows=%d unique_ids=%d "
             "page_overlap=%d malformed_ids=%d page_ids_sha256=%s http_status=%d "
             "latency_ms=%d request_id=%r content_type=%r response_bytes=%d payload_keys=%s "
-            "diagnostic_only=%s",
+            "later_total_mode=%s",
             self.employer.name,
             page + 1,
             offset,
@@ -135,34 +155,32 @@ class _PaginationTrace:
             response.content_type,
             response.response_bytes,
             ",".join(sorted(response.payload)),
-            self.invalid_reason is not None,
+            self.later_total_mode or "single_page",
         )
 
-    def finish(self, collected_rows: int) -> None:
-        would_complete = (
+    def finish(self, collected_rows: int) -> bool:
+        complete = (
             collected_rows == self.expected_total
             and len(self.seen_ids) == self.expected_total
             and self.overlap_count == 0
             and self.malformed_id_count == 0
         )
-        log = logger.warning if self.invalid_reason else logger.info
-        log(
+        logger.info(
             "workday pagination summary employer=%r pages=%d expected_total=%d "
             "collected_rows=%d unique_ids=%d overlap=%d malformed_ids=%d "
-            "reported_totals=%s page_sizes=%s would_complete=%s diagnostic_only=%s reason=%r",
+            "later_total_mode=%s final_page_size=%d complete=%s",
             self.employer.name,
-            len(self.page_sizes),
+            self.page_count,
             self.expected_total,
             collected_rows,
             len(self.seen_ids),
             self.overlap_count,
             self.malformed_id_count,
-            ",".join(str(value) for value in self.reported_totals),
-            ",".join(str(value) for value in self.page_sizes),
-            would_complete,
-            self.invalid_reason is not None,
-            self.invalid_reason,
+            self.later_total_mode or "single_page",
+            self.final_page_size,
+            complete,
         )
+        return complete
 
 
 class WorkdayFetcher:
@@ -229,25 +247,9 @@ def _paginate(
         if total is None:
             total = page_total
             trace = _PaginationTrace.start(employer, total)
-        elif page_total != total:
+        else:
             assert trace is not None
-            if trace.invalid_reason is None:
-                trace.invalid_reason = (
-                    f"workday total changed during fetch for {employer.name!r}: "
-                    f"{total} → {page_total}"
-                )
-                logger.warning(
-                    "workday pagination anomaly employer=%r page=%d offset=%d "
-                    "expected_total=%d reported_total=%d action=diagnostic_shadow",
-                    employer.name,
-                    page + 1,
-                    offset,
-                    total,
-                    page_total,
-                )
-        # A total mismatch has already made this snapshot unusable. Keep walking only to learn
-        # whether offset pages are empty, repeated, or complete/disjoint; the original FetchError
-        # is raised below before this list can leave the fetcher (D-091).
+            trace.validate_later_total(page_total)
         page_jobs = payload["jobPostings"]
         assert trace is not None
         trace.observe(
@@ -265,17 +267,28 @@ def _paginate(
         if not page_jobs or len(postings) >= total:
             break
 
-    if trace is not None and (len(trace.page_sizes) > 1 or trace.invalid_reason is not None):
-        trace.finish(len(postings))
-    if trace is not None and trace.invalid_reason is not None:
-        raise FetchError(trace.invalid_reason)
-
     # Completeness guard: only an exact tally is safe. Both a short and an over-counted snapshot
-    # can hide pagination drift that the diff would otherwise interpret as real board churn.
-    if total is None or len(postings) != total:
+    # can hide pagination drift that the diff would otherwise interpret as real board churn. The
+    # identity checks duplicate the shared pre-transaction guard intentionally: the fetcher can
+    # reject a repeated-page response before returning an invalid snapshot at all.
+    complete = total is not None and len(postings) == total
+    if trace is not None:
+        complete = trace.finish(len(postings))
+    if not complete:
         expected = total if total is not None else "unknown"
         raise FetchError(
             f"workday fetch for {employer.name!r} incomplete: got {len(postings)} of {expected}"
+        )
+
+    assert trace is not None
+    if (
+        trace.later_total_mode == "first_page_only"
+        and total == _FIRST_PAGE_ONLY_RESULT_CAP
+        and trace.final_page_size == _PAGE_SIZE
+    ):
+        raise FetchError(
+            f"workday fetch for {employer.name!r} hit possible {total}-result cap; "
+            "source completeness is unproven"
         )
     return postings
 
