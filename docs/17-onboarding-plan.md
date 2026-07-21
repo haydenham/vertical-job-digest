@@ -175,10 +175,10 @@ then built on `feat/onboarding-tutorial`.**
   deferred because the product is time-sensitive. The July 16 run started before #88 merged; use
   July 17 and 18 as the two production observation nights, then re-measure and reconsider
   extraction-first batching only if spend remains material.
-- **LLM optimization follow-on (D-090, active; plan `docs/19`):** keep the July 17/18 D-088 observation
-  window, then sequence provider boundary → multi-model eval/CI repair → extraction choice → matching choice
-  → chosen-model `no`-output optimization. Block 1 preserves Anthropic behavior and adds no provider secret;
-  no candidate model or output-schema change is preselected.
+- **LLM optimization follow-on (D-090, active; plan `docs/19`):** provider readiness → modest existing-eval
+  expansion + DeepSeek V4 Flash extraction cutover → modest existing-eval expansion + GPT-5.6 Luna matching
+  cutover. Provider dashboards are authoritative for exact cost. No generic benchmark, payload/cache redesign,
+  or `no`-output follow-on is in scope.
 - **Robotics vertical inputs (branch ready for review):** `robotics_software` adds 30 curated employers, 24 with
   verified Layer-1 endpoints, plus its YAML and matching profile. This branch does not import Neon data or run
   discovery. Because `/api/verticals` is config-driven, deploy only with the coordinated seed import/cutover;

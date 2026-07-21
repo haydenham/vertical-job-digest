@@ -149,7 +149,7 @@ def test_matches_only_in_scope_stage_b_survivors(migrated_engine: Engine) -> Non
     summary = _run(migrated_engine)
 
     assert (summary.profiles, summary.total, summary.matched, summary.failed) == (1, 1, 1, 0)
-    assert summary.est_cost_usd > 0
+    assert summary.est_cost_usd is not None and summary.est_cost_usd > 0
     assert summary.usage.input == 900  # real tokens aggregated through the run (D-069)
     assert _match_count(migrated_engine) == 1
 

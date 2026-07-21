@@ -5,6 +5,29 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-21 — D-090 lean provider readiness built; no model cutover
+
+**Decision correction:** Hayden rejected work without a concrete use case. The D-090 plan now has three
+small blocks only: provider readiness, DeepSeek V4 Flash extraction evaluation/cutover, and GPT-5.6 Luna
+matching evaluation/cutover. Provider dashboards are authoritative for exact billing. The generic benchmark,
+payload compaction, new prefilter, cache redesign, paid-failure-ledger work, and `no`-output follow-on are out;
+shortening a `no` payload would not avoid the reasoning that produces the verdict.
+
+**Built on `fix/optional-llm-catalog-cost` (uncommitted; Hayden owns commit/PR):** stable LiteLLM 1.93 replaces
+1.92 so DeepSeek can map `reasoning_effort=none` to `thinking.type=disabled`. Valid structured responses no
+longer fail solely because LiteLLM lacks catalog pricing: required usage/model/latency telemetry still crosses
+the typed boundary, missing/invalid cost warns once per model, call/run cost becomes `None`, and the existing
+nullable `pipeline_runs.llm_cost_usd` stores `NULL` rather than a false `$0`. Known catalog estimates still
+aggregate unchanged. No model route, prompt, schema, provider credential, deployment, database migration,
+Neon read, or paid provider call was made.
+
+**Verification:** focused provider/extraction/matching/nightly coverage **26 passed**; full default suite
+**563 passed, 20 opt-in deselected** (one pre-existing FastAPI/httpx deprecation warning). Ruff format/check,
+mypy (132 files), import-linter (1 kept / 0 broken), `uv lock --check`, `git diff --check`, frontend lint/types/
+**95 tests**, and production Docker image `vja:llm-provider-readiness` are green. LiteLLM 1.93's installed
+DeepSeek transform was inspected locally and explicitly maps `none` to disabled thinking. **Next:** Hayden
+reviews/commits/PRs this readiness block; after merge, create the separate small extraction-eval/cutover branch.
+
 ## 2026-07-21 — D-092 Workday pagination contract corrected from the first D-091 evidence run
 
 **Read-only production audit:** PR #92 merged July 20, so the July 21 execution `vja-nightly-djxjt`

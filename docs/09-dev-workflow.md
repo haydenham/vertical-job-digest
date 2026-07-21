@@ -81,8 +81,9 @@ Non-determinism is handled in the suite itself, not by weakening the target gate
 
 ## Observability & cost as first-class (not "later")
 
-- **Every pipeline run writes its summary** (`pipeline_runs`) including `llm_cost_usd` — metering is from day one
-  (D-005), so cost regressions are visible the morning after, not at the month's bill.
+- **Every pipeline run writes its summary** (`pipeline_runs`) including token usage and a best-effort
+  `llm_cost_usd` catalog estimate (`NULL` when unavailable). Provider dashboards are authoritative for exact
+  billing; local telemetry still makes token regressions visible the morning after. (D-005, D-090)
 - **A failed/missing digest is itself the top-priority alert** (CLAUDE.md): the product is the digest landing; its
   absence must be loud.
 

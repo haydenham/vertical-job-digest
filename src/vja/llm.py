@@ -7,6 +7,7 @@ spread provider response shapes, token semantics, or pricing tables through the 
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 from vja.models import TokenUsage
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger("vja.llm")
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,7 @@ class StructuredResult[T: BaseModel]:
 
     value: T
     usage: TokenUsage
-    cost_usd: float
+    cost_usd: float | None
     model: str
     latency_seconds: float
     request_id: str | None = None
@@ -95,12 +97,20 @@ def _token_usage(usage: object) -> TokenUsage:
     )
 
 
+def sum_catalog_costs(*costs: float | None) -> float | None:
+    """Sum catalog estimates, or preserve ``None`` when any estimate is unavailable."""
+    if any(cost is None for cost in costs):
+        return None
+    return sum(cost for cost in costs if cost is not None)
+
+
 class LiteLLMClient:
     """Synchronous embedded-LiteLLM implementation of ``StructuredLLM``.
 
     No router, fallback, or retry policy is configured here. Unsupported request parameters and
-    missing catalog pricing remain errors; this boundary never silently drops a feature or records
-    a paid response as a false zero-dollar call.
+    usage remain errors. Catalog pricing is best-effort telemetry: provider billing is
+    authoritative, and an unavailable estimate is represented as ``None`` rather than blocking a
+    valid response or recording a false zero-dollar call.
     """
 
     def __init__(
@@ -118,6 +128,7 @@ class LiteLLMClient:
         self._completion = completion
         self._completion_cost = completion_cost
         self._clock = clock
+        self._missing_cost_models: set[str] = set()
 
     def parse(
         self,
@@ -169,17 +180,30 @@ class LiteLLMClient:
             raise ValueError("LLM returned no token usage")
         usage = _token_usage(raw_usage)
 
-        raw_cost = self._completion_cost(completion_response=response)
-        if not isinstance(raw_cost, int | float):
-            raise TypeError("LiteLLM completion_cost returned a non-numeric value")
-        cost = float(raw_cost)
-        if cost < 0 or (usage != TokenUsage() and cost == 0):
-            raise ValueError("LiteLLM returned invalid zero/negative catalog cost")
-
         actual_model = _field(response, "model", model)
         if not isinstance(actual_model, str) or not actual_model:
             actual_model = model
         request_id = _field(response, "id")
+        try:
+            raw_cost = self._completion_cost(completion_response=response)
+            if not isinstance(raw_cost, int | float):
+                raise TypeError("LiteLLM completion_cost returned a non-numeric value")
+            numeric_cost = float(raw_cost)
+            if numeric_cost < 0 or (usage != TokenUsage() and numeric_cost == 0):
+                raise ValueError("LiteLLM returned invalid zero/negative catalog cost")
+            cost: float | None = numeric_cost
+        except Exception as exc:
+            if actual_model not in self._missing_cost_models:
+                logger.warning(
+                    "catalog cost unavailable for model %s request %s: %r",
+                    actual_model,
+                    request_id,
+                    exc,
+                )
+                self._missing_cost_models.add(actual_model)
+            else:
+                logger.debug("catalog cost still unavailable for model %s", actual_model)
+            cost = None
         return StructuredResult(
             value=value,
             usage=usage,

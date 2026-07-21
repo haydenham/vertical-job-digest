@@ -70,14 +70,15 @@ def update_llm_metrics(
     *,
     extraction_calls: int,
     match_calls: int,
-    llm_cost_usd: float,
+    llm_cost_usd: float | None,
     usage: TokenUsage = _NO_USAGE,
 ) -> None:
     """Record the run's Layer-2 LLM totals (extraction + matching) after the per-vertical loop.
 
     `finish_run` writes 0s first (the run row is finalized before the LLM steps run); the nightly
     loop calls this once the extract/match passes are done, overwriting them with real totals —
-    including the actual token breakdown (D-069), the meter behind the `llm_cost_usd` estimate.
+    including the actual token breakdown (D-069), the meter behind the best-effort
+    `llm_cost_usd` estimate. The estimate is null when catalog pricing is unavailable.
     """
     conn.execute(
         pipeline_runs.update()

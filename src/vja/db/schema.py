@@ -298,8 +298,8 @@ pipeline_runs = Table(
     Column("extraction_calls", Integer),
     Column("match_calls", Integer),
     Column("llm_cost_usd", Float),
-    # Real per-run token accounting (D-069) — the meter behind llm_cost_usd, so cached-vs-uncached
-    # and input-vs-output spend is queryable, not just the aggregate estimate.
+    # Real per-run token accounting (D-069) survives when the best-effort catalog estimate is NULL,
+    # so cached-vs-uncached and input-vs-output behavior remains queryable (D-090).
     Column("input_tokens", Integer),
     Column("output_tokens", Integer),
     Column("cache_read_tokens", Integer),

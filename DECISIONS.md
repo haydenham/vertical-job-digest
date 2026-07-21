@@ -1665,8 +1665,9 @@ Anthropic adaptive thinking plus output effort. The current prompts, schemas, ca
 D-089 clamp, isolation, idempotency, and existing DB schema remain unchanged. The actual response model is
 persisted and returned catalog costs are aggregated into the existing nightly ledger.
 
-Unsupported parameters or missing pricing/usage fail loudly: parameter dropping is disabled, a nonempty paid
-response may not become `$0`, and there is no automatic routing, fallback, or new retry policy. No model,
+**Original Block-1 rule (superseded by the July 21 amendment below):** unsupported parameters or missing
+pricing/usage fail loudly; parameter dropping is disabled, a nonempty paid response may not become `$0`, and
+there is no automatic routing, fallback, or new retry policy. No model,
 prompt, schema, secret, provider, database, discovery-agent, or `no`-verdict behavior changes in Block 1.
 The existing Anthropic eval is a manual parity gate here. D-020/D-021's path-filtered eval policy remains the
 target, but the current CI workflow has no eval job; Block 2 must restore it with the expanded harness before a
@@ -1677,6 +1678,19 @@ D-007, D-020, D-021, D-035, D-036, D-069, D-088, D-089.
 **Implementation status:** Block 1 merged as PR #90 and deployed to the Cloud Run service + nightly Job as
 image `07ed265` on 2026-07-16. Health returned 200, the anonymous postings guard returned 401, and the Job is
 Ready with the existing Anthropic secret, six-hour timeout, zero retries, and no model-route overrides.
+
+**Lean-plan amendment (Hayden, 2026-07-21):** exact cost is tracked in provider dashboards, so catalog
+pricing is useful telemetry but not a correctness dependency. Usage/model/latency remain required; a
+missing or invalid LiteLLM price warns, returns `cost_usd=None`, and makes the aggregate
+`pipeline_runs.llm_cost_usd` null rather than failing a valid response or recording a false `$0`. Stable
+LiteLLM 1.93 is required for DeepSeek V4's explicit non-thinking mode. Remaining work is three small,
+separately reviewed blocks: provider readiness; a modest extension of the existing extraction eval plus
+DeepSeek V4 Flash cutover; and a modest extension of the existing matching eval plus GPT-5.6 Luna cutover.
+The first model-changing branch restores D-020/D-021's path-filtered eval CI gate, but no generic benchmark,
+pricing overlay, payload compactor, new prefilter, cache redesign, or paid-failure ledger is authorized.
+The proposed `no`-output optimization is retired: matching reasons before its verdict, so shortening the
+stored payload is not expected to remove the material reasoning-token spend. This paragraph supersedes
+D-090's missing-price failure and fourth-follow-on requirements; all other boundary rules remain.
 
 ### D-091 · Workday incident · Quarantined pagination trace before changing the completeness contract · accepted · 2026-07-17
 The first D-088 production run succeeded once in 33m35s, but 14 otherwise-healthy Workday tenants failed on

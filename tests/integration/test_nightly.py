@@ -91,6 +91,19 @@ def _fake_layer2(engine: Engine, vertical: str, *, client: object, now: datetime
     )
 
 
+def _fake_layer2_without_catalog_cost(
+    engine: Engine, vertical: str, *, client: object, now: datetime
+) -> Layer2Summary:
+    result = _fake_layer2(engine, vertical, client=client, now=now)
+    return Layer2Summary(
+        extracted=result.extracted,
+        matched=result.matched,
+        est_cost_usd=None,
+        extract_usage=result.extract_usage,
+        match_usage=result.match_usage,
+    )
+
+
 def _profile(engine: Engine) -> None:
     upsert_profile(
         engine,
@@ -167,6 +180,29 @@ def test_happy_path_sends_digest_and_does_not_alert(migrated_engine: Engine) -> 
     assert run_row["output_tokens"] == 300  # 100 extract + 200 match
     assert run_row["cache_read_tokens"] == 4000
     assert run_row["cache_write_tokens"] == 0
+
+
+@respx.mock
+def test_unknown_catalog_cost_persists_null_without_losing_usage(migrated_engine: Engine) -> None:
+    respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "a"}))
+    eid = _seed(migrated_engine)
+    _profile(migrated_engine)
+
+    result = run_nightly(
+        migrated_engine,
+        now=_NOW,
+        config=_CONFIG,
+        resolve_fetcher=_resolver(FakeFetcher({eid: [_posting("p1")]})),
+        verify=_PASS,
+        run_layer2=_fake_layer2_without_catalog_cost,
+    )
+
+    assert result.llm_cost_usd is None
+    with migrated_engine.connect() as conn:
+        run_row = conn.execute(select(pipeline_runs)).mappings().one()
+    assert run_row["llm_cost_usd"] is None
+    assert run_row["input_tokens"] == 1700
+    assert run_row["output_tokens"] == 300
 
 
 @respx.mock
