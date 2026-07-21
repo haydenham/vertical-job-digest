@@ -36,7 +36,7 @@ from vja.db.matches import (
     save_match,
 )
 from vja.db.profiles import Profile, active_profiles, mark_backfill_completed
-from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult
+from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult, sum_catalog_costs
 from vja.models import MatchTrigger, TokenUsage, Verdict
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import in_scope
@@ -122,7 +122,7 @@ class MatchingSummary:
     total: int
     matched: int
     failed: int
-    est_cost_usd: float
+    est_cost_usd: float | None
     usage: TokenUsage = TokenUsage()
 
 
@@ -239,7 +239,7 @@ def _match_profile(
     trigger: MatchTrigger,
     now: datetime,
     max_postings: int | None = None,
-) -> tuple[int, int, TokenUsage, float]:
+) -> tuple[int, int, TokenUsage, float | None]:
     """Match one profile's Stage-A/B-surviving, unmatched candidates → (total, matched, usage).
 
     The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
@@ -263,7 +263,7 @@ def _match_profile(
         candidates = candidates[:max_postings]
     matched = 0
     usage = TokenUsage()
-    cost_usd = 0.0
+    cost_usd: float | None = 0.0
     for candidate in candidates:
         try:
             call = match_posting(
@@ -273,7 +273,7 @@ def _match_profile(
             logger.warning("match failed for posting %s: %r", candidate.posting_id, exc)
             continue
         usage = usage + call.usage
-        cost_usd += call.cost_usd
+        cost_usd = sum_catalog_costs(cost_usd, call.cost_usd)
         with begin(engine) as conn:
             save_match(
                 conn,
@@ -307,7 +307,7 @@ def run_matching(
     profiles = active_profiles(engine, vertical)
     total = matched = 0
     usage = TokenUsage()
-    cost_usd = 0.0
+    cost_usd: float | None = 0.0
     for profile in profiles:
         prof_total, prof_matched, prof_usage, prof_cost = _match_profile(
             engine,
@@ -322,7 +322,7 @@ def run_matching(
         total += prof_total
         matched += prof_matched
         usage = usage + prof_usage
-        cost_usd += prof_cost
+        cost_usd = sum_catalog_costs(cost_usd, prof_cost)
 
     return MatchingSummary(
         vertical=vertical,
@@ -404,10 +404,13 @@ def match_main(argv: list[str] | None = None) -> int:
     for vertical in verticals:
         cfg = load_vertical_config(vertical)
         summary = run_matching(engine, vertical, config=cfg)
+        estimated_cost = (
+            f"${summary.est_cost_usd:.4f}" if summary.est_cost_usd is not None else "unavailable"
+        )
         print(
             f"[{summary.vertical}] matched {summary.matched}/{summary.total} across "
             f"{summary.profiles} profile(s) (failed {summary.failed}) "
-            f"est_cost=${summary.est_cost_usd:.4f}"
+            f"est_cost={estimated_cost}"
         )
     return 0
 
@@ -446,10 +449,13 @@ def backfill_main(argv: list[str] | None = None) -> int:
         return 0
     for profile in profiles:
         summary = run_backfill(engine, args.vertical, profile, config=cfg)
+        estimated_cost = (
+            f"${summary.est_cost_usd:.4f}" if summary.est_cost_usd is not None else "unavailable"
+        )
         print(
             f"[{summary.vertical}→{profile.user_email}] backfilled "
             f"{summary.matched}/{summary.total} (failed {summary.failed}) "
-            f"est_cost=${summary.est_cost_usd:.4f}"
+            f"est_cost={estimated_cost}"
         )
     return 0
 

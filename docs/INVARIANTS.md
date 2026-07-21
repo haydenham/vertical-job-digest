@@ -235,8 +235,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (input/output/cache_read/cache_write) is summed per stage and **persisted to `pipeline_runs`**
   (four token columns) + logged as a per-stage nightly line with the matching cache-hit %. The
   `$0.01`-per-match figure survives **only** as the backfill budget-guard proxy (below), not as the spend
-  meter. Layer 2 uses LiteLLM's catalog cost for the actual response model; missing pricing/usage and a
-  false zero-dollar paid call fail at the per-posting boundary. The actual upstream model is persisted.
+  meter. Layer 2 records LiteLLM's catalog estimate when available, while provider dashboards are the
+  authoritative bill. Missing/invalid pricing warns and makes the run estimate `NULL`, never a false `$0`;
+  missing usage still fails at the per-posting boundary. The actual upstream model is persisted.
   Parameter dropping, automatic routing/fallback, and a new retry policy are forbidden. (D-035, D-036,
   D-069, D-090)
 - **Anthropic Message Batches are deferred.** Job delivery is time-sensitive, so extraction and

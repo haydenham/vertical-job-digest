@@ -177,7 +177,7 @@ erDiagram
     string status "running/ok/partial/failed"
     int fetch_failures
     int postings_new_closed
-    float llm_cost_usd
+    float? llm_cost_usd
   }
 ```
 

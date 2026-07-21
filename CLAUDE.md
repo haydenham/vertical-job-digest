@@ -286,7 +286,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing, the churn-fix prerequisite, and the rejected-features record. Planning only; nothing live.
-- `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090): observe D-088 → LiteLLM provider boundary → multi-model eval/CI repair → extraction cutover → matching cutover → chosen-model `no`-output optimization.
+- `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090): LiteLLM provider readiness → small existing-eval expansion + DeepSeek V4 Flash extraction cutover → small existing-eval expansion + GPT-5.6 Luna matching cutover. Provider billing is authoritative; no generic benchmark or `no`-output follow-on.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

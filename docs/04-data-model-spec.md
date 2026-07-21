@@ -190,7 +190,7 @@ digest must leave a loud record here.
 | `fetch_failures` | INTEGER | per-fetcher failures (loud-alert trigger) |
 | `postings_new` / `postings_closed` | INTEGER | |
 | `extraction_calls` / `match_calls` | INTEGER | |
-| `llm_cost_usd` | REAL | metered from day one (D-005 cost discipline) |
+| `llm_cost_usd` | REAL, nullable | best-effort catalog estimate; provider billing is authoritative (D-005/D-090) |
 | `errors` | TEXT | JSON list of structured errors |
 | `notes` | TEXT | |
 

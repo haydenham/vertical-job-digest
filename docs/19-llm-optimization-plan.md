@@ -7,8 +7,9 @@ separate branch/review decision; Hayden commits and opens PRs.*
 ## Outcome and sequencing
 
 Rolefeed must be able to evaluate and change extraction/matching models without provider SDK code
-changes, then choose both models from measured quality, latency, and catalog cost. This work is a
-beta/Robotics prerequisite, but it must not erase the production evidence from D-088/D-089.
+changes, then choose both models from measured quality, latency, token usage, and authoritative
+provider billing. This work is a beta/Robotics prerequisite, but it must not erase the production
+evidence from D-088/D-089.
 
 1. **Block 0 — observe (CONTRACT FIX BUILT; post-deploy gate remains):** the July 17 audit passed
    D-086/D-089/D-090, confirmed NextEra's Radancy surge was expected DB catch-up, and exposed 14 Workday
@@ -19,24 +20,26 @@ beta/Robotics prerequisite, but it must not erase the production evidence from D
 2. **Block 1 — provider boundary (COMPLETE):** embedded LiteLLM preserves the current Anthropic
    models and behavior and replaces provider-specific types/rates with a typed local contract.
    Merged as PR #90 and deployed as image `07ed265` on 2026-07-16.
-3. **Block 2 — evaluation harness (new-model step 1/3):** expand the small synthetic extraction/matching set, collect
-   quality/latency/token/catalog-cost evidence across candidate models, and restore the missing
-   path-filtered eval CI job documented by D-020/D-021.
-4. **Block 3 — extraction cutover (new-model step 2/3):** choose and deploy the lowest-cost extraction model that clears
-   the accepted extraction threshold. DeepSeek is a candidate, not a decision.
-5. **Block 4 — matching cutover (new-model step 3/3):** choose and deploy the best value matching model that clears the
-   trust threshold. Sonnet, Grok, Muse, and the proposed GPT route are candidates, not decisions;
-   exact available model identifiers and prices are verified in Block 2.
-6. **Block 5 — NO-output optimization (separate follow-on):** against the chosen matching model, test and implement the
-   approved contract that a `no` verdict stores no user-facing reasoning fields, if the eval shows
-   the shorter schema/prompt preserves rejection quality and produces material output-token savings.
+3. **Block 2 — provider readiness (CURRENT):** upgrade to stable LiteLLM 1.93 so DeepSeek can run
+   with thinking disabled. Token/latency/model telemetry remains required, but catalog price is a
+   best-effort estimate: unavailable pricing stores `NULL` and never blocks a valid paid response.
+   Provider dashboards are authoritative for exact cost.
+4. **Block 3 — extraction evaluation + cutover:** modestly extend the existing extraction eval with
+   representative postings, compare Haiku with `deepseek/deepseek-v4-flash` in non-thinking mode,
+   and cut over only if schema and field quality hold. Restore the D-020/D-021 path-filtered eval CI
+   gate as part of this first model-changing branch; do not build a generic benchmark framework.
+5. **Block 4 — matching evaluation + cutover:** modestly extend the existing matching eval with clear
+   and ambiguous cases, compare Sonnet with `openai/gpt-5.6-luna` at `none`, `low`, and `medium`, and
+   choose the lowest effort that preserves trust. Measure real cost in the provider dashboard after
+   one normal production run.
 
 No candidate wins from a benchmark headline or vendor claim. Extraction and matching are separate
 choices because their quality/cost requirements differ.
 
-Put differently: **three steps remain for testing/selecting new models** (evaluation harness → extraction
-choice → matching choice). The `no`-output work is a fourth, separate optimization performed only after the
-matching model is selected.
+The earlier `no`-output follow-on is removed. The model reasons before emitting its verdict, so shortening
+the stored `no` payload is not expected to avoid the material reasoning-token spend. Payload compaction,
+new prefilters, cache rework, and a new benchmark/reporting system are also out of scope unless production
+evidence later establishes a concrete use case.
 
 ## Immediate handoff — deploy and observe D-092, then return to Block 2's decision gate
 
@@ -54,8 +57,8 @@ of debug page evidence plus one compact summary. No manual board fetch, DB/schem
 cap workaround is included. After Hayden's branch review/commit/PR and deploy, one normal scheduled run confirms
 the 13 restored boards and the two explicit cap failures.
 
-Block 2 starts only after that observation and Hayden's approval of its fixtures, rubric, pass thresholds,
-candidate list, repetition count, and maximum eval spend.
+D-092 merged as PR #94 on July 21. Its next scheduled-run observation remains an operations check in
+parallel; Hayden approved the lean model-readiness branch without waiting on that unrelated observation.
 
 ## Block 1 — LiteLLM provider boundary
 
@@ -72,13 +75,13 @@ candidate list, repetition count, and maximum eval spend.
   behavior, system-prefix cache breakpoint, D-089 score clamp, per-posting failure isolation, and
   rerun idempotency.
 - Normalize each paid response into: validated value; mutually exclusive uncached input/output/
-  cache-read/cache-write tokens; LiteLLM catalog cost; actual upstream model; latency; request ID.
+  cache-read/cache-write tokens; best-effort LiteLLM catalog cost; actual upstream model; latency; request ID.
   Persist the actual upstream model on the existing posting/match row.
-- Unsupported parameters, malformed responses, absent usage, missing catalog pricing, and a false
-  zero cost fail loudly at the existing per-posting isolation boundary. `drop_params=False`; no
-  router, fallback, or new retry policy.
+- Unsupported parameters, malformed responses, and absent usage fail loudly at the existing per-posting
+  isolation boundary. Missing/invalid catalog pricing warns and becomes `None`, never a false `$0`;
+  provider billing is authoritative. `drop_params=False`; no router, fallback, or new retry policy.
 - Keep the existing `pipeline_runs` schema. Stage summaries aggregate returned catalog cost and
-  normalized tokens; no migration or per-call trace table is needed for this block.
+  normalized tokens; an incomplete estimate stores `NULL`. No migration or per-call trace table is needed.
 
 ### Explicitly out of Block 1
 
@@ -101,14 +104,14 @@ candidate list, repetition count, and maximum eval spend.
 - D-090, INVARIANTS, CLAUDE, `.env.example`, testing/workflow/deploy docs, beta ledger, docs/17,
   and WORKLOG all describe the same live boundary and remaining blocks.
 
-## Block 2 decision gate
+## Lean evaluation rule
 
-Before either cutover, Hayden approves the fixture set, scoring rubric, minimum pass thresholds,
-candidate list, run count, and maximum eval spend. The report must separate extraction from matching
-and show at least: schema-pass rate, task-specific correctness, obvious-NO recall, rationale quality,
-median/p95 latency, uncached/cache/output tokens, and catalog cost. A model that cannot support the
-required structured-output/caching/reasoning parameters must be called out explicitly; the adapter
-does not silently erase those requirements.
+Reuse and modestly extend the existing real-model evals rather than creating a benchmark subsystem.
+Extraction covers roughly six representative postings; matching covers roughly eight clear/ambiguous
+cases. Compare task correctness, schema validity, obvious-NO behavior, rationale quality, latency, and
+token usage; human-review outputs and repeat only questionable cases. Provider dashboards supply exact
+cost after each separately deployed cutover. A model that cannot support required structured output,
+caching, or reasoning controls fails; the adapter does not silently erase those requirements.
 
 ## Deployment rule
 

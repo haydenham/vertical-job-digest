@@ -166,10 +166,10 @@ pillar** (Hayden's call — folded in rather than a separate day).
      **extraction batching first** (input-bound and uncacheable). Matching already showed roughly 84–93%
      cache hits on most measured nights and is not the first target. Set spend guardrails beyond the
      existing backfill cap + daily ceiling (D-057, D-088).
-- **Accepted pre-beta/Robotics optimization program (D-090, `docs/19`):** July 17/18 observation → embedded
-  LiteLLM boundary at Anthropic parity → expanded multi-model eval + missing CI eval repair → separately
-  approved extraction cutover → matching cutover → chosen-model `no`-output optimization. Candidate names and
-  vendor benchmark claims are not decisions; exact availability, price, latency, and task quality are measured.
+- **Accepted pre-beta/Robotics optimization program (D-090, `docs/19`):** embedded LiteLLM boundary at
+  Anthropic parity → provider readiness → modest existing-eval expansion + DeepSeek V4 Flash extraction
+  cutover → modest existing-eval expansion + GPT-5.6 Luna matching cutover. Restore the missing CI eval gate,
+  but build no generic benchmark or `no`-output follow-on; provider dashboards are authoritative for cost.
 - **DoD:** a written scaling doc (thresholds + "what breaks first" + the Block-2 decision); any guardrail
   config that's cheap to land now. Reads `docs/11` (portability ledger) as the baseline.
 
@@ -225,7 +225,7 @@ does not block broader beta by itself.
 - Resolve the live robotics promise mismatch (ship the config or remove the public claim).
 - Land remaining user-facing beta fixes and minimum Cloud Job monitoring.
 - Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
-- Complete D-090's LLM optimization blocks through the chosen-model `no`-output decision; this precedes both
+- Complete D-090's lean extraction and matching model cutovers; this precedes both
   broader beta launch and the Robotics vertical.
 - Execute already-validated no-code employer activations.
 

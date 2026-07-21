@@ -1,11 +1,12 @@
 """Offline contract tests for the embedded LiteLLM provider boundary."""
 
+import logging
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from vja.llm import LiteLLMClient, _token_usage
+from vja.llm import LiteLLMClient, _token_usage, sum_catalog_costs
 
 
 class _Answer(BaseModel):
@@ -120,34 +121,55 @@ def test_unsupported_parameter_failure_propagates() -> None:
         )
 
 
-def test_missing_catalog_pricing_failure_propagates() -> None:
+def test_missing_catalog_pricing_returns_unavailable_cost(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Alembic's test-only fileConfig disables loggers imported before migration tests run.
+    logging.getLogger("vja.llm").disabled = False
+    caplog.set_level(logging.WARNING, logger="vja.llm")
+
     def missing_price(**_: Any) -> Any:
         raise RuntimeError("model is not mapped")
 
     client = LiteLLMClient(completion=lambda **_: _response(), completion_cost=missing_price)
-    with pytest.raises(RuntimeError, match="not mapped"):
-        client.parse(
-            model="provider/model",
-            system="system",
-            user="user",
-            response_model=_Answer,
-            max_tokens=10,
-        )
+    result = client.parse(
+        model="provider/model",
+        system="system",
+        user="user",
+        response_model=_Answer,
+        max_tokens=10,
+    )
+
+    assert result.cost_usd is None
+    assert result.usage.input == 1000
+    client.parse(
+        model="provider/model",
+        system="system",
+        user="user",
+        response_model=_Answer,
+        max_tokens=10,
+    )
+    assert caplog.text.count("catalog cost unavailable") == 1
 
 
-def test_nonempty_usage_cannot_be_recorded_as_false_zero_cost() -> None:
+def test_invalid_catalog_cost_is_unavailable_not_false_zero() -> None:
     client = LiteLLMClient(
         completion=lambda **_: _response(),
         completion_cost=lambda **_: 0.0,
     )
-    with pytest.raises(ValueError, match="zero/negative catalog cost"):
-        client.parse(
-            model="provider/model",
-            system="system",
-            user="user",
-            response_model=_Answer,
-            max_tokens=10,
-        )
+    result = client.parse(
+        model="provider/model",
+        system="system",
+        user="user",
+        response_model=_Answer,
+        max_tokens=10,
+    )
+    assert result.cost_usd is None
+
+
+def test_catalog_cost_sum_preserves_unavailable_state() -> None:
+    assert sum_catalog_costs(0.1, 0.2) == pytest.approx(0.3)
+    assert sum_catalog_costs(0.1, None) is None
 
 
 def test_missing_structured_content_and_usage_fail_loud() -> None:

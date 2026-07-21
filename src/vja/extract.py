@@ -43,7 +43,7 @@ from vja.fetchers.phenom import PhenomFetcher
 from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
-from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult
+from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult, sum_catalog_costs
 from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
@@ -122,7 +122,7 @@ class ExtractionSummary:
     total: int
     extracted: int
     failed: int
-    est_cost_usd: float
+    est_cost_usd: float | None
     usage: TokenUsage = TokenUsage()
 
 
@@ -194,7 +194,7 @@ def run_extraction(
     extracted = 0
     failed = 0
     usage = TokenUsage()
-    cost_usd = 0.0
+    cost_usd: float | None = 0.0
     for candidate in candidates:
         try:
             call = extract_posting(cli, _source_text(candidate, detail))
@@ -206,7 +206,7 @@ def run_extraction(
             continue
         fields = call.value
         usage = usage + call.usage
-        cost_usd += call.cost_usd
+        cost_usd = sum_catalog_costs(cost_usd, call.cost_usd)
         columns = fields_to_columns(fields)
         # Compute the durable in_scope gate on the effective (L1-authoritative) location: the stored
         # L1 value wins when present, else the model's read — matching what save_extraction writes.
@@ -262,9 +262,12 @@ def extract_main(argv: list[str] | None = None) -> int:
                 locations=cfg.prefilter_locations, levels=cfg.prefilter_levels
             ),
         )
+        estimated_cost = (
+            f"${summary.est_cost_usd:.4f}" if summary.est_cost_usd is not None else "unavailable"
+        )
         print(
             f"[{summary.vertical}] extracted {summary.extracted}/{summary.total} "
-            f"(failed {summary.failed}) est_cost=${summary.est_cost_usd:.4f}"
+            f"(failed {summary.failed}) est_cost={estimated_cost}"
         )
     return 0
 
