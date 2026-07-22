@@ -53,7 +53,7 @@ merge red.
 | Lint | `ruff check` | clean |
 | Types | `mypy` | clean; public functions typed |
 | Tests | `pytest` (unit+integration+system) | green; `live`/`e2e` excluded (`08`) |
-| Secrets | a secret-scan (e.g. `gitleaks`) | no findings |
+| Secrets | `gitleaks` (config: root `.gitleaks.toml` — default rules + a narrow public-fixture-value allowlist) | no findings. Scans the pushed range on push/PR but **full history on `workflow_dispatch`**, so a finding in an old blob needs an allowlist entry — scrubbing the tracked file alone can't green a manual-dispatch deploy |
 | Lockfile | `uv lock --check` | lock in sync with `pyproject.toml` (D-014) |
 | **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
 

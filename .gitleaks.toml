@@ -1,0 +1,20 @@
+# Config for the CI secrets gate (ci.yml `secrets` job). gitleaks auto-detects this file at the
+# repo root of whatever it scans, so no workflow change is needed. Note the scan is range-scoped
+# on push/PR events but FULL-HISTORY on workflow_dispatch — an allowlist entry must therefore
+# cover historical blobs too; scrubbing a tracked file alone cannot green a dispatch run.
+
+[extend]
+useDefault = true
+
+# Both entries cover public values inside captured ATS careers-page fixtures — served to every
+# anonymous page visitor, not credentials: the Apply-with-LinkedIn widget key attribute, and the
+# preview-link token NextEra embeds in its public "no unsolicited resumes" body paragraph. Kept
+# narrow (line-shape, not a tests/fixtures/ path allowlist) so a real secret accidentally captured
+# in a future fixture still fails the gate.
+[allowlist]
+description = "Public client-side values captured in ATS page fixtures"
+regexTarget = "line"
+regexes = [
+  '''data-api-key="[0-9a-z]+"''',
+  '''previewLink=true&amp;[A-Za-z0-9=&;]*token=[A-Za-z0-9%]+''',
+]
