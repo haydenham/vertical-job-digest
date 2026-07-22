@@ -5,6 +5,39 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-22 — Gitleaks fixture false positive unblocked the post-Luna deploy
+
+**Incident:** the D-093 deploy initially failed because prod lacked the `OPENAI_API_KEY` secret
+(`ship.sh` now mounts it on both Cloud Run targets); Hayden created the Secret Manager secret and
+re-ran CI via `workflow_dispatch`. That rerun then failed the `secrets` gate: gitleaks flagged
+`data-api-key="86x0eymjxbhgol"` at `tests/fixtures/radancy_detail.html:1087` — the public
+Apply-with-LinkedIn widget key served in NextEra's public careers page, captured with the D-052
+Radancy fixture. It is a client-side identifier, not a credential; nothing was rotated. Root cause
+of the late surfacing: push/PR runs scan the pushed range, but `workflow_dispatch` scans **full
+history** (`fetch-depth: 0`), reaching the old fixture blob that no push diff ever contained.
+
+**Built on `fix/gitleaks-fixture-allowlist` (uncommitted; Hayden owns commit/PR):** a local
+full-history gitleaks (8.30.1) run against the default ruleset enumerated the complete finding set —
+**two** public values in the same fixture's one historical blob: the widget key at line 1087 and a
+NextEra `previewLink` URL token (`token=a4un…%3D%3D`) at line 693, embedded in the public
+"no unsolicited resumes" body paragraph. New root `.gitleaks.toml` extends the default ruleset with
+two narrow line-target allowlist regexes, one per value shape (deliberately not a blanket
+`tests/fixtures/` path allowlist — fixtures are sanitized by policy and the scanner backstops that
+policy). The allowlist is required because the values persist in the historical blob; scrubbing
+alone cannot green a full-history scan. All three working-tree occurrences (the widget key at 1087
+and as `companyId` at 915, the URL token at 693) were still scrubbed to `fixture0scrubbed` for tree
+hygiene; no code reads the attributes, and the only detail-fetch assertion ("NextEra Energy" in the
+description) is unaffected. docs/09 now records the config file and the range-vs-full-history scan
+behavior.
+
+**Verification:** local full-history gitleaks (`--log-opts=--all`, 109 commits) **zero findings**;
+a worktree scan's only hits are the git-ignored `.env` (never scanned by CI — correct backstop
+behavior). Full default suite **565 passed, 31 opt-in deselected**; Radancy fixture suite 18/18;
+ruff format/check, mypy, import-linter (1 kept / 0 broken), `uv lock --check`, and
+`git diff --check` green. **Next:** Hayden reviews/commits/PRs; after merge, re-run the deploy
+(Actions → CI → Run workflow on `main`) — the dispatch-mode `secrets` pass is the end-to-end proof,
+and the deploy then lands the Luna cutover with the new secret mount.
+
 ## 2026-07-22 — D-093 Luna-low matching cutover built after human-reviewed eval
 
 **Decision:** the approved eight-case grid/aviation/robotics comparison produced Sonnet 4.6 medium **7/8**,
