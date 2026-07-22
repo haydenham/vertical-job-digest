@@ -1,12 +1,13 @@
 """Offline contract tests for the embedded LiteLLM provider boundary."""
 
 import logging
+import traceback
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from vja.llm import LiteLLMClient, _token_usage, sum_catalog_costs
+from vja.llm import LiteLLMClient, LLMRequestError, _token_usage, sum_catalog_costs
 
 
 class _Answer(BaseModel):
@@ -94,6 +95,35 @@ def test_parse_accepts_sdk_parsed_value() -> None:
     ).value == _Answer(label="parsed")
 
 
+def test_provider_exception_is_replaced_without_rendering_secrets() -> None:
+    leaked_key = "sentinel-api-key-value-that-must-never-render"
+
+    class ProviderFailure(RuntimeError):
+        status_code = 401
+
+    def completion(**_: Any) -> Any:
+        raise ProviderFailure(f"Authorization: Bearer {leaked_key}; prompt=private resume")
+
+    client = LiteLLMClient(completion=completion, completion_cost=lambda **_: 0.01)
+    with pytest.raises(LLMRequestError) as caught:
+        client.parse(
+            model="provider/model",
+            system="private system prompt",
+            user="private user prompt",
+            response_model=_Answer,
+            max_tokens=10,
+        )
+
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert str(caught.value) == (
+        "LLM request failed: model=provider/model error=ProviderFailure status=401"
+    )
+    assert leaked_key not in rendered
+    assert "private resume" not in rendered
+    assert "private system prompt" not in rendered
+    assert "private user prompt" not in rendered
+
+
 def test_token_usage_derives_uncached_input_when_provider_omits_text_detail() -> None:
     usage = _token_usage(
         {
@@ -110,7 +140,10 @@ def test_unsupported_parameter_failure_propagates() -> None:
         raise RuntimeError("unsupported reasoning_effort")
 
     client = LiteLLMClient(completion=completion, completion_cost=lambda **_: 0.01)
-    with pytest.raises(RuntimeError, match="unsupported reasoning_effort"):
+    with pytest.raises(
+        LLMRequestError,
+        match="LLM request failed: model=provider/model error=RuntimeError",
+    ):
         client.parse(
             model="provider/model",
             system="system",

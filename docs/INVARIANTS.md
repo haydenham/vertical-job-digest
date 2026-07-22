@@ -75,6 +75,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `anthropic/claude-sonnet-4-6`. Extraction is cached by `content_hash`; matching's stable system prefix is
   prompt-cached and runs at **`VJA_MATCH_EFFORT=medium`** by default (LiteLLM maps it to Sonnet adaptive
   thinking + output effort). Any cutover is eval-gated in a separate block. (D-035, D-036, D-069, D-090)
+- **Provider failures crossing `vja.llm` are secret-safe.** The public exception retains only the
+  configured model route, provider exception class, and integer HTTP status; provider response text,
+  headers, prompts, and API keys never remain in the raised exception or chained traceback. (D-090)
 - **Resume input abstracts to `resume_text`;** non-text formats are a signup-time adapter,
   not pipeline concern. (D-033)
 
@@ -266,9 +269,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (D-021)
 - **Default `pytest` suite is fast/offline/free** (unit + integration + system). `live` /
   `e2e` / `eval` are opt-in markers; tests run against captured fixtures, not live ATS.
-  LLM evals remain the required path-filtered merge policy, but the current CI workflow has drifted and
-  contains no eval job; provider-boundary parity is manually eval-gated in D-090 Block 1 and Block 2 must
-  restore the automated job before any model cutover. (D-019, D-020, D-090)
+  The real-model **extraction** eval is manual, metered evidence rather than a merge gate: model output is
+  nondeterministic, and a reasonable extraction model must not block a PR because one fixture varies. The
+  six-case Haiku check remains available for model/prompt decisions. Matching policy is decided separately
+  in D-090 Block 4. (D-019, D-020 as amended by D-090)
 - **Definition of Done:** green tests + ruff/format/mypy + import-linter + a human-read
   diff + updated docs, before merge. CI and pre-commit run the same checks. (D-021)
 - **Toolchain is `uv`; the lockfile must stay in sync** (`uv lock --check` in CI). (D-014)

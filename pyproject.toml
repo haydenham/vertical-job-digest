@@ -82,12 +82,12 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Opt-in tiers (docs/08): default run is unit+integration+system only.
-# `live`/`e2e`/`eval` never run in the inner loop or block a merge unless asked.
+# `live`/`e2e`/`eval` never run in the inner loop; extraction eval is advisory.
 addopts = "-m 'not live and not e2e and not eval'"
 markers = [
     "live: hits real ATS endpoints (opt-in; catches ATS drift, not logic)",
     "e2e: full real pipeline incl. network/LLM/email (opt-in, milestone-only)",
-    "eval: pins LLM match/extraction behavior (opt-in; manual until D-090 Block 2 restores CI)",
+    "eval: checks LLM behavior (opt-in/metered; extraction is advisory per D-090)",
 ]
 
 # import-linter: the layered architecture is law, not luck (run: `uv run lint-imports`).

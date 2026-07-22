@@ -1692,6 +1692,25 @@ The proposed `no`-output optimization is retired: matching reasons before its ve
 stored payload is not expected to remove the material reasoning-token spend. This paragraph supersedes
 D-090's missing-price failure and fourth-follow-on requirements; all other boundary rules remain.
 
+**Extraction decision (Hayden, 2026-07-21): retain Haiku.** The lean extraction eval now covers six
+representative postings and four literal anti-hallucination rules (unknown seniority, remote geographic
+eligibility, no hourly annualization, and publication-date provenance). On the final tuned prompt, production
+Haiku passed 6/6, DeepSeek V4 Flash passed 5/6, and DeepSeek V4 Pro passed 4/6. Both DeepSeek candidates missed
+explicit remote-US location; Pro also mislabeled a 3–5-year Engineer II role. They are rejected after the
+approved single tuning round, so no DeepSeek adapter, secret, model route, or deployment change is warranted.
+The useful universal prompt rules and six-case manual Haiku eval remain; matching/Luna is the next separate
+decision. **Extraction amendment (Hayden, 2026-07-22):** real extraction output is nondeterministic evidence,
+not a merge gate. The first solid Haiku baseline scored 5/6, so one varied fixture or provider outage must not
+block a code PR. This narrowly supersedes D-020/D-035's extraction-gate requirement: run the small metered suite
+manually for model/prompt decisions and apply human judgment. Matching's policy remains for its separate Block 4
+decision. The proposed automatic extraction workflow and GitHub Actions model-secret dependency are removed.
+
+During candidate testing, a provider SDK traceback retained request details and rendered the then-current local
+DeepSeek key. Hayden rotated it immediately. `vja.llm` now replaces every provider-call exception at the boundary
+without chaining it, retaining only model route, exception class, and integer HTTP status; a regression formats
+the full traceback and proves that keys and prompt text are absent. No key value entered the repository diff,
+and DeepSeek never reached production configuration.
+
 ### D-091 · Workday incident · Quarantined pagination trace before changing the completeness contract · accepted · 2026-07-17
 The first D-088 production run succeeded once in 33m35s, but 14 otherwise-healthy Workday tenants failed on
 page two with the same HTTP-200 shape: page one reported a nonzero total and page two reported `total=0`.

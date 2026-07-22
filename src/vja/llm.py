@@ -21,6 +21,14 @@ T = TypeVar("T", bound=BaseModel)
 logger = logging.getLogger("vja.llm")
 
 
+class LLMRequestError(RuntimeError):
+    """Safe provider-call failure that never retains response text, headers, prompts, or keys."""
+
+    def __init__(self, *, model: str, error_type: str, status_code: int | None) -> None:
+        status = f" status={status_code}" if status_code is not None else ""
+        super().__init__(f"LLM request failed: model={model} error={error_type}{status}")
+
+
 @dataclass(frozen=True)
 class StructuredResult[T: BaseModel]:
     """One validated response plus provider-normalized metering and trace metadata."""
@@ -157,7 +165,16 @@ class LiteLLMClient:
             kwargs["cache_control_injection_points"] = [{"location": "message", "role": "system"}]
 
         started = self._clock()
-        response = self._completion(**kwargs)
+        try:
+            response = self._completion(**kwargs)
+        except Exception as exc:
+            raw_status = getattr(exc, "status_code", None)
+            status_code = raw_status if type(raw_status) is int else None
+            raise LLMRequestError(
+                model=model,
+                error_type=type(exc).__name__,
+                status_code=status_code,
+            ) from None
         latency = self._clock() - started
 
         choices = _field(response, "choices")

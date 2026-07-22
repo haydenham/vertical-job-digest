@@ -20,15 +20,16 @@ evidence from D-088/D-089.
 2. **Block 1 — provider boundary (COMPLETE):** embedded LiteLLM preserves the current Anthropic
    models and behavior and replaces provider-specific types/rates with a typed local contract.
    Merged as PR #90 and deployed as image `07ed265` on 2026-07-16.
-3. **Block 2 — provider readiness (CURRENT):** upgrade to stable LiteLLM 1.93 so DeepSeek can run
+3. **Block 2 — provider readiness (COMPLETE):** upgrade to stable LiteLLM 1.93 so DeepSeek can run
    with thinking disabled. Token/latency/model telemetry remains required, but catalog price is a
    best-effort estimate: unavailable pricing stores `NULL` and never blocks a valid paid response.
    Provider dashboards are authoritative for exact cost.
-4. **Block 3 — extraction evaluation + cutover:** modestly extend the existing extraction eval with
-   representative postings, compare Haiku with `deepseek/deepseek-v4-flash` in non-thinking mode,
-   and cut over only if schema and field quality hold. Restore the D-020/D-021 path-filtered eval CI
-   gate as part of this first model-changing branch; do not build a generic benchmark framework.
-5. **Block 4 — matching evaluation + cutover:** modestly extend the existing matching eval with clear
+4. **Block 3 — extraction evaluation (COMPLETE; NO CUTOVER):** six representative cases plus four
+   literal prompt rules produced 6/6 for Haiku, 5/6 for DeepSeek V4 Flash, and 4/6 for DeepSeek V4
+   Pro. Both DeepSeek candidates were rejected; extraction remains Haiku. The six cases remain a
+   manual advisory tool, not a merge gate. No DeepSeek adapter, credential, or deploy configuration
+   remains.
+5. **Block 4 — matching evaluation + cutover (NEXT):** modestly extend the existing matching eval with clear
    and ambiguous cases, compare Sonnet with `openai/gpt-5.6-luna` at `none`, `low`, and `medium`, and
    choose the lowest effort that preserves trust. Measure real cost in the provider dashboard after
    one normal production run.
@@ -41,24 +42,11 @@ the stored `no` payload is not expected to avoid the material reasoning-token sp
 new prefilters, cache rework, and a new benchmark/reporting system are also out of scope unless production
 evidence later establishes a concrete use case.
 
-## Immediate handoff — deploy and observe D-092, then return to Block 2's decision gate
+## Immediate handoff — Block 4 matching decision
 
-The July 21 scheduled execution `vja-nightly-djxjt` was the first run with D-091 instrumentation. It completed
-once in 34m39s under the D-086 policy; its partial pipeline had 15/101 failures, all Workday. Each affected board
-returned consistent later-page zeros, disjoint pages, an exact page-one row/unique-ID count, zero overlap, and
-zero malformed IDs. Four other multi-page Workday boards repeated the original total and completed exactly.
-Thirteen zero-sentinel boards ended on a short page. Airbus and Thales instead each reported exactly 2,000 and
-returned 100 full pages—agreement with the reported target, but not proof that the source was uncapped.
-
-**D-092 contract correction:** page one sets the target; later pages must consistently repeat it or consistently
-report zero. Every unexpected/mixed total, incomplete/overlapping/malformed snapshot, and the ambiguous
-first-page-only 2,000/full-page signature still raises before diffing. The D-091 shadow walk is retired in favor
-of debug page evidence plus one compact summary. No manual board fetch, DB/schema/model/config change, or broad
-cap workaround is included. After Hayden's branch review/commit/PR and deploy, one normal scheduled run confirms
-the 13 restored boards and the two explicit cap failures.
-
-D-092 merged as PR #94 on July 21. Its next scheduled-run observation remains an operations check in
-parallel; Hayden approved the lean model-readiness branch without waiting on that unrelated observation.
+Hayden reviews/commits/PRs the extraction hardening branch. The next separate branch evaluates GPT-5.6 Luna
+for matching against the retained Sonnet baseline using the existing lean-eval rule. Do not reopen extraction
+model tuning without new production evidence; both approved DeepSeek candidates have had their one tuning round.
 
 ## Block 1 — LiteLLM provider boundary
 
@@ -90,8 +78,8 @@ parallel; Hayden approved the lean model-readiness branch without waiting on tha
   or generic LLM-read fetcher work.
 - No claim that a named candidate exists at a particular identifier/price until Block 2 verifies
   it against current primary provider documentation/catalog data.
-- No CI eval repair in this branch. The current Anthropic eval is run manually for parity; the
-  documented-but-missing path-filtered CI job is repaired with the expanded harness in Block 2.
+- No CI eval repair was part of Block 1. The Anthropic parity eval ran manually there; Block 3 retained
+  that manual/advisory policy after demonstrating that reasonable model variance makes a hard gate brittle.
 
 ### Block 1 DoD
 
