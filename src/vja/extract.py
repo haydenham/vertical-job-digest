@@ -1,10 +1,11 @@
 """Layer-2 LLM extraction (P5.2) — the first model code in the system.
 
 Turns the unstructured postings Stage A kept in-scope into the structured fields matching needs,
-using the configured cheap tier (Haiku 4.5 by default — D-005) through the provider-neutral LLM
-boundary for a schema-validated result. Runs only on open postings with `extracted_at IS NULL` that
-pass the free Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog once,
-then pennies a night. Synchronous calls (latency lands in-process; the absolute spend is pennies).
+using the configured cheap tier (Haiku 4.5 by default — D-005/D-090) through the provider-neutral
+LLM boundary for a schema-validated result. Runs only on open postings with `extracted_at IS NULL`
+that pass the free Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog
+once, then pennies a night. Synchronous calls (latency lands in-process; the absolute spend is
+pennies).
 
 Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy,
 Paylocity, Phenom, BambooHR —
@@ -63,6 +64,13 @@ def _extract_model() -> str:
 _SYSTEM_PROMPT = """\
 You extract structured fields from a single job posting (given as the raw ATS payload). Report
 only what the posting states; use the unknown/empty value when a field is absent — never guess.
+
+Apply these literal rules:
+- level is unknown when the posting gives no level, seniority marker, or experience range.
+- for a remote role, location is its stated geographic eligibility; use null if none is stated.
+- comp_min / comp_max use only explicitly annual USD bounds; never annualize hourly compensation.
+- posted_at is only a job publication/start date; never use graduation or candidate-eligibility
+  dates.
 
 - level: career level. intern | new_grad | early_career | mid | senior | unknown.
 - location: primary work location as a short string (e.g. "Houston, TX"), or null if unstated.

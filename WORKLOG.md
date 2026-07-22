@@ -5,6 +5,31 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-22 — D-090 extraction candidates rejected; Haiku retained and eval kept advisory
+
+**Decision:** the approved lean six-posting evaluation and one prompt-tuning round produced **Haiku 6/6**,
+**DeepSeek V4 Flash 5/6**, and **DeepSeek V4 Pro 4/6**. Both DeepSeek models omitted the explicit United States
+eligibility location on a remote role; Pro also labeled a 3–5-year Engineer II role `early_career` rather than
+`mid`. Hayden rejected both candidates, so extraction remains `anthropic/claude-haiku-4-5`; no DeepSeek adapter,
+production credential, route, or deploy change remains. The useful universal prompt rules and six representative
+Haiku cases remain as a manual/advisory tool, never a merge gate. GPT-5.6 Luna matching is the next separate
+branch/decision. Hayden explicitly rejected automatic extraction-model gating: the first solid Haiku baseline
+was 5/6, which is evidence to review rather than a reason to block a PR.
+
+**Security correction:** an initial DeepSeek provider failure rendered request details, including the old local
+API key, through the provider SDK traceback. Hayden rotated the key. `vja.llm` now replaces provider-call failures
+with a non-chained exception containing only model route, exception class, and integer status; a regression
+formats the full traceback and proves keys and prompts cannot render. No secret value entered the repo diff.
+
+**Built on `fix/extraction-eval-hardening` (uncommitted; Hayden owns commit/PR):** retained only the concrete
+quality and security improvements. Focused provider/extraction coverage **22 passed**; full default suite
+**564 passed, 25 opt-in deselected** (one pre-existing FastAPI/httpx deprecation warning). Ruff format/check,
+mypy (132 files), import-linter (1 kept / 0 broken), `uv lock --check`, `git diff --check`, frontend lint/types/
+**95 tests**, and production Docker image `vja:extraction-eval-hardening` are green. The final paid Haiku eval
+was already 6/6 after the retained prompt change, so it was not rerun after deleting code used only by rejected
+DeepSeek routes. The proposed automatic extraction-eval workflow and repository-secret dependency were removed;
+then Hayden reviews/commits/PRs this branch. Matching/Luna starts only on its next branch.
+
 ## 2026-07-21 — D-090 lean provider readiness built; no model cutover
 
 **Decision correction:** Hayden rejected work without a concrete use case. The D-090 plan now has three

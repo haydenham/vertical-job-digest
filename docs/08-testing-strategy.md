@@ -23,10 +23,9 @@ Fast tests are run constantly and so stay green; slow/flaky tests get skipped an
 as possible **down** the pyramid. If a thing *can* be tested as a pure function, it must be.
 
 The default test command (`pytest`) runs **unit + integration + system** — all deterministic, offline, free, seconds
-to run. The `live` and `e2e` tiers are opt-in markers that never run in the inner loop or block a merge. D-020's
-policy is that `eval` also stays out of the inner loop but blocks prompt/matching/extraction PRs. **Current drift
-(D-090):** `.github/workflows/ci.yml` has no eval job. Block 1 manually runs the Anthropic-parity eval; Block 2
-expands the harness and restores the path-filtered CI gate before any model cutover.
+to run. The `live` and `e2e` tiers are opt-in markers that never run in the inner loop or block a merge. `eval` is
+also opt-in and metered. D-090 narrowly amends D-020 for **extraction** output: its nondeterministic results are
+advisory evidence rather than required checks. Matching policy remains a separate Block-4 decision.
 
 ---
 
@@ -138,9 +137,10 @@ Two sub-tiers, split by determinism so the gate is robust to the model flapping:
   **threshold/majority over the small golden set** (e.g. sample an "obvious no" a few times, require the majority to
   say `no`) rather than demanding one perfect run — a single flaky sample warns, a real regression (the model now
   says `yes` to junk) fails the set.
-- **This is the required merge policy, not just a signal — and it is path-filtered.** Block 2 of D-090 must make
-  CI run `-m eval` only when the PR touches prompt/matching/extraction/provider-boundary code. Until that repair,
-  those changes require a documented manual eval; no model cutover is allowed.
+- **Real extraction-model output is evidence, not a merge gate.** Run its small eval manually when choosing or
+  materially changing the extraction prompt/model, record the result, and use human judgment. A reasonable 5/6
+  or provider outage must not block an otherwise-correct PR; deterministic schema/wiring contracts stay in the
+  default suite. Matching policy remains for D-090 Block 4.
 - **Metered + small.** Every eval run counts toward LLM spend, but the golden set is a handful of cases and only the
   prompt-touching PRs trigger it, so the bill is cents — cheap insurance on the one trust-critical output. Keep the
   set small and curated; grade structure/coverage against a rubric (optionally LLM-as-judge) where wording matters.
