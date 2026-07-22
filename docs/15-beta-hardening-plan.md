@@ -166,11 +166,10 @@ pillar** (Hayden's call — folded in rather than a separate day).
      **extraction batching first** (input-bound and uncacheable). Matching already showed roughly 84–93%
      cache hits on most measured nights and is not the first target. Set spend guardrails beyond the
      existing backfill cap + daily ceiling (D-057, D-088).
-- **Accepted pre-beta/Robotics optimization program (D-090, `docs/19`):** embedded LiteLLM boundary and
-  provider readiness are complete. The six-case extraction decision retained Haiku (6/6) after rejecting
-  DeepSeek V4 Flash (5/6) and Pro (4/6). Its six cases remain manual/advisory rather than a live-model merge
-  gate. GPT-5.6 Luna matching evaluation is next. Build no generic benchmark or `no`-output follow-on; provider dashboards are
-  authoritative for cost.
+- **Accepted pre-beta/Robotics optimization program (D-090/D-093, `docs/19`):** extraction retained Haiku;
+  the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Both live-model
+  evals stay manual evidence, not paid CI gates. Build no generic benchmark or `no`-output follow-on; provider
+  dashboards are authoritative for cost.
 - **DoD:** a written scaling doc (thresholds + "what breaks first" + the Block-2 decision); any guardrail
   config that's cheap to land now. Reads `docs/11` (portability ledger) as the baseline.
 

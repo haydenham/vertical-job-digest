@@ -175,10 +175,10 @@ then built on `feat/onboarding-tutorial`.**
   deferred because the product is time-sensitive. The July 16 run started before #88 merged; use
   July 17 and 18 as the two production observation nights, then re-measure and reconsider
   extraction-first batching only if spend remains material.
-- **LLM optimization follow-on (D-090, active; plan `docs/19`):** provider readiness is complete; the lean
-  extraction decision retained Haiku after DeepSeek V4 Flash/Pro missed required fields; its six-case eval remains
-  manual/advisory, never a merge gate. GPT-5.6 Luna matching evaluation is next. Provider dashboards are authoritative for exact
-  cost. No generic benchmark, payload/cache redesign, or `no`-output follow-on is in scope.
+- **LLM optimization follow-on (D-090/D-093; plan `docs/19`):** extraction retained Haiku and the reviewed
+  eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live-model evals remain manual
+  evidence with Hayden signoff, never paid CI gates. Provider dashboards are authoritative for exact cost; no
+  generic benchmark, payload/cache redesign, or `no`-output follow-on is in scope.
 - **Robotics vertical inputs (branch ready for review):** `robotics_software` adds 30 curated employers, 24 with
   verified Layer-1 endpoints, plus its YAML and matching profile. This branch does not import Neon data or run
   discovery. Because `/api/verticals` is config-driven, deploy only with the coordinated seed import/cutover;

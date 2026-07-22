@@ -56,15 +56,14 @@ merge red.
 | Secrets | a secret-scan (e.g. `gitleaks`) | no findings |
 | Lockfile | `uv lock --check` | lock in sync with `pyproject.toml` (D-014) |
 | **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
-| **LLM evals** (opt-in, metered) | `pytest -m eval` | extraction is manual/advisory (D-090); matching policy is decided in Block 4 |
 
 Pre-commit mirrors CI so failures surface in seconds, not after a push. CI is the gate that can't be bypassed.
 
-**The eval gate is conditional on purpose.** Evals hit the real configured provider, so an unconditional check
-would tax a docs typo with tokens and flake risk. D-020 requires the gate only for prompt/matching/extraction
-paths. The repository currently drifted from that policy: `ci.yml` has no eval job (D-090). Block 1 therefore
-requires a documented manual parity run; Block 2 restores and expands the conditional job before any cutover.
-Non-determinism is handled in the suite itself, not by weakening the target gate — see `08`.
+**Real-model evals are deliberately outside CI.** They hit paid providers, vary legitimately, and would require
+provider credentials in GitHub without a concrete operational need. A matching/extraction model or prompt change
+instead requires a small local metered run, preserved outputs, and Hayden's explicit review/signoff. CI hard-gates
+the deterministic structure, routing, persistence, and offline behavior. Do not add a benchmark subsystem or paid
+workflow merely because the eval file exists. (D-090, D-093; see `08`.)
 
 ## Conventions that keep generated code consistent
 

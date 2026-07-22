@@ -238,7 +238,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - API keys in env config, never in the repo. DB never publicly exposed. Application CLIs auto-load
   a git-ignored `.env` (python-dotenv); **Alembic does not**, so migrations require an explicit
   `VJA_DATABASE_URL` export (D-083). Layer-2 routes = `VJA_EXTRACT_MODEL` (default
-  `anthropic/claude-haiku-4-5`) + `VJA_MATCH_MODEL` (default `anthropic/claude-sonnet-4-6`), through
+  `anthropic/claude-haiku-4-5`) + `VJA_MATCH_MODEL` (default `openai/gpt-5.6-luna`, low effort), through
   embedded LiteLLM; provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
   (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
   **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's
@@ -286,7 +286,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing, the churn-fix prerequisite, and the rejected-features record. Planning only; nothing live.
-- `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090): LiteLLM provider readiness complete; the six-case extraction decision retained Haiku after rejecting DeepSeek V4 Flash/Pro; GPT-5.6 Luna matching evaluation is next. Provider billing is authoritative; no generic benchmark or `no`-output follow-on.
+- `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090/D-093): extraction retained Haiku; the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live evals remain manual evidence, provider billing is authoritative, and no generic benchmark/paid CI gate/`no`-output follow-on exists.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 

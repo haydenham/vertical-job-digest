@@ -24,8 +24,9 @@ clutter in actual use.
 and resist clutter. Redundant-for-us features are rejected on sight (the whole platform is
 early-career, so YOE/new-grad flags say nothing here).
 
-The slate: two adaptations (**F1 freshness**, **F2 salary**) + two novel derivations from data
-we already pay to collect (**F3 recurring-gaps report**, **F4 lifespan intel**).
+The original slate: two adaptations (**F1 freshness**, **F2 salary**) + two novel derivations from data
+we already pay to collect (**F3 recurring-gaps report**, **F4 lifespan intel**). D-093 later parks **F5
+city/region preferences** as an unsequenced follow-on; it does not expand the active build slate.
 
 ## Blocking prerequisite — the D-085 churn diagnosis
 
@@ -122,6 +123,19 @@ approaches its employer's median. Zero LLM cost.
 **Prereq:** churn fix — reopen/close cycling corrupts the medians (D-053 reopen semantics also
 reset `first_seen_at`, which the stat must account for).
 **Status:** planned, not started.
+
+## F5 — City + region preferences (parked follow-on; D-093)
+
+City selection is a proven job-board control. The Rolefeed-specific extension is broader regions: a user could
+select “Midwest” and matching could map that preference to Chicago or other cities named in a posting. This is
+the first concrete use case for variable prompt components derived from user preferences.
+
+Location remains logistics, not match quality: preferences should annotate or prioritize the write-up/list,
+not change the semantic résumé-to-role score. Explicit country/work-authorization incompatibility remains a
+separate hard signal. The current one-size-fits-all prompt stays in place; schema, region taxonomy, UI, and prompt
+wiring wait for a dedicated post-beta decision rather than riding the Luna cutover.
+
+**Status:** idea accepted and parked; not sequenced or built.
 
 ## Sequencing (post-beta-exit)
 
