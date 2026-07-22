@@ -243,6 +243,11 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
               ? "Upload résumé"
               : "Uploaded"}
         </button>
+
+        <p className="upload-disclosure">
+          By uploading, you agree your résumé is processed by AI models from Anthropic and OpenAI
+          to generate your matches. See our <Link to="/privacy">privacy notice</Link>.
+        </p>
       </form>
     </div>
   );

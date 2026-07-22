@@ -1177,3 +1177,62 @@ a:hover {
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* ---- privacy notice + shell footer (compliance PR 1, D-094) ----
+   Scoped to .legal-page / .app-footer / .upload-disclosure; rules above stay untouched. */
+.legal-page {
+  max-width: 68ch;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  font-size: 15px;
+  line-height: 1.65;
+}
+.legal-page h2 {
+  margin: 28px 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.legal-page p,
+.legal-page ul {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+}
+.legal-page li {
+  margin: 0 0 8px;
+}
+.legal-page strong {
+  color: var(--text);
+}
+.legal-title {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 650;
+}
+.legal-updated {
+  margin: 0 0 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.app-footer {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: center;
+  padding: 20px 24px 28px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.app-footer-link {
+  color: var(--text-dim);
+}
+.app-footer-link:hover {
+  color: var(--text-muted);
+}
+
+.upload-disclosure {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}

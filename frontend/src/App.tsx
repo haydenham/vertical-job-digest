@@ -6,6 +6,7 @@ import { TOUR_SEEN_KEY, WelcomeTour } from "./components/WelcomeTour";
 import { Dashboard } from "./pages/Dashboard";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
+import { Privacy } from "./pages/Privacy";
 import { Upload } from "./pages/Upload";
 
 // App shell + auth-aware routing (Phase B, D-064/D-065). Vertical is a property of the logged-in
@@ -147,7 +148,18 @@ export default function App() {
         <Route path="/onboarding" element={<OnboardingRoute />} />
         <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/upload" element={<UploadRoute />} />
+        <Route path="/privacy" element={<Privacy />} />
       </Routes>
+      {/* The landing page owns its own footer (with its own Privacy link), so the shell footer
+          skips `/` — where Landing renders logged-out and logged-in visitors redirect anyway. */}
+      {location.pathname !== "/" && (
+        <footer className="app-footer">
+          <Link to="/privacy" className="app-footer-link">
+            Privacy
+          </Link>
+          <span className="app-footer-copy">© 2026 Rolefeed</span>
+        </footer>
+      )}
       {tourOpen && profile && <WelcomeTour onDismiss={dismissTour} />}
     </div>
   );

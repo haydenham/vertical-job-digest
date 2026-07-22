@@ -59,4 +59,9 @@ describe("Landing", () => {
     );
     expect(screen.getByText(/never auto-applies/i)).toBeInTheDocument();
   });
+
+  it("links the privacy notice from the footer", () => {
+    render(<Landing />);
+    expect(screen.getByRole("link", { name: /privacy/i })).toHaveAttribute("href", "/privacy");
+  });
 });

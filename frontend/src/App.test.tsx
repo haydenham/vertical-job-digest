@@ -12,6 +12,7 @@ vi.mock("./pages/Dashboard", () => ({ Dashboard: () => <div>dashboard-page</div>
 vi.mock("./pages/Login", () => ({ Login: () => <div>login-page</div> }));
 vi.mock("./pages/Upload", () => ({ Upload: () => <div>upload-page</div> }));
 vi.mock("./pages/Landing", () => ({ Landing: () => <div>landing-page</div> }));
+vi.mock("./pages/Privacy", () => ({ Privacy: () => <div>privacy-page</div> }));
 vi.mock("./auth/useAuth", () => ({ useAuth: vi.fn() }));
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -175,5 +176,27 @@ describe("App routing + guards", () => {
     mockUseAuth.mockReturnValue(auth({ loading: true }));
     renderAt("/");
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  // --- privacy notice (compliance PR 1, D-094) ---
+
+  it("/privacy is reachable logged-out, with the shell footer's privacy link", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/privacy");
+    expect(screen.getByText("privacy-page")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^privacy$/i })).toHaveAttribute("href", "/privacy");
+  });
+
+  it("/privacy is reachable while signed in", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    renderAt("/privacy");
+    expect(screen.getByText("privacy-page")).toBeInTheDocument();
+  });
+
+  it("the shell footer stays off the root route, where the landing owns the footer", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/");
+    expect(screen.getByText("landing-page")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^privacy$/i })).not.toBeInTheDocument();
   });
 });

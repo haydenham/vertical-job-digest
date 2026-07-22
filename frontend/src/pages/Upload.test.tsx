@@ -66,6 +66,18 @@ describe("Upload", () => {
     expect(screen.getByText("login-page")).toBeInTheDocument();
   });
 
+  it("discloses the AI-provider processing next to submit, linking the privacy notice", async () => {
+    mockUseAuth.mockReturnValue(signedIn());
+    renderUpload();
+    const disclosure = await screen.findByText(/processed by AI models/i);
+    expect(disclosure).toHaveTextContent(/anthropic/i);
+    expect(disclosure).toHaveTextContent(/openai/i);
+    expect(screen.getByRole("link", { name: /privacy notice/i })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+  });
+
   it("renders the vertical cards + file dropzone in onboarding mode", async () => {
     mockUseAuth.mockReturnValue(signedIn());
     renderUpload();

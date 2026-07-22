@@ -219,15 +219,19 @@ incorporating beta-user feedback are the main product loops. Execute already-val
 then add fetchers by the `docs/07` demand ledger when coverage demand justifies them. An endless fetcher queue
 does not block broader beta by itself.
 
-## Beta exit line (accepted 2026-07-13, D-085)
+## Beta exit line (accepted 2026-07-13, D-085; **reduced 2026-07-22, D-094**)
 
-- Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard merged #87.
-- Resolve the live robotics promise mismatch (ship the config or remove the public claim).
-- Land remaining user-facing beta fixes and minimum Cloud Job monitoring.
-- Complete the five-pillar scaling assessment, including the churn-first D-069/Batch decision.
-- Complete D-090's remaining lean matching model decision; this precedes both
-  broader beta launch and the Robotics vertical.
-- Execute already-validated no-code employer activations.
+- Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard merged #87. ✅
+- Robotics promise mismatch resolved: the vertical config merged #93 and its Neon baseline ran. ✅
+- D-090/D-093 matching decision complete: Luna low merged #97 and deployed. ✅
+- **Compliance/usability block (D-094, 3 PRs):** privacy notice (PR 1) → digest unsubscribe (PR 2) →
+  settings + account deletion (PR 3).
+- **Kept minimums (D-094):** one GCP alert-policy pair on the nightly Job (failed / did-not-run);
+  one-time Google OAuth publishing-status check (the 100-user "Testing" cap); the July-23 read-only
+  first-Luna-night audit; the already-validated no-code employer activations (Hayden-run, not a gate).
+- **Dropped (D-094):** the five-pillar written scaling assessment, D-086's durable digest delivery
+  idempotency (the 6h/zero-retry guard covers the observed path), and monitoring beyond the single
+  alert pair.
 
 Scheduled discovery and the remaining generic-fetcher roadmap are explicitly outside this exit gate.
 
