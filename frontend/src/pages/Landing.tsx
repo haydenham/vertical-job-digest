@@ -228,7 +228,9 @@ export function Landing() {
         <p className="footer-note">
           Rolefeed surfaces and reasons — it never auto-applies. Every application stays yours.
         </p>
-        <p className="footer-copy">© 2026 Rolefeed</p>
+        <p className="footer-copy">
+          © 2026 Rolefeed · <a href="/privacy">Privacy</a>
+        </p>
       </footer>
     </div>
   );

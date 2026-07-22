@@ -204,9 +204,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (demand-ranked, D-076: SWA/Thales Workday configs ✅ → Paylocity + D-077 `vja-review set-ats` tooling ✅ →
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
   (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo).
-  **Beta exit:** PR 3 + user-facing fixes/reupload guard + robotics-promise resolution + minimum Job monitoring +
-  scaling assessment + validated no-code activations. After that, the main loops are UI/UX, company databases,
-  and beta-user feedback; scheduled discovery and the endless fetcher tail are not exit gates (D-085).
+  **Beta exit (reduced by D-094, 2026-07-22):** the compliance/usability 3-PR block — privacy notice →
+  digest unsubscribe → settings + account deletion — plus one GCP alert-policy pair on the nightly Job, a
+  one-time Google OAuth publishing-status check, and the Hayden-run no-code activations. The five-pillar
+  scaling doc, D-086 digest idempotency, and broader monitoring are dropped. Robotics config (#93) and the
+  Luna matching cutover (#97, D-093) closed their exit items. After exit, the main loops are UI/UX, company
+  databases, and beta-user feedback; scheduled discovery and the endless fetcher tail are not exit gates
+  (D-085/D-094).
 - **Phase 10 — Layer 3: discovery agent (resequenced down; D-047/D-084).** On-demand agent finds new *employers* →
   `proposed` rows in a review queue. A nice-to-have, not essential: shell + formatting around Opus deep web search
   → new companies into the DB. Deferred because it doesn't gate a user-facing launch. **10.1 thin core ✅** (D-070):

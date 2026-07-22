@@ -5,6 +5,33 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-22 — D-094 beta exit re-scoped; compliance PR 1 (privacy notice) built
+
+**Decision (D-094):** Hayden reduced the final beta-exit line — the five-pillar scaling doc, D-086 digest
+idempotency, and broad monitoring are dropped; time goes to user-facing compliance/usability features. In:
+a 3-PR block — privacy notice → digest unsubscribe (pause-only, flag on `users` so a résumé reupload can't
+reset it) → settings page + hard account deletion. Kept minimums: one GCP alert-policy pair on the nightly
+Job, a one-time Google OAuth publishing-status check (100-user "Testing" cap), the July-23 first-Luna-night
+read-only audit, and the Hayden-run no-code activations. Exit-line state was reconciled: robotics config
+merged #93 with its Neon baseline running, and Luna low merged #97 — both formerly-open exit items are done.
+
+**Built on `feat/privacy-page` (frontend-only, uncommitted; Hayden owns commit/PR) — PR 1 of 3:** new static
+`/privacy` route (`Privacy.tsx`): plain-language disclosure of what's stored (Google email/name, résumé
+text, matches/digests), résumé processing by Anthropic + OpenAI APIs (with the not-used-for-training API-terms
+line), Resend delivery, single session cookie, no selling/no auto-apply, and the contact-email deletion path
+until PRs 2–3 ship self-serve. Landing footer links it (plain `<a>` — Landing renders Router-free in tests);
+a new shell footer (Privacy + ©) renders on all non-`/` routes, skipping the landing which owns its own
+footer; the upload form gains the one-line AI-processing disclosure beside submit. New scoped `.legal-page` /
+`.app-footer` / `.upload-disclosure` styles in `theme.css`.
+
+**Verification:** frontend eslint + `tsc -b --noEmit` + vitest **103/103** (was 95: new Privacy suite, shell
+footer/route coverage incl. footer-absent-on-`/`, landing footer link, upload disclosure) + production build
+green. Headless-Chrome pass against the served build on a scratch sqlite DB (throwaway session secret, minted
+cookie, zero LLM): `/privacy` 1440+720, landing, and authed `/upload` 1440+720 — no overflow, no new console
+errors (only the pre-existing anonymous `/api/me` 401 log). Backend untouched; `git diff --check` clean.
+Docs: D-094, docs/15 exit line, CLAUDE. **Next:** Hayden reviews/commits/PRs; then PR 2 (unsubscribe:
+migration + email footer + endpoint) on a fresh branch.
+
 ## 2026-07-22 — Gitleaks fixture false positive unblocked the post-Luna deploy
 
 **Incident:** the D-093 deploy initially failed because prod lacked the `OPENAI_API_KEY` secret

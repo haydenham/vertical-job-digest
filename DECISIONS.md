@@ -1782,3 +1782,24 @@ rollback. Future location preferences are parked post-beta: users may select cit
 mapping such as “Midwest” → Chicago and variable prompt components. Even then, preferences inform/annotate the
 write-up rather than becoming match-score quality. The current prompt stays one-size-fits-all. References D-007,
 D-020, D-021, D-023, D-036, D-069, D-089, D-090.
+
+### D-094 · Product/compliance · Privacy notice + unsubscribe + account deletion; beta-exit line reduced · accepted · 2026-07-22
+Hayden re-scoped the final beta hardening: remaining ledger breadth loses to shipping user-facing features.
+**In (a 3-PR block):** PR 1 — a static `/privacy` notice (what's stored; résumé text is processed by
+third-party AI model providers — Anthropic + OpenAI — whose API terms exclude training on API data; Resend
+delivery; one session cookie; no selling; no auto-apply; deletion path), linked from the landing footer, a
+shell footer on non-landing routes, and a disclosure line beside the upload submit. PR 2 — unsubscribe:
+`users.digest_paused` (on `users`, not versioned `profiles`, so a reupload can't reset it), a tokenized
+no-login link in the digest email footer, and a paused check inside `send_digest`. PR 3 — a `/settings` page
+with the pause/resume toggle plus hard account deletion (`DELETE /api/me`: user, profiles, matches, digest
+rows; postings/employers untouched — D-009's never-delete covers postings, not user PII). Unsubscribe pauses
+digest email only: matching and the dashboard continue. The notice is a plain-language product disclosure,
+not legal advice.
+
+**Out (drops D-085 exit-line items):** the five-pillar written scaling assessment, D-086's durable digest
+delivery idempotency (the 6h/zero-retry guard covers the observed path), and any monitoring beyond one
+platform alert. **Kept minimums:** a single GCP alert policy pair on the nightly Job (execution failed /
+no execution in 24h — the one failure tests cannot see), a one-time check that the Google OAuth consent
+screen is not in "Testing" mode (100-user hard cap), the July-23 read-only first-Luna-night audit, and the
+already-validated no-code employer activations (Hayden-run, not a gate). References D-005, D-009, D-027,
+D-037, D-057, D-064, D-082, D-085, D-086, D-090, D-093.
