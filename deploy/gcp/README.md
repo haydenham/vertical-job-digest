@@ -109,8 +109,8 @@ Values to load:
 
 | Secret | Source |
 |---|---|
-| `ANTHROPIC_API_KEY` | existing (current LiteLLM Layer-2 default routes) |
-| `OPENAI_API_KEY` | GPT-5.6 Terra (ready-but-off Layer-3 discovery Job) |
+| `ANTHROPIC_API_KEY` | extraction (`anthropic/claude-haiku-4-5`) |
+| `OPENAI_API_KEY` | matching (`openai/gpt-5.6-luna`) + manual Layer-3 discovery |
 | `RESEND_API_KEY` | existing (digest + alert email) |
 | `VJA_DATABASE_URL` | Neon, `+psycopg` rewritten (§3) |
 | `VJA_SESSION_SECRET` | `openssl rand -hex 32` (fresh for prod) |
@@ -125,9 +125,9 @@ Values to load:
 (SPA is same-origin in prod).
 
 Layer-2 routes default in code to `anthropic/claude-haiku-4-5` (extraction) and
-`anthropic/claude-sonnet-4-6` (matching), so D-090 Block 1 adds no Cloud Run env or secret. A later cutover must
-mount its provider key in both complete `ship.sh` secret lists and set `VJA_EXTRACT_MODEL` and/or
-`VJA_MATCH_MODEL` as preserved non-secret env; do not switch a route before its eval block is approved.
+`openai/gpt-5.6-luna` at `low` effort (matching). D-090's approved matching cutover mounts the existing
+OpenAI Secret Manager key in both complete `ship.sh` secret lists and explicitly preserves
+`VJA_MATCH_MODEL`/`VJA_MATCH_EFFORT` on both Cloud Run targets.
 
 > Cloud Run's runtime service account needs `roles/secretmanager.secretAccessor` to read these — granted
 > at the 9.5d deploy when the service account is known.
@@ -173,7 +173,7 @@ The 9.5d image push target: `${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/r
 
 - [ ] GCP project `role-feed-prod` exists, billing linked, four APIs enabled
 - [ ] Neon DB created (AWS us-east-2), `+psycopg` URL reach-tested
-- [ ] All 8 secrets present (`gcloud secrets list`)
+- [ ] All 9 secrets present (`gcloud secrets list`)
 - [ ] OAuth web client created with the `https://role-feed.com/auth/callback` redirect URI
 - [ ] Resend domain `role-feed.com` Verified (SPF/DKIM in Cloudflare)
 - [ ] Artifact Registry repo `rolefeed` exists (`gcloud artifacts repositories list`)

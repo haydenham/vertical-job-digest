@@ -3,7 +3,7 @@
 Turns the in-scope, extracted postings that clear the two cheap gates into a written judgment
 against the user's resume. Stage A (`scope.in_scope` on the title) and Stage B
 (`prefilter.passes_prefilter` on the extracted level/location) drop the obvious non-matches for
-free; only the survivors reach the **strong tier** here (Sonnet — D-005), which states what fits,
+free; only the survivors reach the configured rationale model, which states what fits,
 what does NOT fit, a verdict, and a 0-100 score (D-007: matching is reasoning, not similarity, and
 the willingness to say *no* is a product requirement).
 
@@ -44,17 +44,16 @@ from vja.verticals import VerticalConfig
 
 logger = logging.getLogger("vja.match")
 
-_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
+_DEFAULT_MODEL = "openai/gpt-5.6-luna"
 _BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
-_MAX_TOKENS = 4096  # room for adaptive thinking + the structured rationale
-# Sonnet effort (adaptive thinking depth). Matching is a bounded, schema-constrained judgment task,
-# so `high` (the API default) overspends — thinking bills as output ($15/MTok). Default `medium`,
-# validated by the D-020 eval; env-overridable so `low` can be A/B'd in prod without a redeploy.
-_DEFAULT_MATCH_EFFORT = "medium"
+_MAX_TOKENS = 4096  # room for reasoning + the structured rationale
+# Matching is a bounded, schema-constrained judgment task. The D-090 comparison found Luna `low`
+# preserved trust while beating both Luna `medium` and Sonnet `medium` on latency and cost.
+_DEFAULT_MATCH_EFFORT = "low"
 
 
 def _match_effort() -> str:
-    """The Sonnet effort level (`VJA_MATCH_EFFORT`), read at call time (mirrors backfill knobs)."""
+    """Configured reasoning effort, read at call time (mirrors the backfill knobs)."""
     return os.environ.get("VJA_MATCH_EFFORT") or _DEFAULT_MATCH_EFFORT
 
 
@@ -84,6 +83,14 @@ State, grounded only in what the resume and posting actually say:
 - score: 0-100 overall match strength, consistent with the verdict (no≈0-35, maybe≈35-60,
   yes≈60-85, strong_yes≈85-100).
 - rationale: one or two sentences justifying the verdict — the line a busy job-seeker reads first.
+
+Calibrate experience against the role's stated level. For new-grad and early-career roles,
+relevant internships, coursework, and substantial projects are valid evidence; do not cap an
+otherwise excellent match below strong_yes merely because the candidate lacks production depth.
+For a US role, an unstated willingness to relocate or work onsite is neutral: you may mention the
+location logistics, but never lower the verdict or score for that uncertainty. Only an explicit
+geographic or work-authorization incompatibility counts negatively. Preserve maybe or no for
+mid/senior level mismatches and hard eligibility conflicts.
 
 Report only what the inputs support; never invent experience the resume doesn't state."""
 

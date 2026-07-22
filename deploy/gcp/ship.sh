@@ -39,6 +39,13 @@ set -euo pipefail
 : "${JOB_TASK_TIMEOUT_SECONDS:=21600}"
 : "${JOB_MAX_RETRIES:=0}"
 
+# D-090: matching cut over only after the human-reviewed eight-case Sonnet/Luna comparison.
+# `--update-env-vars` preserves the auth/cookie/public-URL guards while making the exact route and
+# effort explicit on both Cloud Run targets; rollback remains a route change or prior revision.
+: "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"
+: "${MATCH_REASONING_EFFORT:=low}"
+LAYER2_ENV="VJA_MATCH_MODEL=${MATCH_MODEL_ROUTE},VJA_MATCH_EFFORT=${MATCH_REASONING_EFFORT}"
+
 # Unattended CD (9.6/D-068) sets this to 1: on a failed smoke, auto-roll traffic back to the prior
 # revision before exiting non-zero (gcloud run deploy sends 100% traffic to the new revision on deploy,
 # so a bad revision is already serving). Default 0 = the manual behavior — print rollback + exit, human
@@ -47,9 +54,9 @@ set -euo pipefail
 
 # ⚠ --set-secrets has REPLACE semantics: each list below is the COMPLETE set mounted on that target.
 # Adding a secret to prod means adding it here too, or the next deploy drops it. Kept identical to
-# CUTOVER §5 (service, 8) and §8 (job, 5).
-SERVICE_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
-JOB_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+# CUTOVER §5 (service, 9) and §8 (job, 6).
+SERVICE_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+JOB_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
 
 FORCE=0
 [[ "${1:-}" == "--force" || "${1:-}" == "-y" ]] && FORCE=1
@@ -96,6 +103,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --service-account "$RUNTIME_SA" \
+  --update-env-vars "$LAYER2_ENV" \
   --set-secrets "$SERVICE_SECRETS"
 
 # --- 5. Update the nightly Job to the same image (D-031 trigger-swap: one image, two run targets) -
@@ -106,6 +114,7 @@ gcloud run jobs update "$JOB" \
   --service-account "$RUNTIME_SA" \
   --task-timeout "$JOB_TASK_TIMEOUT_SECONDS" \
   --max-retries "$JOB_MAX_RETRIES" \
+  --update-env-vars "$LAYER2_ENV" \
   --set-secrets "$JOB_SECRETS"
 
 # --- Smoke -------------------------------------------------------------------------------------

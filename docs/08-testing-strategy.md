@@ -24,8 +24,8 @@ as possible **down** the pyramid. If a thing *can* be tested as a pure function,
 
 The default test command (`pytest`) runs **unit + integration + system** — all deterministic, offline, free, seconds
 to run. The `live` and `e2e` tiers are opt-in markers that never run in the inner loop or block a merge. `eval` is
-also opt-in and metered. D-090 narrowly amends D-020 for **extraction** output: its nondeterministic results are
-advisory evidence rather than required checks. Matching policy remains a separate Block-4 decision.
+also opt-in and metered. D-090/D-093 amend D-020 for real-model output: extraction and matching results are
+manual, human-reviewed evidence rather than automated merge checks.
 
 ---
 
@@ -125,22 +125,22 @@ Matching and extraction are **non-deterministic**: you cannot `assert rationale 
 everywhere in Levels 1–3** (the pipeline's *wiring* is deterministic and gets tested; the model's *words* do not
 run there). The model's actual behavior is pinned by a small, separate **eval suite** (`-m eval`, opt-in, metered):
 
-Two sub-tiers, split by determinism so the gate is robust to the model flapping:
+Two sub-tiers, split by determinism:
 
 - **(a) Structural properties — deterministic, hard gate.** On model output (a recorded response is enough; no
   live call needed): `verdict ∈ {strong_yes,yes,maybe,no}`; `fits` non-empty AND `gaps` non-empty for **every**
   match (D-007 — a rationale missing either is a defect); extraction `level ∈` the allowed enum; `stack` parses as
   a JSON array. These are pure schema checks — they cannot flap, so they **block hard**.
-- **(b) Behavioral cases — live, threshold gate.** The willingness-to-say-no test (a product requirement, not a
+- **(b) Behavioral cases — live, human-reviewed evidence.** The willingness-to-say-no test (a product requirement, not a
   nicety — D-007): a curated, deliberately-bad posting (senior role, wrong domain, visa-blocked) **must** return
   `verdict = no`; a couple of "obvious yes" cases must clear `maybe`. These call the real model, so they gate on a
-  **threshold/majority over the small golden set** (e.g. sample an "obvious no" a few times, require the majority to
-  say `no`) rather than demanding one perfect run — a single flaky sample warns, a real regression (the model now
-  says `yes` to junk) fails the set.
-- **Real extraction-model output is evidence, not a merge gate.** Run its small eval manually when choosing or
-  materially changing the extraction prompt/model, record the result, and use human judgment. A reasonable 5/6
-  or provider outage must not block an otherwise-correct PR; deterministic schema/wiring contracts stay in the
-  default suite. Matching policy remains for D-090 Block 4.
+  small accepted rubric and complete output review; repeat only questionable cases. The run informs the human
+  model/prompt decision and never executes in CI.
+- **Real model output is evidence, not a merge gate.** Run the small extraction or matching eval manually when
+  choosing or materially changing its prompt/model, preserve the complete output, and require Hayden's explicit
+  signoff. Model variance or a provider outage must not block an otherwise-correct PR; deterministic schema,
+  routing, and persistence contracts stay in the default suite. Do not add provider credentials or paid model
+  jobs to CI without a concrete new use case. (D-090, D-093)
 - **Metered + small.** Every eval run counts toward LLM spend, but the golden set is a handful of cases and only the
   prompt-touching PRs trigger it, so the bill is cents — cheap insurance on the one trust-critical output. Keep the
   set small and curated; grade structure/coverage against a rubric (optionally LLM-as-judge) where wording matters.
@@ -155,7 +155,7 @@ Two sub-tiers, split by determinism so the gate is robust to the model flapping:
 | Anything that reads or writes the DB, or chains two components | **Integration** test on a real temp DB, externals faked |
 | A change to the pipeline orchestrator / run summary / send path | **System** test keeping the full run green |
 | A new/changed fetcher, or anything touching a real endpoint | a **`live`** smoke fixture refresh; run `-m live` once manually |
-| A new/changed matching or extraction **prompt** | an **`eval`** case (incl. an "obvious no"); run `-m eval` once |
+| A new/changed matching or extraction **prompt/model** | run the small **`eval`** suite locally, preserve outputs, obtain Hayden's signoff |
 | **A bug fix** | the **failing regression test first** (red), then the fix (green). The test reproduces the bug before the fix exists. No regression test ⇒ the bug isn't fixed, it's hidden. |
 
 Non-negotiables:

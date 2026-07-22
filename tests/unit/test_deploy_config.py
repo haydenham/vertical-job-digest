@@ -18,3 +18,12 @@ def test_nightly_job_disables_unsafe_whole_task_retry() -> None:
     create_runbook = _CUTOVER.read_text(encoding="utf-8")
     assert "--task-timeout 21600" in create_runbook
     assert "--max-retries 0" in create_runbook
+
+
+def test_luna_matching_route_and_secret_survive_every_deploy() -> None:
+    script = _SHIP.read_text(encoding="utf-8")
+
+    assert ': "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"' in script
+    assert ': "${MATCH_REASONING_EFFORT:=low}"' in script
+    assert script.count("OPENAI_API_KEY=OPENAI_API_KEY:latest") == 2
+    assert script.count('--update-env-vars "$LAYER2_ENV"') == 2

@@ -29,10 +29,14 @@ evidence from D-088/D-089.
    Pro. Both DeepSeek candidates were rejected; extraction remains Haiku. The six cases remain a
    manual advisory tool, not a merge gate. No DeepSeek adapter, credential, or deploy configuration
    remains.
-5. **Block 4 — matching evaluation + cutover (NEXT):** modestly extend the existing matching eval with clear
-   and ambiguous cases, compare Sonnet with `openai/gpt-5.6-luna` at `none`, `low`, and `medium`, and
-   choose the lowest effort that preserves trust. Measure real cost in the provider dashboard after
-   one normal production run.
+5. **Block 4 — matching evaluation + cutover (BUILT; deploy/observation remains):** the eight-case
+   grid/aviation/robotics comparison produced Sonnet medium **7/8** (the mid-level/domain-fit case was
+   `yes/72` twice), Luna low **8/8**, and Luna medium **8/8**. Hayden selected Luna low: it met the same
+   trust bar as medium with lower latency/tokens and was materially faster/cheaper than Sonnet.
+   One approved prompt-calibration round made domestic relocation neutral and calibrated early-career
+   evidence without weakening the mid/senior or work-authorization guards. The tuned Luna-low run passed
+   8/8; one malformed `fits` fragment did not repeat on the allowed rerun. Deploy through the existing
+   OpenAI Secret Manager key, then measure authoritative billing after one normal production run.
 
 No candidate wins from a benchmark headline or vendor claim. Extraction and matching are separate
 choices because their quality/cost requirements differ.
@@ -42,11 +46,13 @@ the stored `no` payload is not expected to avoid the material reasoning-token sp
 new prefilters, cache rework, and a new benchmark/reporting system are also out of scope unless production
 evidence later establishes a concrete use case.
 
-## Immediate handoff — Block 4 matching decision
+## Immediate handoff — Block 4 deploy
 
-Hayden reviews/commits/PRs the extraction hardening branch. The next separate branch evaluates GPT-5.6 Luna
-for matching against the retained Sonnet baseline using the existing lean-eval rule. Do not reopen extraction
-model tuning without new production evidence; both approved DeepSeek candidates have had their one tuning round.
+Hayden reviews/commits/PRs the matching branch. Merge-to-main deploys the provider-neutral image with
+`VJA_MATCH_MODEL=openai/gpt-5.6-luna`, `VJA_MATCH_EFFORT=low`, and the existing `OPENAI_API_KEY` mounted on
+both the service (signup backfill) and nightly Job. Smoke the normal service/auth checks; the next scheduled
+run is the first production cost/quality observation. Do not reopen extraction or matching model tuning
+without new production evidence.
 
 ## Block 1 — LiteLLM provider boundary
 
@@ -97,14 +103,16 @@ model tuning without new production evidence; both approved DeepSeek candidates 
 Reuse and modestly extend the existing real-model evals rather than creating a benchmark subsystem.
 Extraction covers roughly six representative postings; matching covers roughly eight clear/ambiguous
 cases. Compare task correctness, schema validity, obvious-NO behavior, rationale quality, latency, and
-token usage; human-review outputs and repeat only questionable cases. Provider dashboards supply exact
-cost after each separately deployed cutover. A model that cannot support required structured output,
-caching, or reasoning controls fails; the adapter does not silently erase those requirements.
+token usage; human-review outputs and repeat only questionable cases. Both suites are manual/advisory,
+not paid CI merge gates: model/prompt decisions require a recorded local run plus Hayden's explicit signoff,
+while deterministic structure/routing/persistence remain hard offline gates. Do not add provider keys or
+live-model jobs to GitHub Actions without a new concrete use case. Provider dashboards supply exact cost
+after each separately deployed cutover. A model that cannot support required structured output, caching,
+or reasoning controls fails; the adapter does not silently erase those requirements.
 
 ## Deployment rule
 
-Block 1 requires no production secret or env mutation: the defaults route through the already-mounted
-`ANTHROPIC_API_KEY`. A later provider cutover is incomplete until its credential is added to Secret
-Manager and to the complete service/Job secret lists in `deploy/gcp/ship.sh`, and its exact model route
-is set as a preserved non-secret Cloud Run environment variable. Rollback is an env/model-route change
-to the last eval-passing model, with the existing image still provider-neutral.
+Block 4 uses the existing production `OPENAI_API_KEY` Secret Manager entry. The cutover is incomplete until
+that key is in the complete service/Job secret lists in `deploy/gcp/ship.sh` and the exact Luna-low route is
+set as preserved non-secret Cloud Run environment variables on both targets. Rollback is an env/model-route
+change to Sonnet medium (or traffic to the prior revision); the image remains provider-neutral.

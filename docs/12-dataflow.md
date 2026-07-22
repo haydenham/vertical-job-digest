@@ -53,8 +53,8 @@ flowchart TD
   stageA2 -->|no| dropM1["dropped, free"]
   stageA2 -->|yes| stageB{"passes_prefilter?<br/>Stage-B level/geo (free)"}
   stageB -->|no| dropM2["dropped, free"]
-  stageB -->|yes| sonnet["match_posting<br/>Sonnet (cached resume prefix)"]
-  sonnet -.LLM.-> saveMatch["save_match<br/>fits/gaps/verdict/score"]
+  stageB -->|yes| luna["match_posting<br/>Luna low (cached resume prefix)"]
+  luna -.LLM.-> saveMatch["save_match<br/>fits/gaps/verdict/score"]
   saveMatch --> matches[("matches")]
 
   %% --- Delivery: push ---------------------------------------------------------
@@ -115,7 +115,7 @@ bump.
 
 LLM spend is governed by two free deterministic gates *before* each model tier. Extraction
 is the cheap tier (Haiku); only its survivors that also clear Stage B reach the strong
-tier (Sonnet) — the one real cost.
+tier (Luna low) — the trust-critical judgment step.
 
 ```mermaid
 flowchart LR
@@ -124,14 +124,14 @@ flowchart LR
   a -->|keep| haiku["Haiku extract<br/>level, geo, stack, comp…"]
   haiku -.LLM $.-> b{"Stage B<br/>passes_prefilter<br/>level + geo, coarse"}
   b -->|drop| x2["wrong level/geo — $0"]
-  b -->|keep| sonnet["Sonnet match<br/>fits/gaps/verdict/score"]
-  sonnet -.LLM $$.-> matches[("matches")]
+  b -->|keep| luna["Luna-low match<br/>fits/gaps/verdict/score"]
+  luna -.LLM $$.-> matches[("matches")]
 ```
 
 Both gates are **deliberately coarse and err toward keeping** (`unknown` level or location
 passes): dropping a plausible match is worse than spending a few cents to let the model
 rule it out. Both gates' knobs are vertical config (`config/verticals/*.yaml`), never code
-(D-004). Sonnet's resume + instructions are a **cached prefix**, so the per-posting fields
+(D-004). The match model's resume + instructions are a **cached prefix**, so the per-posting fields
 are the only volatile tokens — the backfill burst pays the resume once.
 
 ## Data stores (the five core entities + the run log)

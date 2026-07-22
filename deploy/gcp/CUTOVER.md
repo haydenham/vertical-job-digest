@@ -103,13 +103,15 @@ gcloud run deploy rolefeed \
   --region "$REGION" \
   --allow-unauthenticated \
   --service-account "$RUNTIME_SA" \
-  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+  --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low" \
+  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
 ```
 
 - `--allow-unauthenticated` is **Cloud Run's** IAM (lets the public reach the container) — orthogonal to the
   app's own `VJA_AUTH_REQUIRED` login gate. Keep it on; the app enforces its own auth.
 - `VJA_FRONTEND_DIST=/app/frontend/dist` is already the image default (D-060) — no need to set it.
-- The service needs `ANTHROPIC_API_KEY` (upload→backfill matching) + DB + session + OAuth; `RESEND`/`DIGEST_*`
+- The service needs `OPENAI_API_KEY` (upload→backfill matching), `ANTHROPIC_API_KEY` (extraction), DB,
+  session, and OAuth; `RESEND`/`DIGEST_*`
   are mounted too so nothing is missing if a code path touches them. Cost guards default safely
   (`VJA_BACKFILL_MAX_POSTINGS`=100, `VJA_DAILY_LLM_BUDGET_USD`=$5) — set explicitly only to override.
 - Optional: `--min-instances=1` avoids cold starts + keeps a warm Neon connection; default 0 is cheapest.
@@ -154,7 +156,8 @@ gcloud run jobs create vja-nightly \
   --command /app/.venv/bin/vja-nightly \
   --task-timeout 21600 \
   --max-retries 0 \
-  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+  --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low" \
+  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
 
 # Cloud Scheduler → Jobs Admin :run API (nightly; matches the launchd 06:00 local trigger)
 gcloud scheduler jobs create http vja-nightly-trigger \

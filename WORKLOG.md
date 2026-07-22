@@ -5,6 +5,33 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-22 — D-093 Luna-low matching cutover built after human-reviewed eval
+
+**Decision:** the approved eight-case grid/aviation/robotics comparison produced Sonnet 4.6 medium **7/8**,
+GPT-5.6 Luna low **8/8**, and Luna medium **8/8**. Sonnet promoted the deliberately ambiguous mid-level/domain-fit
+case to `yes/72` twice; both Luna efforts kept it at `maybe/48`. Luna low averaged 5.94s versus Sonnet's 9.61s
+and its LiteLLM catalog estimate was ~$0.018 versus ~$0.049 for the same eight cases; provider billing remains
+authoritative. Hayden reviewed every score/rationale and selected `openai/gpt-5.6-luna` at `low` effort.
+
+**Built on `eval/luna-vs-sonnet-matching` (uncommitted; Hayden owns commit/PR):** matching now defaults to Luna
+low. One approved prompt-calibration round treats internships/coursework/projects as valid early-career evidence
+and makes domestic relocation neutral to verdict/score while preserving explicit country/work-auth and mid/senior
+guards. The tuned run passed **8/8**, moving the generic technical fit `maybe/58 → yes/76` and clear robotics
+fit `yes/74 → strong_yes/88`; one malformed `fits` fragment did not repeat on its allowed rerun, so no heuristic
+cleanup/retry was added. City + region preferences and variable prompt parts are parked post-beta; they annotate
+logistics rather than change semantic match quality, and today's prompt stays universal.
+
+**Deployment/security/workflow:** `ship.sh` mounts the existing OpenAI Secret Manager key by name on both the API
+service and nightly Job and preserves the exact Luna-low env route; GitHub Actions never receives the provider key.
+The secret-safe unchained `vja.llm` exception regression remains green. Extraction and matching live evals are
+manual metered evidence requiring recorded outputs + Hayden signoff, not paid CI gates; no benchmark/CI machinery
+was added. D-093, INVARIANTS, docs/08/09/12/15/17/18/19, deploy runbooks, CLAUDE, `.env.example`, and dataflow are
+reconciled. Full default suite **565 passed, 31 opt-in deselected**; ruff format/check, mypy (132 files),
+import-linter (1 kept / 0 broken), `uv lock --check`, `git diff --check`, bash syntax, frontend lint/types/**95
+tests**/build, and production `linux/amd64` image `vja:luna-match-cutover` are green. No production deploy, commit,
+or PR was performed. **Next:** Hayden reviews/commits/PRs; merge-to-main deploys Luna low, then the next normal
+scheduled run is the first production quality/cost observation.
+
 ## 2026-07-22 — D-090 extraction candidates rejected; Haiku retained and eval kept advisory
 
 **Decision:** the approved lean six-posting evaluation and one prompt-tuning round produced **Haiku 6/6**,

@@ -87,7 +87,7 @@ addopts = "-m 'not live and not e2e and not eval'"
 markers = [
     "live: hits real ATS endpoints (opt-in; catches ATS drift, not logic)",
     "e2e: full real pipeline incl. network/LLM/email (opt-in, milestone-only)",
-    "eval: checks LLM behavior (opt-in/metered; extraction is advisory per D-090)",
+    "eval: manual/advisory LLM evidence (opt-in/metered; D-090/D-093)",
 ]
 
 # import-linter: the layered architecture is law, not luck (run: `uv run lint-imports`).

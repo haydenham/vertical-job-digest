@@ -29,16 +29,16 @@ overhaul). §9.5d below is the cutover index.
 | **Data migration** | **Fresh Postgres, no carryover** + a **suppressed baseline run** | sqlite→PG migration is throwaway risk; `vja.db` is disposable-by-design; postings re-fetch nightly; the 425 matches / 3 profiles are test data. Baseline run stamps `first_seen_at` so the first real digest is a normal delta, not a monster |
 | **Sequencing** | **Four sub-blocks** (9.5a–d); a/b are code-now, c/d are ops-later | each PR-sized with a real gate; code progress isn't blocked on provisioning |
 
-**Secrets needed in prod** (all env, → Secret Manager at 9.5c): `ANTHROPIC_API_KEY`, `RESEND_API_KEY`,
+**Secrets needed in prod** (all env, → Secret Manager at 9.5c): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `RESEND_API_KEY`,
 `VJA_DATABASE_URL` (Neon), `VJA_SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `VJA_DIGEST_FROM` (verified domain), `VJA_DIGEST_RECIPIENT` (ops/alert addr), `VJA_AUTH_REQUIRED=1`,
 `VJA_CORS_ORIGINS` (if SPA ever off-origin; same-origin needs none), `VJA_PUBLIC_BASE_URL` (see 9.5a-2).
 
 **Layer-2 routing (D-090):** embedded LiteLLM currently defaults to
 `VJA_EXTRACT_MODEL=anthropic/claude-haiku-4-5` and
-`VJA_MATCH_MODEL=anthropic/claude-sonnet-4-6`, so Block 1 needs no production env/secret mutation. A later
-provider cutover must add its credential to Secret Manager + both complete `ship.sh` secret lists and set the
-model route as a preserved non-secret Cloud Run variable; the evaluated Anthropic route remains rollback.
+`VJA_MATCH_MODEL=openai/gpt-5.6-luna` at `VJA_MATCH_EFFORT=low`. The approved matching cutover mounts the
+existing OpenAI Secret Manager key through both complete `ship.sh` secret lists and preserves the exact
+route/effort as non-secret Cloud Run variables; Sonnet medium remains the rollback route.
 
 ---
 
@@ -155,7 +155,7 @@ Manual + the written runbook (`deploy/gcp/README.md`), no app code. As executed 
 4. **OAuth:** web client **in `role-feed-prod`** (consent screen External/Testing + test users); redirect
    `https://role-feed.com/auth/callback`. The `*.run.app` fallback URI is added at 9.5d once the service URL
    exists.
-5. **Secret Manager:** all 8 secrets loaded (the table above).
+5. **Secret Manager:** all 9 secrets loaded (the table above).
 6. **Artifact Registry:** Docker repo `rolefeed` in `us-central1`.
 7. **Resend:** `role-feed.com` verified (SPF/DKIM in Cloudflare); `VJA_DIGEST_FROM=digest@role-feed.com`.
 

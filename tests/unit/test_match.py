@@ -98,13 +98,13 @@ def test_match_posting_passes_effort_default_and_env_override(
 ) -> None:
     client = _FakeClient(_RESULT)
     match_posting(cast("StructuredLLM", client), "resume", (), "Title: SWE")
-    assert client.calls[0]["model"] == "anthropic/claude-sonnet-4-6"
-    assert client.calls[0]["reasoning_effort"] == "medium"  # D-069 default
+    assert client.calls[0]["model"] == "openai/gpt-5.6-luna"
+    assert client.calls[0]["reasoning_effort"] == "low"  # D-090 selected default
 
-    monkeypatch.setenv("VJA_MATCH_EFFORT", "low")
+    monkeypatch.setenv("VJA_MATCH_EFFORT", "medium")
     client2 = _FakeClient(_RESULT)
     match_posting(cast("StructuredLLM", client2), "resume", (), "Title: SWE")
-    assert client2.calls[0]["reasoning_effort"] == "low"  # env-overridable knob
+    assert client2.calls[0]["reasoning_effort"] == "medium"  # env-overridable knob
 
 
 def test_match_posting_model_env_override(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -69,12 +69,16 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   guarantees an integer but not JSON-Schema numeric bounds; a returned integer outside the range is
   clamped to the nearest boundary and logged before strict final validation. Wrong types and every
   other malformed result still fail per posting; no corrective LLM retry is made. (D-089, D-007)
-- **Layer-2 model access is provider-neutral and configured, but today's models are unchanged.**
+- **Layer-2 model access is provider-neutral and configured.**
   `vja.llm` is the sole embedded-LiteLLM boundary; extraction/matching import its typed contract, never a
-  provider SDK. `VJA_EXTRACT_MODEL` defaults to `anthropic/claude-haiku-4-5` and `VJA_MATCH_MODEL` to
-  `anthropic/claude-sonnet-4-6`. Extraction is cached by `content_hash`; matching's stable system prefix is
-  prompt-cached and runs at **`VJA_MATCH_EFFORT=medium`** by default (LiteLLM maps it to Sonnet adaptive
-  thinking + output effort). Any cutover is eval-gated in a separate block. (D-035, D-036, D-069, D-090)
+  provider SDK. `VJA_EXTRACT_MODEL` defaults to `anthropic/claude-haiku-4-5`; matching defaults to
+  `VJA_MATCH_MODEL=openai/gpt-5.6-luna` at **`VJA_MATCH_EFFORT=low`** after the human-reviewed D-093
+  comparison. Extraction is cached by `content_hash`; matching's stable system prefix is prompt-cached.
+  (D-035, D-036, D-069, D-090, D-093)
+- **Domestic location is match logistics, not match quality.** For a US role, unstated relocation or onsite
+  willingness may be mentioned but never lowers verdict/score. Explicit country/work-authorization conflicts
+  still count, and the deterministic Stage-B confirmed-non-US filter remains. Future city/region preferences
+  are parked and will annotate the write-up rather than the score; today's prompt is universal. (D-023, D-093)
 - **Provider failures crossing `vja.llm` are secret-safe.** The public exception retains only the
   configured model route, provider exception class, and integer HTTP status; provider response text,
   headers, prompts, and API keys never remain in the raised exception or chained traceback. (D-090)
@@ -269,10 +273,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (D-021)
 - **Default `pytest` suite is fast/offline/free** (unit + integration + system). `live` /
   `e2e` / `eval` are opt-in markers; tests run against captured fixtures, not live ATS.
-  The real-model **extraction** eval is manual, metered evidence rather than a merge gate: model output is
-  nondeterministic, and a reasonable extraction model must not block a PR because one fixture varies. The
-  six-case Haiku check remains available for model/prompt decisions. Matching policy is decided separately
-  in D-090 Block 4. (D-019, D-020 as amended by D-090)
+  Real-model extraction and matching evals are manual, metered evidence rather than merge gates: model output
+  is nondeterministic and provider credentials do not belong in CI without a concrete use case. Model/prompt
+  changes require the small representative suite, preserved outputs, and Hayden's explicit signoff;
+  deterministic schema/routing/persistence remain hard gates. (D-019, D-020 as amended by D-090/D-093)
 - **Definition of Done:** green tests + ruff/format/mypy + import-linter + a human-read
   diff + updated docs, before merge. CI and pre-commit run the same checks. (D-021)
 - **Toolchain is `uv`; the lockfile must stay in sync** (`uv lock --check` in CI). (D-014)

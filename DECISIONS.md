@@ -1753,3 +1753,32 @@ agreement with the reported target but not source completeness and strongly matc
 specific first-page-only/full-page signature raises an explicit cap `FetchError`. Their existing rows remain
 untouched; no broad acceptance, facet-partition strategy, manual refetch, or config/Layer-2 reclassification is
 part of this branch. References D-005, D-016, D-021, D-032, D-046, D-088, D-091.
+
+### D-093 · LLM optimization · Luna low replaces Sonnet for matching; live evals stay manual · accepted · 2026-07-22
+The approved eight-case grid/aviation/robotics comparison measured Sonnet 4.6 medium at **7/8**, GPT-5.6
+Luna low at **8/8**, and Luna medium at **8/8**. Sonnet promoted the intentionally ambiguous mid-level/domain-fit
+case to `yes/72` twice; both Luna efforts kept it at `maybe/48`. Luna low met the same 8/8 trust bar as medium
+with lower latency and token use, and its catalog estimate was about 63% below Sonnet's over the fixture set.
+Hayden selected `openai/gpt-5.6-luna` at `low` effort.
+
+One human-reviewed prompt-calibration round makes relevant internships/coursework/projects real evidence at
+new-grad and early-career levels without weakening mid/senior or hard-eligibility guards. Domestic location is
+logistics, not match quality: for US roles, an unstated willingness to relocate or work onsite may be mentioned
+but never lowers verdict/score; explicit country/work-authorization incompatibility still counts, and Stage B's
+confirmed-non-US filter remains unchanged. The tuned Luna-low run passed 8/8 and improved two conservative
+positives; one malformed `fits` fragment did not repeat on its allowed rerun, so no one-off cleanup heuristic or
+retry policy was added.
+
+Real matching output is nondeterministic evidence, not an automatic merge gate. Future model/prompt decisions
+must run the small metered suite locally, preserve the complete outputs, and receive Hayden's explicit signoff.
+Deterministic schema/routing/persistence tests remain hard CI gates. Do not add a provider key, paid eval job, or
+benchmark subsystem to GitHub Actions without a concrete new use case. This supersedes D-020/D-021 and D-090's
+unimplemented path-filtered live-eval requirement for matching; extraction already follows the same manual rule.
+Provider-call exceptions still cross `vja.llm` through the D-090 secret-safe, unchained boundary.
+
+Deployment mounts the existing `OPENAI_API_KEY` Secret Manager entry on both Cloud Run targets and explicitly
+preserves `VJA_MATCH_MODEL=openai/gpt-5.6-luna` plus `VJA_MATCH_EFFORT=low`; Sonnet medium remains the env-only
+rollback. Future location preferences are parked post-beta: users may select cities and broader regions, with AI
+mapping such as “Midwest” → Chicago and variable prompt components. Even then, preferences inform/annotate the
+write-up rather than becoming match-score quality. The current prompt stays one-size-fits-all. References D-007,
+D-020, D-021, D-023, D-036, D-069, D-089, D-090.
