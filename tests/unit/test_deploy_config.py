@@ -26,4 +26,19 @@ def test_luna_matching_route_and_secret_survive_every_deploy() -> None:
     assert ': "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"' in script
     assert ': "${MATCH_REASONING_EFFORT:=low}"' in script
     assert script.count("OPENAI_API_KEY=OPENAI_API_KEY:latest") == 2
-    assert script.count('--update-env-vars "$LAYER2_ENV"') == 2
+    # Service keeps LAYER2_ENV verbatim; the Job's env extends it (JOB_ENV) — both carry the route.
+    assert '--update-env-vars "$LAYER2_ENV"' in script
+    assert '--update-env-vars "$JOB_ENV"' in script
+    assert 'JOB_ENV="${LAYER2_ENV},' in script
+
+
+def test_unsubscribe_token_config_survives_every_deploy() -> None:
+    # D-094: the nightly composer must sign with the same secret the API verifies with, and needs
+    # the public origin for absolute links. Both mounted on the Job by every deploy.
+    script = _SHIP.read_text(encoding="utf-8")
+
+    assert script.count("VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest") == 2  # service AND job
+    assert "VJA_PUBLIC_BASE_URL=${VJA_PUBLIC_BASE_URL:-https://role-feed.com}" in script
+
+    create_runbook = _CUTOVER.read_text(encoding="utf-8")
+    assert create_runbook.count("VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest") == 2

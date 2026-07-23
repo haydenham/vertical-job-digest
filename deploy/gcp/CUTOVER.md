@@ -156,8 +156,8 @@ gcloud run jobs create vja-nightly \
   --command /app/.venv/bin/vja-nightly \
   --task-timeout 21600 \
   --max-retries 0 \
-  --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low" \
-  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+  --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low,VJA_PUBLIC_BASE_URL=https://role-feed.com" \
+  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest"
 
 # Cloud Scheduler → Jobs Admin :run API (nightly; matches the launchd 06:00 local trigger)
 gcloud scheduler jobs create http vja-nightly-trigger \
@@ -170,7 +170,8 @@ gcloud scheduler jobs create http vja-nightly-trigger \
 
 Prove it before trusting the cron: `gcloud run jobs execute vja-nightly --region "$REGION"` and watch logs
 (`gcloud run jobs executions list --job vja-nightly`). The Job needs DB + Anthropic (extract/match) + Resend +
-`VJA_DIGEST_*` (send) — but **not** OAuth/session (it has no HTTP surface).
+`VJA_DIGEST_*` (send) — and, as of D-094, `VJA_SESSION_SECRET` + `VJA_PUBLIC_BASE_URL` (the digest's
+unsubscribe token/link — same secret the API verifies with). It still needs **no** OAuth (no HTTP surface).
 
 **Task-attempt policy (D-086):** keep the timeout at **21,600 seconds (6h)** and automatic task retries at
 **zero**. The nightly processes verticals sequentially and sends each vertical immediately after its Layer-2

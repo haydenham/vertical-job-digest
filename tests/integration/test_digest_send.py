@@ -10,17 +10,20 @@ send advances the next digest's window.
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
+import pytest
 import respx
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
 from vja.db.matches import save_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
-from vja.db.schema import digests, employers, postings
+from vja.db.schema import digests, employers, postings, users
 from vja.digest.assembly import build_digest
 from vja.digest.send import DigestConfig, send_digest
+from vja.digest.unsubscribe import parse_unsubscribe_token
 
 _PASS = lambda _url: True  # noqa: E731  (tiny test stub; a def would be noisier)
 _EMAIL = "me@example.com"
@@ -222,3 +225,126 @@ def test_successful_send_advances_the_window(migrated_engine: Engine) -> None:
     contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
     assert contents.since == t1
     assert {p.external_id for p in contents.new} == {"fresh"}
+
+
+def _user(engine: Engine, *, email: str = _EMAIL, digest_paused: bool = False) -> int:
+    with begin(engine) as conn:
+        result = conn.execute(
+            users.insert().values(
+                google_sub=f"g-{email}",
+                email=email,
+                name="Me",
+                created_at=datetime.now(UTC),
+                digest_paused=digest_paused,
+            )
+        )
+    pk = result.inserted_primary_key
+    assert pk is not None
+    return int(pk[0])
+
+
+@respx.mock
+def test_paused_user_sends_nothing_and_writes_no_row(migrated_engine: Engine) -> None:
+    # D-094: the pause beats everything — even with matched postings ready to ship, nothing is
+    # built, sent, or persisted (the check precedes build_digest, so no digests row / no window
+    # advance; a future resume gets the accumulated diff).
+    route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    _user(migrated_engine, digest_paused=True)
+    now = datetime(2026, 6, 17, tzinfo=UTC)
+    a = _posting(migrated_engine, emp, "a", first_seen=now)
+    _match(migrated_engine, a, prof)
+
+    result = send_digest(
+        migrated_engine, "grid_power_software", prof, now=now, config=_CONFIG, verify=_PASS
+    )
+
+    assert result.status == "paused"
+    assert result.digest_id is None
+    assert not route.called
+    with migrated_engine.connect() as conn:
+        assert conn.execute(select(func.count()).select_from(digests)).scalar_one() == 0
+
+
+@respx.mock
+def test_send_carries_unsubscribe_footer_and_rfc8058_headers(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_SESSION_SECRET", "integration-secret")
+    route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    user_id = _user(migrated_engine)
+    now = datetime(2026, 6, 17, tzinfo=UTC)
+    a = _posting(migrated_engine, emp, "a", first_seen=now)
+    _match(migrated_engine, a, prof)
+    config = DigestConfig(
+        api_key="re_test",
+        sender="onboarding@resend.dev",
+        recipient="ops@example.com",
+        public_base_url="https://role-feed.com",
+    )
+
+    result = send_digest(
+        migrated_engine, "grid_power_software", prof, now=now, config=config, verify=_PASS
+    )
+
+    assert result.status == "sent"
+    sent = json.loads(route.calls.last.request.content)
+    unsub = sent["headers"]["List-Unsubscribe"]
+    assert unsub.startswith("<https://role-feed.com/unsubscribe?token=") and unsub.endswith(">")
+    assert sent["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    assert "https://role-feed.com/unsubscribe?token=" in sent["html"]
+    assert "https://role-feed.com/unsubscribe?token=" in sent["text"]
+    # The footer token authorizes exactly this user.
+    token = unquote(unsub[1:-1].split("token=", 1)[1])
+    claim = parse_unsubscribe_token(token)
+    assert claim is not None and (claim.user_id, claim.email) == (user_id, _EMAIL)
+
+
+@respx.mock
+def test_send_without_users_row_omits_footer_and_headers(migrated_engine: Engine) -> None:
+    # A pre-login seed profile has no users row → nothing to key a token on; send plain (D-094).
+    route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    now = datetime(2026, 6, 17, tzinfo=UTC)
+    a = _posting(migrated_engine, emp, "a", first_seen=now)
+    _match(migrated_engine, a, prof)
+    config = DigestConfig(
+        api_key="re_test",
+        sender="onboarding@resend.dev",
+        recipient="ops@example.com",
+        public_base_url="https://role-feed.com",
+    )
+
+    result = send_digest(
+        migrated_engine, "grid_power_software", prof, now=now, config=config, verify=_PASS
+    )
+
+    assert result.status == "sent"
+    sent = json.loads(route.calls.last.request.content)
+    assert "headers" not in sent
+    assert "unsubscribe" not in sent["html"].lower()
+
+
+@respx.mock
+def test_send_without_public_base_url_omits_footer_and_headers(migrated_engine: Engine) -> None:
+    # Dev (no VJA_PUBLIC_BASE_URL): never render a relative/localhost link into a real email.
+    route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    _user(migrated_engine)
+    now = datetime(2026, 6, 17, tzinfo=UTC)
+    a = _posting(migrated_engine, emp, "a", first_seen=now)
+    _match(migrated_engine, a, prof)
+
+    result = send_digest(
+        migrated_engine, "grid_power_software", prof, now=now, config=_CONFIG, verify=_PASS
+    )
+
+    assert result.status == "sent"
+    sent = json.loads(route.calls.last.request.content)
+    assert "headers" not in sent
+    assert "unsubscribe" not in sent["html"].lower()

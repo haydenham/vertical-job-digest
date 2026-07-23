@@ -21,8 +21,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from html import escape
 from pathlib import Path
 from typing import Annotated, cast
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import (
@@ -37,7 +39,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
@@ -67,7 +69,8 @@ from vja.db.profiles import (
     upload_profile,
 )
 from vja.db.schema_guard import ensure_configured_schema_ready
-from vja.db.users import User, upsert_user_by_google
+from vja.db.users import User, get_user, set_digest_paused, upsert_user_by_google
+from vja.digest.unsubscribe import parse_unsubscribe_token
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
 from vja.verticals import ConfigError, available_verticals, load_vertical_config
@@ -254,6 +257,37 @@ def _mount_spa(app: FastAPI, dist: Path) -> None:
         if full_path and candidate.is_file() and dist.resolve() in candidate.parents:
             return FileResponse(candidate)  # a real static file (favicon, etc.)
         return FileResponse(index)  # an SPA client route
+
+
+def _unsubscribe_page(title: str, body: str) -> str:
+    """A minimal standalone HTML page for the no-login unsubscribe flow (D-094). The SPA isn't
+    involved: this must render for a logged-out email click, and mail-client webviews."""
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<title>{escape(title)} — Rolefeed</title></head>"
+        "<body style='font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;"
+        "padding:0 1rem;color:#222'>"
+        "<h1 style='font-size:1.3rem'>Rolefeed</h1>"
+        f"<h2 style='font-size:1.1rem'>{escape(title)}</h2>"
+        f"{body}"
+        "</body></html>"
+    )
+
+
+def _resolve_unsubscribe_claim(engine: Engine, token: str | None) -> User | None:
+    """Token → the live `users` row it authorizes, or None. Requires id AND email to match the
+    current row (stale-token defense); callers answer None with a generic 400 — never revealing
+    whether a user exists."""
+    if not token:
+        return None
+    claim = parse_unsubscribe_token(token)
+    if claim is None:
+        return None
+    user = get_user(engine, claim.user_id)
+    if user is None or user.email != claim.email:
+        return None
+    return user
 
 
 def _get_engine(request: Request) -> Engine:
@@ -470,6 +504,53 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return ProfileCreated(
             profile_id=profile.id, vertical=vertical, resume_version=profile.resume_version
         )
+
+    # No-login digest unsubscribe (D-094). GET = confirm page only (mail scanners prefetch GETs;
+    # a prefetch must never change state); POST = the actual pause. The same POST serves the
+    # confirm form and RFC-8058 one-click (providers POST `List-Unsubscribe=One-Click` to the
+    # List-Unsubscribe URL) — the body is never read; the signed query token is identity + authz,
+    # so no session/CSRF machinery applies. Registered before the SPA mount so the catch-all
+    # can't shadow it.
+    _invalid_unsub = _unsubscribe_page(
+        "Link not valid",
+        "<p>This unsubscribe link isn't valid. It may have been truncated by your mail client — "
+        "try copying the full link, or manage email in your dashboard.</p>",
+    )
+
+    @app.get("/unsubscribe", response_class=HTMLResponse, include_in_schema=False)
+    def unsubscribe_confirm(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        token: str | None = None,
+    ) -> HTMLResponse:
+        user = _resolve_unsubscribe_claim(engine, token)
+        if user is None:
+            return HTMLResponse(_invalid_unsub, status_code=400)
+        action = f"/unsubscribe?token={quote(token or '', safe='')}"
+        page = _unsubscribe_page(
+            "Pause digest emails?",
+            f"<p>Stop the daily digest for <strong>{escape(user.email)}</strong>? "
+            "Matching and your dashboard keep running; only the email stops.</p>"
+            f"<form method='post' action='{escape(action, quote=True)}'>"
+            "<button type='submit' style='padding:.5rem 1rem'>Pause digest emails</button>"
+            "</form>",
+        )
+        return HTMLResponse(page)
+
+    @app.post("/unsubscribe", response_class=HTMLResponse, include_in_schema=False)
+    def unsubscribe_apply(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        token: str | None = None,
+    ) -> HTMLResponse:
+        user = _resolve_unsubscribe_claim(engine, token)
+        if user is None:
+            return HTMLResponse(_invalid_unsub, status_code=400)
+        set_digest_paused(engine, user_id=user.id, email=user.email, paused=True)
+        page = _unsubscribe_page(
+            "You're unsubscribed",
+            f"<p>Digest emails to <strong>{escape(user.email)}</strong> are paused. "
+            "Matching and your dashboard keep running.</p>",
+        )
+        return HTMLResponse(page)
 
     # Serve the built SPA same-origin in prod, if a real build exists (D-042/D-059). Gated on
     # index.html (not just the dir) so a stale/empty `dist/` doesn't mount a broken catch-all.

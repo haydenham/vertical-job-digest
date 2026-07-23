@@ -1803,3 +1803,14 @@ no execution in 24h — the one failure tests cannot see), a one-time check that
 screen is not in "Testing" mode (100-user hard cap), the July-23 read-only first-Luna-night audit, and the
 already-validated no-code employer activations (Hayden-run, not a gate). References D-005, D-009, D-027,
 D-037, D-057, D-064, D-082, D-085, D-086, D-090, D-093.
+
+**PR 2 implementation note (2026-07-23, Hayden-decided):** the unsubscribe link is **confirm-page GET +
+POST-only state change** (mail scanners prefetch GETs; a prefetch must never unsubscribe anyone), and the
+digest also carries the **RFC-8058 one-click pair** (`List-Unsubscribe` + `List-Unsubscribe-Post`) whose
+provider POST hits the same endpoint. Token = `itsdangerous.URLSafeSerializer` (already a dependency via
+Starlette sessions), **non-expiring**, salt `digest-unsubscribe`, seeded from `VJA_SESSION_SECRET` (now
+also mounted on the nightly Job, with `VJA_PUBLIC_BASE_URL`), payload `{uid, email}` — the endpoint
+requires both to match the live row (stale-token defense, no user enumeration; invalid → generic 400).
+A paused user's `send_digest` returns `paused` before `build_digest`: no verification network cost, no
+send, no `digests` row — so the window doesn't advance and a future resume gets the accumulated diff. A
+pre-login seed profile (no `users` row) or an unset public base URL ships the email without footer/headers.

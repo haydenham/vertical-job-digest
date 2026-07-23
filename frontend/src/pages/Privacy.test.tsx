@@ -22,6 +22,11 @@ describe("Privacy", () => {
     expect(disclosure).toHaveTextContent(/not used to train/i);
   });
 
+  it("points unsubscribe at the digest footer link (PR 2) with the email as fallback", () => {
+    render(<Privacy />);
+    expect(screen.getByText(/unsubscribe link in any digest/i)).toBeInTheDocument();
+  });
+
   it("links the contact email for unsubscribe and deletion requests", () => {
     render(<Privacy />);
     const links = screen.getAllByRole("link", { name: "haydenham10@gmail.com" });

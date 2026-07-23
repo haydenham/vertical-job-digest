@@ -5,6 +5,43 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-23 — D-094 compliance PR 2 (digest unsubscribe) built
+
+**Scope decisions (Hayden, this session):** confirm-page flow (GET renders a confirm page, **POST**
+sets the flag — mail scanners prefetch GETs, so a prefetch must never unsubscribe anyone); RFC-8058
+one-click headers included (`List-Unsubscribe` + `List-Unsubscribe-Post`, provider POST hits the same
+endpoint — Gmail's native Unsubscribe + bulk-sender requirement); token = non-expiring `itsdangerous`
+`URLSafeSerializer` seeded from `VJA_SESSION_SECRET` (salt `digest-unsubscribe`, payload `{uid,email}`,
+both must match the live row). Recorded as an implementation note under D-094 (no new ADR).
+
+**Built on `feat/digest-unsubscribe` (uncommitted; Hayden owns commit/PR) — PR 2 of 3:**
+`users.digest_paused` (Boolean NOT NULL server-default false; migration `e91b3a6f2d04` off
+`c4e8a7d9132f`, batch-op + real downgrade) — on `users`, not versioned `profiles`, so a reupload
+can't reset it. New `vja/digest/unsubscribe.py` (make/parse token + URL; api imports it downward,
+contract-clean). `send_digest` checks the flag **before** `build_digest` (new status `"paused"`, one
+stderr line, no `digests` row → window doesn't advance; resume later gets the accumulated diff), and
+threads footer + headers only when `VJA_PUBLIC_BASE_URL` and a `users` row exist (dev/seed-profile
+sends stay plain). `render_digest` gained keyword-only `unsubscribe_url` (None ⇒ byte-identical
+output). No-login `GET`/`POST /unsubscribe` in `app.py` (registered before the SPA mount; invalid
+token → generic 400, no user enumeration; POST idempotent, body never read so the RFC-8058 form body
+works). `ship.sh`: `VJA_SESSION_SECRET` added to `JOB_SECRETS` (REPLACE semantics — mandatory) +
+`JOB_ENV` now sets `VJA_PUBLIC_BASE_URL` on the Job (service guard policy untouched); CUTOVER.md +
+`.env.example` reconciled. Privacy page copy now points at the footer link (contact email kept).
+
+**Verification:** full default suite **585 passed, 31 deselected** (18 new tests: token unit ×5,
+render footer ×2, send paused/footer/headers ×4, `/unsubscribe` API ×7 incl. auth-required-on +
+SPA-shadowing pins, migration round-trip ×1 — plus updated schema-guard head + deploy-config pins);
+ruff format/check, mypy (135 files), import-linter (1 kept / 0 broken), `uv lock --check`,
+`bash -n ship.sh`, alembic up/down/up on scratch SQLite; frontend eslint + `tsc -b` + vitest
+**104/104** + production build. Live HTTP smoke on a scratch DB: GET confirm 200 (email + button),
+RFC-8058 one-click POST 200, garbage token 400, `digest_paused` flipped true in DB. Docs: D-094 note,
+INVARIANTS (digest & delivery), docs/15 exit line, CLAUDE. **Next:** Hayden reviews/commits/PRs.
+**Schema-changing PR — run the Neon migration pre-merge (D-083):** export the Secret Manager
+`VJA_DATABASE_URL`, then `alembic current` → `upgrade head` → `current`. Post-merge deploy check:
+`gcloud run jobs describe vja-nightly` shows `VJA_SESSION_SECRET` mounted + `VJA_PUBLIC_BASE_URL`
+set; then the next real digest proves the footer E2E. PR 3 (settings + deletion) follows on a fresh
+branch.
+
 ## 2026-07-22 — D-094 beta exit re-scoped; compliance PR 1 (privacy notice) built
 
 **Decision (D-094):** Hayden reduced the final beta-exit line — the five-pillar scaling doc, D-086 digest

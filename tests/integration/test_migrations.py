@@ -31,6 +31,7 @@ _EXPECTED_TABLES = {
 # The revision immediately before the 9.2 users/user_id migration (7d5b69c46786).
 _PRE_USER_ID_REVISION = "d30501b4c8ab"
 _PRE_REUPLOAD_GUARD_REVISION = "a06b99424c4c"
+_PRE_DIGEST_PAUSED_REVISION = "c4e8a7d9132f"
 _NOW = datetime(2026, 6, 26, tzinfo=UTC)
 
 
@@ -189,6 +190,76 @@ def test_resume_reupload_clock_upgrade_and_downgrade_preserve_users(
     engine = get_engine(url)
     try:
         assert "last_resume_reupload_at" not in {
+            column["name"] for column in inspect(engine).get_columns("users")
+        }
+        with engine.connect() as conn:
+            assert (
+                conn.execute(select(users.c.id).where(users.c.id == user_id)).scalar_one()
+                == user_id
+            )
+            assert (
+                conn.execute(select(profiles.c.id).where(profiles.c.id == profile_id)).scalar_one()
+                == profile_id
+            )
+    finally:
+        engine.dispose()
+
+
+def test_digest_paused_upgrade_defaults_existing_users_and_downgrades_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-094's users-table rebuild: pre-existing rows land unpaused, and the column is reversible
+    with the user (and a linked profile) preserved on SQLite."""
+    url = f"sqlite:///{tmp_path / 'digest-paused.db'}"
+    monkeypatch.setenv("VJA_DATABASE_URL", url)
+    cfg = alembic_config()
+    command.upgrade(cfg, _PRE_DIGEST_PAUSED_REVISION)
+
+    engine = get_engine(url)
+    try:
+        with begin(engine) as conn:
+            user_id = _insert(
+                conn,
+                users.insert().values(
+                    google_sub="g-me@example.com",
+                    email="me@example.com",
+                    name="Me",
+                    created_at=_NOW,
+                ),
+            )
+            profile_id = _insert(
+                conn,
+                profiles.insert().values(
+                    user_id=user_id,
+                    user_email="me@example.com",
+                    vertical="grid_power_software",
+                    resume_version="v1",
+                    resume_text="r",
+                    active=1,
+                    created_at=_NOW,
+                ),
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = get_engine(url)
+    try:
+        with engine.connect() as conn:
+            # NOT NULL + server_default false: the pre-existing row is unpaused, not NULL.
+            assert (
+                conn.execute(
+                    select(users.c.digest_paused).where(users.c.id == user_id)
+                ).scalar_one()
+                is False
+            )
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, _PRE_DIGEST_PAUSED_REVISION)
+    engine = get_engine(url)
+    try:
+        assert "digest_paused" not in {
             column["name"] for column in inspect(engine).get_columns("users")
         }
         with engine.connect() as conn:

@@ -120,6 +120,17 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Digest recipient is the matched profile's `user_email`.** `VJA_DIGEST_RECIPIENT` is the
   **ops/alert** recipient (failure alerts), NOT the digest recipient. (D-027, D-037)
 - **Empty digest = skip send:** no email, no `digests` row. (D-028)
+- **A user with `users.digest_paused` gets no digest email and no `digests` row** — checked before
+  `build_digest` (status `paused`), so the window doesn't advance and a future resume gets the
+  accumulated diff. Pausing stops the *email only*: matching and the dashboard continue. The flag
+  lives on `users` (not versioned `profiles`) so a résumé reupload can't reset it. (D-094)
+- **Every digest email carries a tokenized no-login unsubscribe link + the RFC-8058 one-click
+  headers** (`List-Unsubscribe` / `List-Unsubscribe-Post`), when a public base URL and a `users` row
+  exist (a dev run or pre-login seed profile ships without them). The state change is **POST-only**
+  (`/unsubscribe`; GET is a confirm page — scanner-prefetch-safe); tokens are non-expiring
+  `itsdangerous` signatures over `{uid, email}` keyed on `VJA_SESSION_SECRET` (mounted on the
+  nightly Job too), and the endpoint requires both to match the live row — invalid tokens get a
+  generic 400, never user enumeration. (D-094)
 - **The Cloud Run nightly Job gets one attempt, with a 6-hour task timeout.** `ship.sh` reasserts
   `--task-timeout 21600 --max-retries 0` on every deploy. The pipeline sends a vertical's digests
   immediately after that vertical's Layer-2 pass and is not yet delivery-idempotent across whole-task

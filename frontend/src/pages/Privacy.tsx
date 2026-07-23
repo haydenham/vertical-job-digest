@@ -1,7 +1,8 @@
 // Privacy notice (D-094, compliance PR 1) — a static, plain-language page reachable logged-out.
 // Honest description of what Rolefeed stores and where résumé text goes (third-party AI model
-// APIs); self-serve unsubscribe/delete land in PRs 2–3, so "stop emails / delete my data" points
-// at the founder contact until those ship. Copy is a product notice, not legal advice.
+// APIs). Self-serve unsubscribe shipped with PR 2 (every digest footer carries the link);
+// self-serve delete lands in PR 3, so "delete my data" points at the founder contact until then.
+// Copy is a product notice, not legal advice.
 
 const CONTACT_EMAIL = "haydenham10@gmail.com";
 
@@ -45,9 +46,9 @@ export function Privacy() {
       <h2>Email</h2>
       <p>
         Rolefeed sends your morning digest to your Google account email through Resend, an email
-        delivery service. To stop receiving digests, email{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> (a self-serve unsubscribe link is
-        coming to the digest itself).
+        delivery service. To stop receiving digests, use the unsubscribe link in any digest&rsquo;s
+        footer — matching and your dashboard keep working. You can also email{" "}
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
 
       <h2>Cookies</h2>
