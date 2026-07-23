@@ -22,6 +22,8 @@ from vja.db.users import User, get_user
 logger = logging.getLogger(__name__)
 
 _GOOGLE_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
+# Mirrored by vja.digest.unsubscribe._DEV_SESSION_SECRET (same secret signs unsubscribe tokens);
+# keep the resolution in lockstep so the email composer and the endpoint never disagree.
 _DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me"  # noqa: S105
 _DEFAULT_SESSION_MAX_AGE = 14 * 24 * 3600  # 14 days (Starlette's own default)
 

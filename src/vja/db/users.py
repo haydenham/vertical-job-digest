@@ -12,11 +12,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import Connection, Engine, select, update
+from sqlalchemy.engine import RowMapping
 
 from vja.db.engine import begin
 from vja.db.schema import profiles, users
 
-_USER_COLS = (users.c.id, users.c.google_sub, users.c.email, users.c.name)
+_USER_COLS = (
+    users.c.id,
+    users.c.google_sub,
+    users.c.email,
+    users.c.name,
+    users.c.digest_paused,
+)
 
 
 @dataclass(frozen=True)
@@ -25,11 +32,22 @@ class User:
     google_sub: str | None
     email: str
     name: str | None
+    digest_paused: bool = False
+
+
+def _user_from_row(row: RowMapping) -> User:
+    return User(
+        id=row["id"],
+        google_sub=row["google_sub"],
+        email=row["email"],
+        name=row["name"],
+        digest_paused=bool(row["digest_paused"]),
+    )
 
 
 def _load_user(conn: Connection, user_id: int) -> User:
     row = conn.execute(select(*_USER_COLS).where(users.c.id == user_id)).mappings().one()
-    return User(id=row["id"], google_sub=row["google_sub"], email=row["email"], name=row["name"])
+    return _user_from_row(row)
 
 
 def get_user(engine: Engine, user_id: int) -> User | None:
@@ -40,7 +58,32 @@ def get_user(engine: Engine, user_id: int) -> User | None:
         )
     if row is None:
         return None
-    return User(id=row["id"], google_sub=row["google_sub"], email=row["email"], name=row["name"])
+    return _user_from_row(row)
+
+
+def get_user_by_email(engine: Engine, email: str) -> User | None:
+    """The user owning this email (`users.email` is unique), or None (e.g. a pre-login seed
+    profile whose owner never signed in)."""
+    with engine.connect() as conn:
+        row = (
+            conn.execute(select(*_USER_COLS).where(users.c.email == email)).mappings().one_or_none()
+        )
+    if row is None:
+        return None
+    return _user_from_row(row)
+
+
+def set_digest_paused(engine: Engine, *, user_id: int, email: str, paused: bool = True) -> bool:
+    """Set the digest-email pause flag (D-094). The email predicate is the stale-token defense:
+    an unsubscribe token whose email no longer matches the row updates nothing. Returns whether
+    a row was updated (idempotent — re-pausing an already-paused user still matches)."""
+    with begin(engine) as conn:
+        result = conn.execute(
+            update(users)
+            .where(users.c.id == user_id, users.c.email == email)
+            .values(digest_paused=paused)
+        )
+        return result.rowcount > 0
 
 
 def upsert_user_by_google(

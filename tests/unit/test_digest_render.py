@@ -199,3 +199,19 @@ def test_audit_keeps_all_closures_when_body_summarized() -> None:
     rendered = render_digest(contents)
     assert "roles across" in rendered.text  # body is summarized
     assert len(contents_to_dict(contents)["closed"]) == 15  # audit keeps every closure
+
+
+def test_no_unsubscribe_url_leaves_bodies_footer_free() -> None:
+    # D-094: dev (no public base URL) / pre-login seed profiles ship without the footer.
+    rendered = render_digest(_contents(new=[_matched("a")]))
+    assert "Unsubscribe" not in rendered.html
+    assert "Unsubscribe" not in rendered.text
+    assert "unsubscribe" not in rendered.html.lower()
+
+
+def test_unsubscribe_url_renders_escaped_footer_in_both_bodies() -> None:
+    url = "https://role-feed.com/unsubscribe?token=t&x=1"
+    rendered = render_digest(_contents(new=[_matched("a")]), unsubscribe_url=url)
+    assert 'href="https://role-feed.com/unsubscribe?token=t&amp;x=1"' in rendered.html
+    assert rendered.html.index("Unsubscribe") < rendered.html.index("</body>")
+    assert f"Unsubscribe (pauses this email; your dashboard keeps working): {url}" in rendered.text

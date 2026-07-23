@@ -224,8 +224,9 @@ does not block broader beta by itself.
 - Onboarding PR 3 merged #82; landing copy merged #86; the reupload guard merged #87. ✅
 - Robotics promise mismatch resolved: the vertical config merged #93 and its Neon baseline ran. ✅
 - D-090/D-093 matching decision complete: Luna low merged #97 and deployed. ✅
-- **Compliance/usability block (D-094, 3 PRs):** privacy notice (PR 1) → digest unsubscribe (PR 2) →
-  settings + account deletion (PR 3).
+- **Compliance/usability block (D-094, 3 PRs):** privacy notice (PR 1, merged #99) → digest
+  unsubscribe (PR 2 — built: `users.digest_paused` + tokenized confirm-page/POST `/unsubscribe` +
+  RFC-8058 one-click headers + paused skip in `send_digest`) → settings + account deletion (PR 3).
 - **Kept minimums (D-094):** one GCP alert-policy pair on the nightly Job (failed / did-not-run);
   one-time Google OAuth publishing-status check (the 100-user "Testing" cap); the July-23 read-only
   first-Luna-night audit; the already-validated no-code employer activations (Hayden-run, not a gate).

@@ -10,10 +10,11 @@
 # commit and rolls it onto both. It does NOT migrate the schema (Alembic stays a deliberate manual
 # step — CUTOVER §3), seed, or touch the domain / OAuth redirect URIs.
 #
-# It also NEVER writes the prod guard env vars (VJA_AUTH_REQUIRED / VJA_COOKIE_SECURE /
+# It also NEVER writes the *service's* prod guard env vars (VJA_AUTH_REQUIRED / VJA_COOKIE_SECURE /
 # VJA_PUBLIC_BASE_URL, set once in CUTOVER §9): omitting --set-env-vars preserves them, so a
 # redeploy can't silently reopen auth. The post-deploy 401 smoke assertion is the tripwire if it ever
-# regresses.
+# regresses. (The nightly *Job* is the one exception: it gets VJA_PUBLIC_BASE_URL explicitly — the
+# digest's unsubscribe links need the public origin, D-094 — which is additive, not a guard.)
 #
 # Usage:
 #   ./deploy/gcp/ship.sh          # build → push → deploy service → update Job → smoke
@@ -54,9 +55,15 @@ LAYER2_ENV="VJA_MATCH_MODEL=${MATCH_MODEL_ROUTE},VJA_MATCH_EFFORT=${MATCH_REASON
 
 # ⚠ --set-secrets has REPLACE semantics: each list below is the COMPLETE set mounted on that target.
 # Adding a secret to prod means adding it here too, or the next deploy drops it. Kept identical to
-# CUTOVER §5 (service, 9) and §8 (job, 6).
+# CUTOVER §5 (service, 9) and §8 (job, 7 — VJA_SESSION_SECRET signs unsubscribe tokens, D-094).
 SERVICE_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
-JOB_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest"
+JOB_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest"
+
+# D-094: the nightly composer signs each digest's unsubscribe token with VJA_SESSION_SECRET (mounted
+# above — same secret the API verifies with) and builds the absolute link off the public origin. The
+# Job needs the env var explicitly; the *service* keeps its CUTOVER §9 guard policy (never written
+# here — see header comment).
+JOB_ENV="${LAYER2_ENV},VJA_PUBLIC_BASE_URL=${VJA_PUBLIC_BASE_URL:-https://role-feed.com}"
 
 FORCE=0
 [[ "${1:-}" == "--force" || "${1:-}" == "-y" ]] && FORCE=1
@@ -114,7 +121,7 @@ gcloud run jobs update "$JOB" \
   --service-account "$RUNTIME_SA" \
   --task-timeout "$JOB_TASK_TIMEOUT_SECONDS" \
   --max-retries "$JOB_MAX_RETRIES" \
-  --update-env-vars "$LAYER2_ENV" \
+  --update-env-vars "$JOB_ENV" \
   --set-secrets "$JOB_SECRETS"
 
 # --- Smoke -------------------------------------------------------------------------------------

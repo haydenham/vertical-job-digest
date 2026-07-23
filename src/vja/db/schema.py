@@ -32,6 +32,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -217,6 +218,9 @@ users = Table(
     # D-085: the first profile upload does not consume this clock. Each accepted changed-résumé
     # upload advances it atomically, enforcing one reupload per user per rolling 24 hours.
     Column("last_resume_reupload_at", UTCDateTime()),
+    # D-094: pauses the digest *email* only (matching + dashboard continue). Lives on `users`,
+    # not the versioned `profiles`, so a résumé reupload can't reset it.
+    Column("digest_paused", Boolean, nullable=False, server_default=false()),
 )
 
 

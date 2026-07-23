@@ -12,6 +12,8 @@ Config comes from the environment (a local `.env` is loaded for the cron runtime
 - `VJA_DIGEST_RECIPIENT` — the **ops/alert** recipient (where nightly failure-alerts go). As of
   P5.4 the *digest* recipient is the matched profile's `user_email`, not this env var (D-027/D-037):
   a digest is per (vertical, profile), addressed to whoever owns that resume.
+- `VJA_PUBLIC_BASE_URL` — the public origin for the no-login unsubscribe link + RFC-8058 one-click
+  headers (D-094). Unset (dev) ⇒ the email ships without footer/headers — never a localhost link.
 """
 
 from __future__ import annotations
@@ -31,8 +33,10 @@ from vja.db import digests as digests_repo
 from vja.db.employers import distinct_active_verticals
 from vja.db.engine import begin, get_engine
 from vja.db.profiles import Profile, active_profiles
+from vja.db.users import get_user_by_email
 from vja.digest.assembly import build_digest
 from vja.digest.render import RenderedEmail, contents_to_dict, render_digest
+from vja.digest.unsubscribe import make_unsubscribe_token, unsubscribe_url
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 _SANDBOX_SENDER = "onboarding@resend.dev"
@@ -52,13 +56,15 @@ class DigestConfig:
     api_key: str
     sender: str
     recipient: str  # ops/alert recipient — the digest recipient is the profile's email (D-037)
+    # Public origin for unsubscribe links/headers (D-094); None (dev) ⇒ no footer/headers.
+    public_base_url: str | None = None
 
 
 @dataclass(frozen=True)
 class DigestSendResult:
     vertical: str
     recipient: str
-    status: str  # "sent" | "failed" | "skipped"
+    status: str  # "sent" | "failed" | "skipped" | "paused"
     digest_id: int | None
     new: int
     closed: int
@@ -78,24 +84,36 @@ def load_config() -> DigestConfig:
     if not recipient:
         raise ConfigError("VJA_DIGEST_RECIPIENT is not set")
     sender = os.environ.get("VJA_DIGEST_FROM", _SANDBOX_SENDER)
-    return DigestConfig(api_key=api_key, sender=sender, recipient=recipient)
+    return DigestConfig(
+        api_key=api_key,
+        sender=sender,
+        recipient=recipient,
+        public_base_url=os.environ.get("VJA_PUBLIC_BASE_URL"),
+    )
 
 
 def send_email(
-    config: DigestConfig, rendered: RenderedEmail, *, recipient: str | None = None
+    config: DigestConfig,
+    rendered: RenderedEmail,
+    *,
+    recipient: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> None:
     """POST one email to Resend; raise `SendError` on any transport error or non-2xx response.
 
     `recipient` defaults to the config's ops/alert recipient (used by the nightly failure alert);
-    digest sends pass the profile's `user_email` explicitly (D-037).
+    digest sends pass the profile's `user_email` explicitly (D-037). `headers` become custom email
+    headers on the Resend payload (the RFC-8058 unsubscribe pair, D-094).
     """
-    payload = {
+    payload: dict[str, object] = {
         "from": config.sender,
         "to": [recipient or config.recipient],
         "subject": rendered.subject,
         "html": rendered.html,
         "text": rendered.text,
     }
+    if headers:
+        payload["headers"] = headers
     try:
         response = httpx.post(
             _RESEND_ENDPOINT,
@@ -119,13 +137,31 @@ def send_digest(
     config: DigestConfig | None = None,
     verify: Callable[[str], bool] | None = None,
 ) -> DigestSendResult:
-    """Build → (skip if empty) → render → persist → send → finalize, per (vertical, profile).
+    """(Skip if paused) → build → (skip if empty) → render → persist → send → finalize,
+    per (vertical, profile).
 
     The digest is addressed to `profile.user_email` and carries that profile's match rationale
     (D-027/D-037); `config` is only the transport (api key/sender) + ops/alert recipient.
     """
     stamp = now or datetime.now(UTC)
     recipient = profile.user_email
+
+    # Paused check first (D-094): the person opted out of the email, so skip everything —
+    # including the D-008 verification gate's network cost. No `digests` row (the D-028 pattern),
+    # so the `since` window doesn't advance and a future resume gets the accumulated diff.
+    user = get_user_by_email(engine, recipient)
+    if user is not None and user.digest_paused:
+        print(f"[{vertical}→{recipient}] paused: digest email disabled by user", file=sys.stderr)
+        return DigestSendResult(
+            vertical=vertical,
+            recipient=recipient,
+            status="paused",
+            digest_id=None,
+            new=0,
+            closed=0,
+            quarantined=0,
+        )
+
     contents = build_digest(engine, vertical, profile=profile, now=stamp, verify=verify)
     n_new, n_closed, n_quar = len(contents.new), len(contents.closed), len(contents.quarantined)
 
@@ -152,7 +188,19 @@ def send_digest(
         return result("skipped", None)
 
     cfg = config or load_config()
-    rendered = render_digest(contents)
+
+    # Footer link + RFC-8058 headers (D-094) need both a public origin and a `users` row to key
+    # the token on; a dev run (no base URL) or a pre-login seed profile sends without them.
+    unsub_url: str | None = None
+    headers: dict[str, str] | None = None
+    if cfg.public_base_url and user is not None:
+        token = make_unsubscribe_token(user.id, user.email)
+        unsub_url = unsubscribe_url(cfg.public_base_url, token)
+        headers = {
+            "List-Unsubscribe": f"<{unsub_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
+    rendered = render_digest(contents, unsubscribe_url=unsub_url)
 
     with begin(engine) as conn:
         digest_id = digests_repo.create_pending(
@@ -160,7 +208,7 @@ def send_digest(
         )
 
     try:
-        send_email(cfg, rendered, recipient=recipient)
+        send_email(cfg, rendered, recipient=recipient, headers=headers)
     except SendError as exc:
         with begin(engine) as conn:
             digests_repo.mark_failed(conn, digest_id, error=str(exc))

@@ -72,19 +72,23 @@ def _rollup_split(
     return ranked[:_ROLLUP_TOP_COMPANIES], ranked[_ROLLUP_TOP_COMPANIES:]
 
 
-def render_digest(contents: DigestContents) -> RenderedEmail:
-    """Build subject + HTML + plaintext from a digest's contents."""
+def render_digest(contents: DigestContents, *, unsubscribe_url: str | None = None) -> RenderedEmail:
+    """Build subject + HTML + plaintext from a digest's contents.
+
+    `unsubscribe_url` (D-094) adds the no-login unsubscribe footer; None (dev without a public
+    base URL, or a pre-login seed profile with no `users` row) leaves the output unchanged.
+    """
     name = _humanize(contents.vertical)
     n_new, n_closed = len(contents.new), len(contents.closed)
     subject = f"{name}: {n_new} new, {n_closed} closed"
     return RenderedEmail(
         subject=subject,
-        html=_render_html(name, contents),
-        text=_render_text(name, contents),
+        html=_render_html(name, contents, unsubscribe_url=unsubscribe_url),
+        text=_render_text(name, contents, unsubscribe_url=unsubscribe_url),
     )
 
 
-def _render_text(name: str, contents: DigestContents) -> str:
+def _render_text(name: str, contents: DigestContents, *, unsubscribe_url: str | None) -> str:
     lines = [name, "=" * len(name), ""]
     lines.append(f"New roles ({len(contents.new)})")
     if contents.new:
@@ -117,15 +121,27 @@ def _render_text(name: str, contents: DigestContents) -> str:
                 f"({tail_roles} {_plural(tail_roles, 'role')})"
             )
     lines.append("")
+    if unsubscribe_url:
+        lines.append(
+            f"Unsubscribe (pauses this email; your dashboard keeps working): {unsubscribe_url}"
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
-def _render_html(name: str, contents: DigestContents) -> str:
+def _render_html(name: str, contents: DigestContents, *, unsubscribe_url: str | None) -> str:
     blocks = [f"<h1>{escape(name)}</h1>"]
     blocks.append(f"<h2>New roles ({len(contents.new)})</h2>")
     blocks.append(_html_list(contents.new, linked=True))
     blocks.append(f"<h2>Closed roles ({len(contents.closed)})</h2>")
     blocks.append(_closed_html(contents.closed))
+    if unsubscribe_url:
+        href = escape(unsubscribe_url, quote=True)
+        blocks.append(
+            '<hr><p style="color:#888;font-size:12px">You get this digest because you signed up '
+            f'for Rolefeed. <a href="{href}">Unsubscribe</a> — matching and your dashboard keep '
+            "working.</p>"
+        )
     body = "\n".join(blocks)
     return f"<!doctype html><html><body>\n{body}\n</body></html>"
 
