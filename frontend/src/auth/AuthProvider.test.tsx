@@ -33,7 +33,7 @@ describe("AuthProvider", () => {
 
   it("exposes the user + their profile once /api/me resolves", async () => {
     mockFetchMe.mockResolvedValue({
-      user: { email: "a@b.co", name: "A" },
+      user: { email: "a@b.co", name: "A", digest_paused: false },
       profile: { vertical: "grid_power_software", resume_version: "v1", backfill_status: null },
     });
     render(
@@ -45,7 +45,7 @@ describe("AuthProvider", () => {
   });
 
   it("exposes profile as null when signed in but not onboarded", async () => {
-    mockFetchMe.mockResolvedValue({ user: { email: "a@b.co", name: "A" }, profile: null });
+    mockFetchMe.mockResolvedValue({ user: { email: "a@b.co", name: "A", digest_paused: false }, profile: null });
     render(
       <AuthProvider>
         <Probe />
@@ -76,7 +76,7 @@ describe("AuthProvider", () => {
   });
 
   it("silent refresh updates state without flipping the global loading flag", async () => {
-    mockFetchMe.mockResolvedValueOnce({ user: { email: "a@b.co", name: "A" }, profile: null });
+    mockFetchMe.mockResolvedValueOnce({ user: { email: "a@b.co", name: "A", digest_paused: false }, profile: null });
     function SilentRefresh() {
       const { refresh } = useAuth();
       return (
@@ -100,7 +100,7 @@ describe("AuthProvider", () => {
     expect(screen.queryByText("loading")).not.toBeInTheDocument();
 
     resolveMe({
-      user: { email: "a@b.co", name: "A" },
+      user: { email: "a@b.co", name: "A", digest_paused: false },
       profile: { vertical: "grid_power_software", resume_version: "v2", backfill_status: null },
     });
     expect(await screen.findByText("a@b.co / grid_power_software")).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("AuthProvider", () => {
 
   it("clears the user on logout", async () => {
     mockFetchMe.mockResolvedValue({
-      user: { email: "a@b.co", name: "A" },
+      user: { email: "a@b.co", name: "A", digest_paused: false },
       profile: null,
     });
     mockLogout.mockResolvedValue();

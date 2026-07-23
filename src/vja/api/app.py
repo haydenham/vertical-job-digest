@@ -69,7 +69,13 @@ from vja.db.profiles import (
     upload_profile,
 )
 from vja.db.schema_guard import ensure_configured_schema_ready
-from vja.db.users import User, get_user, set_digest_paused, upsert_user_by_google
+from vja.db.users import (
+    User,
+    delete_user_account,
+    get_user,
+    set_digest_paused,
+    upsert_user_by_google,
+)
 from vja.digest.unsubscribe import parse_unsubscribe_token
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
@@ -142,10 +148,25 @@ class ProfileCreated(BaseModel):
 
 
 class MeUser(BaseModel):
-    """The authed identity in the `/api/me` payload."""
+    """The authed identity in the `/api/me` payload. `digest_paused` is the D-094 email flag —
+    the settings page reads it here and flips it via `PATCH /api/me`."""
 
     email: str
     name: str | None
+    digest_paused: bool
+
+
+class MeSettingsUpdate(BaseModel):
+    """`PATCH /api/me` body — the settings surface (D-094). One field today; partial-update
+    semantics if it grows."""
+
+    digest_paused: bool
+
+
+class MeSettings(BaseModel):
+    """`PATCH /api/me` response: the applied settings state."""
+
+    digest_paused: bool
 
 
 class MeProfile(BaseModel):
@@ -335,7 +356,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_origins(),
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["*"],
         allow_credentials=True,
     )
@@ -390,18 +411,51 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         onboarding instead of a 404ing dashboard (the D-064 fix)."""
         if user is None:
             raise HTTPException(401, "not authenticated")
+        me_user = MeUser(email=user.email, name=user.name, digest_paused=user.digest_paused)
         profile = active_profile_for_user(engine, user.email)
         if profile is None:
-            return MeResponse(user=MeUser(email=user.email, name=user.name), profile=None)
+            return MeResponse(user=me_user, profile=None)
         started, completed = backfill_stamps(engine, profile.id)
         return MeResponse(
-            user=MeUser(email=user.email, name=user.name),
+            user=me_user,
             profile=MeProfile(
                 vertical=profile.vertical,
                 resume_version=profile.resume_version,
                 backfill_status=derive_backfill_status(started, completed, now=datetime.now(UTC)),
             ),
         )
+
+    @app.patch("/api/me")
+    def update_me(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User, Depends(require_user)],
+        body: MeSettingsUpdate,
+    ) -> MeSettings:
+        """Update the authed user's settings (D-094) — today just the digest pause/resume flag.
+
+        Reuses the unsubscribe path's `set_digest_paused` (idempotent; the email predicate is the
+        same stale-identity defense). A vanished row (deleted concurrently) → 404."""
+        updated = set_digest_paused(
+            engine, user_id=user.id, email=user.email, paused=body.digest_paused
+        )
+        if not updated:
+            raise HTTPException(404, "user not found")
+        return MeSettings(digest_paused=body.digest_paused)
+
+    @app.delete("/api/me", status_code=204)
+    def delete_me(
+        request: Request,
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User, Depends(require_user)],
+    ) -> None:
+        """Hard account deletion (D-094): user + profiles + matches + digest rows, one transaction;
+        postings/employers are shared corpus and survive (D-009 covers postings, not user PII).
+
+        The session is popped here so the cookie dies with the account; a stale cookie elsewhere
+        already resolves to None → 401. An in-flight backfill can't resurrect rows: its inserts
+        either land before the atomic delete (removed) or FK-fail after it (logged, harmless)."""
+        delete_user_account(engine, user_id=user.id, email=user.email)
+        request.session.pop("user_id", None)
 
     @app.get("/api/verticals")
     def verticals() -> list[str]:

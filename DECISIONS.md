@@ -1814,3 +1814,19 @@ requires both to match the live row (stale-token defense, no user enumeration; i
 A paused user's `send_digest` returns `paused` before `build_digest`: no verification network cost, no
 send, no `digests` row — so the window doesn't advance and a future resume gets the accumulated diff. A
 pre-login seed profile (no `users` row) or an unset public base URL ships the email without footer/headers.
+
+**PR 3 implementation note (2026-07-23, Hayden-arbitrated):** the settings surface is **one user
+resource** — `GET`/`PATCH`/`DELETE /api/me` (rejected: a separate `/api/settings` path). `GET` now
+exposes `digest_paused`; `PATCH {digest_paused}` reuses `set_digest_paused` (404 when the row
+vanished concurrently); `DELETE` → 204 and pops the session in-handler (a stale cookie elsewhere
+already resolves to 401). Deletion is **one transaction** in child→parent order — matches (by the
+user's profile ids) → profiles (**`user_id` OR `user_email`**, catching a never-linked pre-login
+seed row) → digests (**by `recipient` email** — the table has no user FK) → the `users` row;
+postings/employers/sources are shared corpus and untouched. **The in-flight-backfill race is
+accepted, not locked:** FK enforcement means a concurrent `save_match` either commits before the
+delete (row removed) or fails after it (one logged traceback aborting a backfill for a
+now-deleted profile) — resurrection is impossible; no matching-loop change. `/settings` is
+**login-gated only** (a never-onboarded user must still reach deletion; the nav link shows for
+every authed user), and the delete confirm is a **plain modal** (Cancel default + red confirm; no
+type-to-confirm ceremony). CORS `allow_methods` gains PATCH/DELETE for the dev origin. No
+migration — the schema head stays `e91b3a6f2d04`.

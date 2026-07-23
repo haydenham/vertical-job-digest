@@ -20,7 +20,7 @@ const mockUseAuth = vi.mocked(useAuth);
 
 // What `refresh` resolves to once the freshly-uploaded profile is visible via /api/me.
 const me = (vertical = "grid_power_software"): Me => ({
-  user: { email: "a@b.co", name: "A" },
+  user: { email: "a@b.co", name: "A", digest_paused: false },
   profile: { vertical, resume_version: "v1", backfill_status: "running" },
 });
 
@@ -37,7 +37,7 @@ function auth(over: Partial<AuthState> = {}): AuthState {
 }
 
 const signedIn = (over: Partial<AuthState> = {}) =>
-  auth({ user: { email: "a@b.co", name: "A" }, ...over });
+  auth({ user: { email: "a@b.co", name: "A", digest_paused: false }, ...over });
 
 function renderUpload(props: { lockedVertical?: string } = {}) {
   return render(
@@ -172,7 +172,7 @@ describe("Upload", () => {
     // upload succeeded, but /api/me keeps returning no profile (visibility race gone bad)
     const refresh = vi
       .fn()
-      .mockResolvedValue({ user: { email: "a@b.co", name: "A" }, profile: null });
+      .mockResolvedValue({ user: { email: "a@b.co", name: "A", digest_paused: false }, profile: null });
     mockUseAuth.mockReturnValue(signedIn({ refresh }));
     mockUpload.mockResolvedValue({
       profile_id: 5,

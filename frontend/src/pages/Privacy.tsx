@@ -1,8 +1,9 @@
 // Privacy notice (D-094, compliance PR 1) — a static, plain-language page reachable logged-out.
 // Honest description of what Rolefeed stores and where résumé text goes (third-party AI model
-// APIs). Self-serve unsubscribe shipped with PR 2 (every digest footer carries the link);
-// self-serve delete lands in PR 3, so "delete my data" points at the founder contact until then.
-// Copy is a product notice, not legal advice.
+// APIs). Self-serve unsubscribe shipped with PR 2 (every digest footer carries the link) and
+// self-serve pause + account deletion with PR 3 (the Settings page); the founder contact stays
+// as the fallback path. Plain `<a>` links keep this page Router-free. Copy is a product notice,
+// not legal advice.
 
 const CONTACT_EMAIL = "haydenham10@gmail.com";
 
@@ -47,7 +48,8 @@ export function Privacy() {
       <p>
         Rolefeed sends your morning digest to your Google account email through Resend, an email
         delivery service. To stop receiving digests, use the unsubscribe link in any digest&rsquo;s
-        footer — matching and your dashboard keep working. You can also email{" "}
+        footer or the toggle on your <a href="/settings">Settings page</a> — matching and your
+        dashboard keep working. You can also email{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
 
@@ -65,9 +67,10 @@ export function Privacy() {
 
       <h2>Deleting your data</h2>
       <p>
-        To delete your account and everything attached to it (résumé, matches, digest history),
-        email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and it will be removed. A
-        self-serve delete button is on its way.
+        To delete your account and everything attached to it (résumé, matches, digest history), use
+        the delete button on your <a href="/settings">Settings page</a> — it takes effect
+        immediately. You can also email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and
+        it will be removed for you.
       </p>
     </div>
   );

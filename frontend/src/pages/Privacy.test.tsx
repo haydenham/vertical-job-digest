@@ -27,6 +27,15 @@ describe("Privacy", () => {
     expect(screen.getByText(/unsubscribe link in any digest/i)).toBeInTheDocument();
   });
 
+  it("points pause and deletion at the self-serve settings page (PR 3)", () => {
+    render(<Privacy />);
+    const settingsLinks = screen.getAllByRole("link", { name: /settings page/i });
+    expect(settingsLinks.length).toBe(2); // the email-pause section + the deletion section
+    for (const link of settingsLinks) {
+      expect(link).toHaveAttribute("href", "/settings");
+    }
+  });
+
   it("links the contact email for unsubscribe and deletion requests", () => {
     render(<Privacy />);
     const links = screen.getAllByRole("link", { name: "haydenham10@gmail.com" });

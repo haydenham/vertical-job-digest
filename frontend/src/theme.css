@@ -1236,3 +1236,144 @@ a:hover {
   line-height: 1.5;
   color: var(--text-dim);
 }
+
+/* ---- settings: digest toggle + account deletion (compliance PR 3, D-094) ----
+   Scoped to .settings-* / .btn-danger; rules above stay untouched. */
+.settings-page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  display: grid;
+  gap: 20px;
+}
+.settings-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+}
+.settings-section {
+  gap: 10px;
+}
+.settings-section h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.settings-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.settings-section .notice.error,
+.settings-confirm .notice.error {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 13px;
+}
+
+/* the switch: a restyled checkbox — checked = receiving the digest */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  cursor: pointer;
+}
+.settings-toggle input {
+  appearance: none;
+  margin: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hover);
+  background: var(--surface-raised);
+  position: relative;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.settings-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.settings-toggle input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.settings-toggle input:checked::after {
+  transform: translateX(16px);
+  background: #08090c;
+}
+.settings-toggle input:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.settings-toggle-label {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+/* danger zone (deletion) — the palette's one red family; used nowhere else */
+.btn-danger {
+  border-color: #7a3b3b;
+  color: #e08d85;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #2a1517;
+  border-color: #a05252;
+}
+.settings-danger {
+  border-color: #3a2226;
+}
+
+/* delete-confirm modal (the tour's backdrop/dialog scaffold, settings-scoped) */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 8, 0.78);
+  backdrop-filter: blur(4px);
+}
+.settings-confirm {
+  width: min(440px, 100%);
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.settings-confirm:focus {
+  outline: none;
+}
+.settings-confirm h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.settings-confirm p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.settings-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

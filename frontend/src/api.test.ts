@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
+  deleteAccount,
   fetchMe,
   loginUrl,
   postingsPath,
+  setDigestPaused,
   UPLOAD_TIMEOUT_MS,
   uploadResume,
   type PostingsQuery,
@@ -145,5 +147,47 @@ describe("uploadResume", () => {
     await vi.advanceTimersByTimeAsync(UPLOAD_TIMEOUT_MS);
     await assertion;
     vi.useRealTimers();
+  });
+});
+
+// The settings surface (compliance PR 3, D-094): the pause/resume PATCH + the account DELETE.
+describe("setDigestPaused / deleteAccount", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("PATCHes /api/me credentialed with the JSON flag and returns the applied state", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { digest_paused: true }));
+    await expect(setDigestPaused(true)).resolves.toEqual({ digest_paused: true });
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/me");
+    expect(init).toMatchObject({ method: "PATCH", credentials: "include" });
+    expect(JSON.parse(init.body as string)).toEqual({ digest_paused: true });
+  });
+
+  it("maps a failed PATCH to an ApiError carrying the server detail", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "authentication required" }));
+    const err = await setDigestPaused(true).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(401);
+    expect((err as ApiError).message).toBe("authentication required");
+  });
+
+  it("DELETEs /api/me credentialed and resolves on 204", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await expect(deleteAccount()).resolves.toBeUndefined();
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/me");
+    expect(init).toMatchObject({ method: "DELETE", credentials: "include" });
+  });
+
+  it("maps a failed DELETE to an ApiError", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "authentication required" }));
+    const err = await deleteAccount().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(401);
   });
 });

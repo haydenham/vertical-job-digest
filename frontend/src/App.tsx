@@ -7,6 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Privacy } from "./pages/Privacy";
+import { Settings } from "./pages/Settings";
 import { Upload } from "./pages/Upload";
 
 // App shell + auth-aware routing (Phase B, D-064/D-065). Vertical is a property of the logged-in
@@ -75,6 +76,16 @@ function UploadRoute() {
   return <Upload lockedVertical={profile.vertical} />;
 }
 
+// `/settings` — login-gated only (D-094): a user with no profile yet must still reach account
+// deletion, so there is no onboarding bounce (Settings handles its own post-deletion routing).
+function SettingsRoute() {
+  const { user, loading, authError } = useAuth();
+  if (loading) return <Spinner />;
+  if (authError) return <AccountLoadError />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Settings />;
+}
+
 // `/login` is a logged-out-only route. An existing session continues through the same one-profile
 // routing as `/` instead of presenting another Google sign-in form (D-083).
 function LoginRoute() {
@@ -129,6 +140,9 @@ export default function App() {
                   </Link>
                 </>
               )}
+              <Link to="/settings" className="nav-link">
+                Settings
+              </Link>
               <span className="nav-user">{user.email}</span>
               <button type="button" className="nav-link as-button" onClick={() => void logout()}>
                 Sign out
@@ -148,6 +162,7 @@ export default function App() {
         <Route path="/onboarding" element={<OnboardingRoute />} />
         <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/upload" element={<UploadRoute />} />
+        <Route path="/settings" element={<SettingsRoute />} />
         <Route path="/privacy" element={<Privacy />} />
       </Routes>
       {/* The landing page owns its own footer (with its own Privacy link), so the shell footer
