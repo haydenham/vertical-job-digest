@@ -5,6 +5,43 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-23 — D-094 compliance PR 3 (settings + account deletion) built — the 3-PR block complete
+
+**Scope decisions (Hayden, this session):** the settings surface is one user resource —
+`PATCH /api/me {digest_paused}` (rejected: a separate `/api/settings`); the delete confirm is a
+plain modal, no type-to-confirm; the in-flight-backfill/delete race is accepted + documented (FK
+enforcement makes resurrection impossible; a late `save_match` FK-fails and aborts that backfill
+with one logged traceback), no locking; `/settings` is login-gated only so a never-onboarded user
+can still delete. Recorded as a PR 3 implementation note under D-094 (no new ADR). **No migration**
+— head stays `e91b3a6f2d04`, so no Neon pre-merge step.
+
+**Built on `feat/settings-account-deletion` (uncommitted; Hayden owns commit/PR) — PR 3 of 3:**
+`delete_user_account` in `db/users.py` (one `begin()` transaction, child→parent: matches by the
+user's profile ids → profiles by `user_id` OR `user_email` (catches the never-linked pre-login
+seed row) → digests by `recipient` email (no user FK) → the `users` row; counts logged by user id
+only). `app.py`: `MeUser` gains `digest_paused` (populated from the already-loaded `User`);
+`PATCH /api/me` reuses `set_digest_paused` (404 on vanished row); `DELETE /api/me` → 204 + session
+pop in-handler; CORS `allow_methods` gains PATCH/DELETE. Frontend: `Settings.tsx` (toggle rendered
+from context truth + silent `/api/me` re-sync; danger card → confirm modal on the WelcomeTour
+scaffold; post-delete `logout()` + land on Landing), `SettingsRoute` (login-gated, no profile
+check) + `/settings` route + nav link for every authed user; `api.ts` `setDigestPaused`/
+`deleteAccount` + `digest_paused` on `User`; scoped `.settings-*`/`.btn-danger` theme block
+(the palette's first red, used nowhere else); Privacy page copy now points pause + deletion at
+`/settings` (founder email kept as fallback).
+
+**Verification:** full default suite **595 passed, 31 deselected** (10 new: settings API ×9 —
+PATCH pause/resume/idempotent/401/404-ghost, DELETE 401/204+isolation/seed-edge/no-profile —
+plus a real-cookie login→DELETE→401 session test in `test_auth.py`); ruff format/check, mypy
+(136 files), import-linter (1 kept / 0 broken), `uv lock --check`; frontend eslint + `tsc -b` +
+vitest **125/125** (was 104: Settings suite ×11, App `/settings` guards + nav ×5, api client ×4,
+Privacy settings-links pin) + production build. Live HTTP smoke on a scratch DB (throwaway
+secret, minted session cookie, `VJA_AUTH_REQUIRED=1`): pause→resume flips `users.digest_paused`
+both ways, anonymous PATCH/DELETE 401, DELETE 204 → same cookie 401, user/profile/match/digest
+rows 0 while postings/employers survive. Docs: D-094 PR 3 note, INVARIANTS (delivery + auth
+sections + SPA routes), docs/15 exit line, CLAUDE. **Next:** Hayden reviews/commits/PRs — this
+closes the D-094 3-PR block; remaining exit items are the GCP alert pair, the OAuth
+publishing-status check, and the no-code activations (all Hayden-run).
+
 ## 2026-07-23 — D-094 compliance PR 2 (digest unsubscribe) built
 
 **Scope decisions (Hayden, this session):** confirm-page flow (GET renders a confirm page, **POST**

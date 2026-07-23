@@ -45,10 +45,12 @@ export interface PostingsQuery {
   profileId?: number;
 }
 
-// The authenticated identity (mirrors `MeUser` in `app.py`).
+// The authenticated identity (mirrors `MeUser` in `app.py`). `digest_paused` is the D-094
+// email flag the settings page reads and flips via `PATCH /api/me`.
 export interface User {
   email: string;
   name: string | null;
+  digest_paused: boolean;
 }
 
 // Backfill progress as `/api/me` reports it (D-082): "running" while the signup/reupload
@@ -145,6 +147,35 @@ export async function logout(): Promise<void> {
   });
   if (!resp.ok) {
     throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for /auth/logout`);
+  }
+}
+
+// ---- settings (D-094 PR 3) ----
+
+// Pause/resume the digest email. Matching and the dashboard keep running server-side; only the
+// email stops. Mirrors `MeSettings` in `app.py`.
+export async function setDigestPaused(paused: boolean): Promise<{ digest_paused: boolean }> {
+  const resp = await fetch(`${API_BASE}/api/me`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ digest_paused: paused }),
+  });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, await errorDetail(resp));
+  }
+  return (await resp.json()) as { digest_paused: boolean };
+}
+
+// Hard account deletion (D-094): removes the user, their profile, matches, and digest history
+// server-side in one transaction, and kills the session. 204 on success.
+export async function deleteAccount(): Promise<void> {
+  const resp = await fetch(`${API_BASE}/api/me`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, await errorDetail(resp));
   }
 }
 

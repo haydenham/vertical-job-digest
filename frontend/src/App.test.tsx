@@ -13,6 +13,7 @@ vi.mock("./pages/Login", () => ({ Login: () => <div>login-page</div> }));
 vi.mock("./pages/Upload", () => ({ Upload: () => <div>upload-page</div> }));
 vi.mock("./pages/Landing", () => ({ Landing: () => <div>landing-page</div> }));
 vi.mock("./pages/Privacy", () => ({ Privacy: () => <div>privacy-page</div> }));
+vi.mock("./pages/Settings", () => ({ Settings: () => <div>settings-page</div> }));
 vi.mock("./auth/useAuth", () => ({ useAuth: vi.fn() }));
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -30,7 +31,7 @@ function auth(over: Partial<AuthState> = {}): AuthState {
   };
 }
 
-const alice: User = { email: "alice@example.com", name: "Alice" };
+const alice: User = { email: "alice@example.com", name: "Alice", digest_paused: false };
 const gridProfile: Profile = {
   vertical: "grid_power_software",
   resume_version: "v1",
@@ -101,6 +102,18 @@ describe("App routing + guards", () => {
     mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
     renderAt("/onboarding");
     expect(screen.queryByRole("link", { name: /update résumé/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the settings nav link for every signed-in user, even before onboarding", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
+    renderAt("/onboarding");
+    expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
+  });
+
+  it("hides the settings nav link when logged out", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/");
+    expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
   });
 
   it("calls logout when sign-out is clicked", async () => {
@@ -176,6 +189,26 @@ describe("App routing + guards", () => {
     mockUseAuth.mockReturnValue(auth({ loading: true }));
     renderAt("/");
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  // --- settings (compliance PR 3, D-094) ---
+
+  it("/settings logged out → login", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/settings");
+    expect(screen.getByText("login-page")).toBeInTheDocument();
+  });
+
+  it("/settings renders for a signed-in user with no profile (deletion stays reachable)", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
+    renderAt("/settings");
+    expect(screen.getByText("settings-page")).toBeInTheDocument();
+  });
+
+  it("/settings renders for an onboarded user", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    renderAt("/settings");
+    expect(screen.getByText("settings-page")).toBeInTheDocument();
   });
 
   // --- privacy notice (compliance PR 1, D-094) ---

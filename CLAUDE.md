@@ -205,9 +205,12 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   Phenom/United ✅ → BambooHR ✅ → **2026-07-12 coverage audit + Honeywell Oracle onboard ✅ → Pinpoint ✅
   (D-079), next order = D-078**: runbook activations → Radancy variants → JazzHR → Jobvite → Taleo).
   **Beta exit (reduced by D-094, 2026-07-22):** the compliance/usability 3-PR block — privacy notice
-  (merged #99) → digest unsubscribe (**PR 2 built**: `users.digest_paused`, tokenized no-login
+  (merged #99) → digest unsubscribe (merged #100: `users.digest_paused`, tokenized no-login
   confirm-page/POST `/unsubscribe`, RFC-8058 one-click headers, paused skip in `send_digest`; Job now
-  mounts `VJA_SESSION_SECRET` + `VJA_PUBLIC_BASE_URL`) → settings + account deletion — plus one GCP
+  mounts `VJA_SESSION_SECRET` + `VJA_PUBLIC_BASE_URL`) → settings + account deletion (**PR 3 built**:
+  login-gated `/settings` with the pause/resume toggle over `PATCH /api/me` + hard deletion via
+  `DELETE /api/me` — matches→profiles→digests→user in one transaction, postings/employers untouched,
+  session popped; no migration) — plus one GCP
   alert-policy pair on the nightly Job, a
   one-time Google OAuth publishing-status check, and the Hayden-run no-code activations. The five-pillar
   scaling doc, D-086 digest idempotency, and broader monitoring are dropped. Robotics config (#93) and the

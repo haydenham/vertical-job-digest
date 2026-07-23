@@ -8,14 +8,17 @@ the email seam to the FK. PII tier (docs/11 §2): never denormalized into employ
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import Connection, Engine, select, update
+from sqlalchemy import Connection, Engine, delete, or_, select, update
 from sqlalchemy.engine import RowMapping
 
 from vja.db.engine import begin
-from vja.db.schema import profiles, users
+from vja.db.schema import digests, matches, profiles, users
+
+logger = logging.getLogger(__name__)
 
 _USER_COLS = (
     users.c.id,
@@ -84,6 +87,43 @@ def set_digest_paused(engine: Engine, *, user_id: int, email: str, paused: bool 
             .values(digest_paused=paused)
         )
         return result.rowcount > 0
+
+
+def delete_user_account(engine: Engine, *, user_id: int, email: str) -> None:
+    """Hard-delete a user's account and every user-scoped row (D-094): matches → profiles →
+    digests → the `users` row, in one transaction (no ON DELETE cascades exist, and FK enforcement
+    is on — child rows must go first). Postings/employers are shared corpus, never touched.
+
+    Profiles match on `user_id` OR `user_email` — a pre-login seed profile has a NULL `user_id`
+    but the same email (D-055 links on first login, so an unlinked row can still exist). Digests
+    carry no FK at all; `recipient == email` is their only link. Atomicity is the no-resurrection
+    guarantee against an in-flight backfill: its `save_match` either commits before this
+    transaction (row deleted here) or FK-fails after it.
+    """
+    profile_predicate = or_(profiles.c.user_id == user_id, profiles.c.user_email == email)
+    with begin(engine) as conn:
+        profile_ids = [
+            row[0] for row in conn.execute(select(profiles.c.id).where(profile_predicate))
+        ]
+        matches_deleted = 0
+        if profile_ids:
+            matches_deleted = (
+                conn.execute(delete(matches).where(matches.c.profile_id.in_(profile_ids))).rowcount
+                or 0
+            )
+        profiles_deleted = conn.execute(delete(profiles).where(profile_predicate)).rowcount or 0
+        digests_deleted = (
+            conn.execute(delete(digests).where(digests.c.recipient == email)).rowcount or 0
+        )
+        conn.execute(delete(users).where(users.c.id == user_id))
+    # PII discipline: counts keyed by user id only, never the email.
+    logger.info(
+        "deleted account user_id=%s: %s profiles, %s matches, %s digests",
+        user_id,
+        profiles_deleted,
+        matches_deleted,
+        digests_deleted,
+    )
 
 
 def upsert_user_by_google(

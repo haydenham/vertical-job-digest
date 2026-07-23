@@ -123,7 +123,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **A user with `users.digest_paused` gets no digest email and no `digests` row** — checked before
   `build_digest` (status `paused`), so the window doesn't advance and a future resume gets the
   accumulated diff. Pausing stops the *email only*: matching and the dashboard continue. The flag
-  lives on `users` (not versioned `profiles`) so a résumé reupload can't reset it. (D-094)
+  lives on `users` (not versioned `profiles`) so a résumé reupload can't reset it. Self-serve it
+  flips via **`PATCH /api/me {digest_paused}`** (behind `require_user`; the `/settings` toggle),
+  reusing the same `set_digest_paused`; `GET /api/me` exposes the current value. (D-094)
 - **Every digest email carries a tokenized no-login unsubscribe link + the RFC-8058 one-click
   headers** (`List-Unsubscribe` / `List-Unsubscribe-Post`), when a public base URL and a `users` row
   exist (a dev run or pre-login seed profile ships without them). The state change is **POST-only**
@@ -146,8 +148,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   stays `vja`) consuming `GET /api/postings`. **`react-router-dom` routes**, all guarded off `useAuth()`
   (D-065): `/` (smart root: logged-out → `Landing`, no-profile → `/onboarding`, has-profile → `/dashboard`),
   `/login` (logged-out only; an existing session routes onward), `/onboarding` (pick vertical +
-  upload), `/dashboard` (their vertical), `/upload` (résumé update,
-  vertical locked); `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
+  upload), `/dashboard` (their vertical), `/upload` (résumé update, vertical locked), `/settings`
+  (login-gated only — digest pause toggle + account deletion, D-094), `/privacy` (public);
+  `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
   is credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
   serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
@@ -244,7 +247,17 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `require_user` (401 without a session). It runs the D-033 adapter (`vja.resume`, text/markdown +
   text PDF; scanned/empty/non-text → 422; PII text never logged) → `upsert_profile` (which now stamps
   `user_id` at creation, the D-055 link at upload not just login) → a **background** `run_backfill`,
-  returning 202. The read API stays read-only (D-005); this write path is the sole exception. (D-057)
+  returning 202. The read API stays read-only (D-005); the write exceptions are this path plus the
+  D-094 settings surface (`PATCH`/`DELETE /api/me`). (D-057, D-094)
+- **Hard account deletion is `DELETE /api/me` (behind `require_user`) → 204, one atomic transaction**
+  removing matches (by the user's profile ids) → profiles (`user_id` **or** `user_email`, so a
+  never-linked pre-login seed row goes too) → digests (by `recipient` email — no user FK exists) →
+  the `users` row; **postings/employers/sources are never touched** (D-009 covers postings, not user
+  PII). The handler pops the session; a stale cookie already resolves to 401. Atomicity + FK
+  enforcement make match resurrection from an in-flight backfill impossible — its late `save_match`
+  FK-fails and aborts that backfill with one logged traceback (accepted, no locking). `/settings`
+  (the SPA page: pause toggle + delete confirm modal) is **login-gated only** — no profile required.
+  (D-094, D-009, D-055)
 
 ## Cost & safety
 

@@ -175,3 +175,24 @@ def test_logout_clears_session(
 
     client.post("/auth/logout")
     assert client.get("/api/me").status_code == 401
+
+
+def test_delete_account_kills_real_session(
+    migrated_engine: Engine, configured_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-094 deletion through the real cookie flow: after DELETE /api/me the session is dead
+    (popped in-handler; a stale id would 401 anyway) and the users row is gone."""
+    app = create_app(migrated_engine)
+
+    async def fake_token(request: object) -> dict[str, object]:
+        return {"userinfo": {"sub": "g-1", "email": _EMAIL, "name": "Me"}}
+
+    monkeypatch.setattr(app.state.oauth.google, "authorize_access_token", fake_token)
+    client = TestClient(app)
+    client.get("/auth/callback")
+    assert client.get("/api/me").status_code == 200
+
+    assert client.delete("/api/me").status_code == 204
+    assert client.get("/api/me").status_code == 401
+    with migrated_engine.connect() as conn:
+        assert conn.execute(select(users.c.id).where(users.c.email == _EMAIL)).first() is None

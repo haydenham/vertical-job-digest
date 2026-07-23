@@ -15,7 +15,7 @@ const mockUseAuth = vi.mocked(useAuth);
 // The dashboard reads its backfill status (and the silent re-probe) from useAuth (D-082).
 function auth(backfillStatus: BackfillStatus = null, over: Partial<AuthState> = {}): AuthState {
   return {
-    user: { email: "a@b.co", name: "A" },
+    user: { email: "a@b.co", name: "A", digest_paused: false },
     profile: {
       vertical: "grid_power_software",
       resume_version: "v1",
