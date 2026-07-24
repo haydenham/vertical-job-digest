@@ -45,6 +45,10 @@ function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
         apply_url: "https://example.com/apply",
         first_seen_at: "2026-06-20T00:00:00Z",
         source_updated_at: null,
+        comp_min: null,
+        comp_max: null,
+        comp_raw: null,
+        comp_display: null,
         verdict: "yes",
         score: 72,
         fits: [],
@@ -82,7 +86,10 @@ describe("Dashboard", () => {
     expect(screen.getByText("Aviation Technology")).toBeInTheDocument();
     expect(screen.queryByText("aviation_software")).not.toBeInTheDocument();
 
-    const guide = screen.getByText(/click a row for details · read-only · updates nightly/i);
+    // Names what the panel holds — the affordance half of the salary work (D-087).
+    const guide = screen.getByText(
+      /click a row for salary, match rationale, and apply link · read-only · updates nightly/i,
+    );
     const table = container.querySelector(".table");
     expect(table).not.toBeNull();
     expect(guide.compareDocumentPosition(table!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

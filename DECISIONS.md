@@ -1830,3 +1830,67 @@ now-deleted profile) — resurrection is impossible; no matching-loop change. `/
 every authed user), and the delete confirm is a **plain modal** (Cancel default + red confirm; no
 type-to-confirm ceremony). CORS `allow_methods` gains PATCH/DELETE for the dev origin. No
 migration — the schema head stays `e91b3a6f2d04`.
+
+### D-095 · Product · Salary display (F2 Phase A) + posting description display · accepted · 2026-07-24
+First build off the D-087 post-beta slate. `docs/18` sequences *churn diagnosis → F2 Phase A → F4 → F1 →
+F3*; the churn prerequisite blocks **F1 and F4 only**, so salary was buildable now. Hayden added
+**description display** to the same session — not in the D-087 slate, and the larger of the two.
+Shipped as **two PRs**: salary (no migration) then description (migration + the D-083 pre-merge Neon step).
+
+**The finding that shaped PR 1.** A fill-rate query over the dev DB (314 in-scope open postings) found
+`comp_min`/`comp_max` on 172 (55%) and `comp_raw` on 176, with `comp_min` **never** present without
+`comp_raw`. But the stored integers are **not display-safe**: despite the extraction prompt already saying
+"never annualize hourly compensation", Haiku annualizes — `$49.82 to $60.22 per hour` → `103579/125258`, a
+ten-week internship at `$4,250 weekly` → `170000/170000`, `75,000 CAD to 108,00 CAD` → bare integers, and
+`Pay within range listed + Bonus + Benefits + Equity` → `81456/122184` whose figures the quoted text never
+shows. Rendering those would put a salary on a real posting that the posting never offered — the trust cost
+D-008 spends a whole verification pass to avoid.
+
+**Decision: corroboration, not trust.** New pure module `vja.comp` (bottom layer, zero LLM):
+`annual_usd_display` formats the integers **only when `comp_raw` agrees they are annual USD**, suppressing
+on a non-annual pay period, a non-USD currency, absent/digit-free `comp_raw`, an implausible annual figure,
+or an inverted range. The API exposes `comp_min`/`comp_max`/`comp_raw` plus a computed `comp_display`, so
+the judgment is server-side and unit-testable and the SPA stays dumb: it renders `comp_display`, else
+`comp_raw` verbatim, else "Not listed". The asymmetry is deliberate — a false positive fabricates a salary,
+a false negative merely hides a formatted range the raw string still conveys, so ambiguity suppresses.
+Against the real dev corpus this displays 157 of 176 comp-bearing rows; all 19 suppressions are correct on
+the evidence the row carries (the last-listed case turned out at eval time to be an under-informative
+`comp_raw` rather than an invented figure — the posting does quote the range elsewhere — so the guard is
+conservative there, and the prompt fix makes such rows display again once re-extracted). `comp_raw` also renders beneath a shown range, because the range is derived and the raw
+string is the posting's own wording. The extraction prompt was tightened in the same PR (enumerate the
+forbidden periods, forbid non-USD, require the integers to come from `comp_raw`) — future extractions only,
+no re-extraction, and the deterministic guard holds with or without it.
+
+**Placement + discoverability (Hayden, this session).** Salary is **panel-only** — no row chip and no sixth
+sortable column, because ~45% of rows have no salary and a half-empty column reads worse than a click.
+That made the panel's discoverability load-bearing, and the row's most link-looking element (the title
+`<a href={apply_url}>` with `stopPropagation`) navigates *away* to the ATS. **Rejected: retargeting the
+title to open the panel** — it would remove today's one-click row→ATS jump that beta users already rely on.
+Instead: a persistent right-edge chevron that rotates when the row opens (decorative, `aria-hidden` — the
+row already carries `role="button"` + `aria-expanded`), the existing `.table-guide` line resharpened to name
+what the panel holds, and tour slide 4 copy updated. The `?` nav button already reopens the tour for users
+who dismissed it.
+
+**Description (PR 2).** `RawPosting.description` exists but is never persisted — `insert_posting` writes only
+`raw_payload`. Rich-list ATSs (iCIMS/Greenhouse/Lever/Ashby/Workable/Pinpoint ≈ 59% of in-scope open) carry
+it inside `raw_payload`; the list-only ATSs (Workday/Oracle/SmartRecruiters/Radancy ≈ 41%) fetch it lazily at
+extraction via `_DETAIL_RESOLVERS` and **discard it**. Decision: a new `postings.description` column holding
+**HTML normalized to plain text** at persist (via `beautifulsoup4`, already a dep from D-052) — no XSS
+surface, no new frontend dependency, roughly half the bytes of storing HTML. Filled at insert/update/reopen
+from the fetcher and, for list-only ATSs, in `save_extraction` from the detail body already fetched — 100%
+coverage going forward at zero new fetch and zero new LLM cost, fill-only-when-NULL so L1 stays authoritative
+(the `location`/`source_updated_at` rule, D-043/D-038). **No backfill:** existing rows fill naturally as
+content changes, reopens, or re-extracts; a one-shot re-fetch CLI and a clear-`extracted_at` re-extraction
+were both rejected as throwaway load and pure LLM cost for text we already had.
+
+**Prompt-change eval (D-093/D-090 gate; run 2026-07-24, real `anthropic/claude-haiku-4-5`, 5 production
+payloads from rich-list ATSs, 46,278 in / 2,443 out tokens ≈ $0.06).** Old vs new system prompt, comp fields
+only. The weekly internship: old → **212,500** (52 × $4,250 — *worse than the stored 170,000, so the
+annualization is not even stable between runs*), new → **null**. The hourly posting: old → 38,460/44,950
+(the hourly figures stored as if annual), new → **null**. Both clean-annual controls: **unchanged under both
+prompts** — no regression, and the new prompt returns a more faithful verbatim `comp_raw`. The
+"Pay within range listed" posting returned 81,456/122,184 under both prompts with `comp_raw` now quoting
+"$81,456 - $122,184 per-year-salary" — i.e. that row was never a fabrication, just an under-informative
+stored quote. Outputs preserved in the session log. **Hayden signed off on this evidence before merge.**
+
+References D-087, D-008, D-005, D-035, D-036, D-038, D-043, D-052, D-080, D-082, D-083, D-090, D-093.

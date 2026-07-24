@@ -5,6 +5,68 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-24 — D-095 PR 1: salary display (F2 Phase A) + the panel click affordance
+
+**Context:** the D-094 compliance block is merged (#99/#100/#101) and the remaining beta-exit items are
+Hayden-run/no-code, so this starts the D-087 post-beta slate. `docs/18` sequences churn → F2 Phase A → F4 →
+F1 → F3; churn blocks **F1/F4 only**, so salary was buildable now. Hayden added **description display** to
+the session — not in the D-087 slate, and the bigger of the two — so it ships as PR 2.
+
+**The finding that reshaped PR 1.** The mandated fill-rate query (dev DB, 314 in-scope open) returned
+`comp_min`/`comp_max` on 172 (55%), `comp_raw` on 176, `comp_min` never present without `comp_raw` — but
+also that the integers are **not display-safe**. Haiku annualizes despite the prompt forbidding it:
+`$49.82 to $60.22 per hour` → `103579/125258`, a ten-week internship at `$4,250 weekly` → `170000/170000`,
+`75,000 CAD to 108,00 CAD` → bare integers, `Pay within range listed + Bonus + Benefits + Equity` (no figure
+at all) → `81456/122184`. Displaying those would invent a salary on a real posting (D-008's whole point).
+
+**Scope decisions (Hayden, this session):** corroboration guard over prompt-fix-then-re-extract (a schema
+change + real LLM spend before anything displays) and over raw-only display · new `postings.description`
+column with HTML normalized to plain text via the existing `beautifulsoup4` (over HTML + a client sanitizer,
+and over a no-migration read from `raw_payload` covering only ~59% of rows) · **no description backfill**
+(natural fill; a re-fetch CLI and a clear-`extracted_at` re-extraction both rejected) · two PRs, salary
+first · salary **panel-only**, no row chip and no sixth sortable column (~45% of rows would show a dash) ·
+affordance = chevron + guide copy, **title keeps its one-click apply** (retargeting it was rejected as a
+behavior change beta users would feel). Recorded as **D-095**.
+
+**Built on `feat/salary-display` (uncommitted; Hayden owns commit/PR) — PR 1 of 2:** new pure
+`src/vja/comp.py` (`annual_usd_display`, bottom import-linter layer, zero LLM) suppressing on non-annual
+pay periods, non-USD currency, absent/digit-free `comp_raw`, implausible annual figures, and inverted
+ranges — prefix-matched words so "through"/"Monday" don't false-positive, whole-word currency codes so
+"Cadence" isn't CAD, and R$/C$/A$ only when they actually price a number. `DashboardPosting` +
+`open_postings_with_match_quality` carry `comp_min`/`comp_max`/`comp_raw`; `PostingRow` adds them plus a
+`@computed_field comp_display`, so the judgment is server-side and the SPA stays dumb. Extraction prompt
+tightened (enumerate forbidden periods, forbid non-USD, require the integers to come from `comp_raw`) —
+future extractions only. Frontend: a `.panel-salary` block (its own block, not a fourth `panel-meta` cell,
+since the fallback is often a full sentence) rendering `comp_display` → `comp_raw` → "Not listed", with
+`comp_raw` beneath a shown range; a sixth 16px grid track holding an `aria-hidden` chevron that rotates on
+`.row.selected`; `.head-right` replacing the `span:last-child` alignment rule the new track would have
+broken; sharpened `.table-guide` copy; tour slide 4 names salary.
+
+**Verification:** full default suite **640 passed, 31 deselected** (45 new: `test_comp.py` ×43 driven by
+the real production strings, plus API + dashboard-query comp coverage); ruff format/check, mypy (138 files),
+import-linter (1 kept / 0 broken), `uv lock --check`; frontend eslint + `tsc -b` + vitest **131/131** (was
+125) + production build. **Guard replayed over the whole dev corpus: 157 of 176 comp-bearing rows display,
+and all 19 suppressions are genuine saves.** Live smoke on a scratch migrated DB (throwaway session secret,
+minted cookie, served build, headless Chrome 1440×900): annual row → `$105,000 – $131,325` + raw beneath,
+internship + hourly rows → raw only with no `$` range, no-comp row → "Not listed", chevrons render and
+rotate, header alignment intact, no horizontal overflow, zero console errors. Docs: D-095, INVARIANTS
+(dashboard display rule + SPA affordance line), docs/18 (F2 Phase A status + the annualization finding),
+CLAUDE. **Prompt-change eval (the D-093/D-090 gate, run this session):** real Haiku over 5 production payloads,
+old vs new prompt, 46,278 in / 2,443 out tokens ≈ $0.06. Weekly internship: old → **212,500** (52 × $4,250,
+*worse than the stored 170,000 — the annualization isn't even stable between runs*), new → **null**. Hourly:
+old → 38,460/44,950, new → **null**. Both clean-annual controls unchanged under both prompts (no
+regression). The "Pay within range listed" row returned the same integers under both, with `comp_raw` now
+quoting "$81,456 - $122,184 per-year-salary" — so that row was **not** a fabrication, just an
+under-informative stored quote; the guard is conservative there and the prompt fix makes it display again
+once re-extracted. D-095 corrected accordingly. Hayden signed off.
+
+**Next:** Hayden reviews/commits/PRs. **One item open before merge:** re-run the fill-rate query against
+Neon — the 55% figure and the panel-only treatment were chosen on local dev data. **PR 2 (description
+column) is deliberately NOT started** — Hayden is holding it until PR 1 merges and wants it planned
+separately, including the still-open read-path call (a `GET /api/postings/{id}` detail endpoint vs. a
+truncated inline snippet; a full description on ~300 rows would add multi-MB to a list response that is
+currently tens of KB). It needs the D-083 pre-merge Neon step when it does run.
+
 ## 2026-07-23 — D-094 compliance PR 3 (settings + account deletion) built — the 3-PR block complete
 
 **Scope decisions (Hayden, this session):** the settings surface is one user resource —

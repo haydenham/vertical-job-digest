@@ -94,7 +94,9 @@ export function Dashboard({ vertical }: { vertical: string }) {
         </div>
       )}
 
-      <div className="table-guide">Click a row for details · read-only · updates nightly</div>
+      <div className="table-guide">
+        Click a row for salary, match rationale, and apply link · read-only · updates nightly
+      </div>
 
       {error ? (
         <div className="notice error">{error}</div>

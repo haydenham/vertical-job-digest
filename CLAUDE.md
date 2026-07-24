@@ -233,11 +233,15 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   Terra runs measured ~$0.77–$0.99; discovery is **manual/on-demand by policy**, with no recurring schedule
   planned (disabled templates remain available machinery). **Later:** auto-approval, a proposal-precision eval,
   and non-employer `sources`.
-- **Post-beta feature slate (planned; D-087, `docs/18`).** Decided 2026-07-14, builds only after the D-085
-  beta exit: intraday freshness + instant alerts (supersedes D-005's once-daily fetch at build time) ·
-  salary display (own extraction first, then DOL H1B/LCA enrichment; Glassdoor/Indeed path closed) ·
-  recurring-gaps report · per-employer lifespan/urgency intel. The D-085 churn diagnosis blocks the
-  freshness + lifespan builds.
+- **Post-beta feature slate (D-087, `docs/18`).** Decided 2026-07-14: intraday freshness + instant alerts
+  (supersedes D-005's once-daily fetch at build time) · salary display (own extraction first, then DOL
+  H1B/LCA enrichment; Glassdoor/Indeed path closed) · recurring-gaps report · per-employer lifespan/urgency
+  intel. The D-085 churn diagnosis blocks the freshness + lifespan builds. **F2 Phase A ✅ built 2026-07-24
+  (D-095)** — salary in the detail panel behind the `vja.comp` corroboration guard (the extracted
+  `comp_min`/`comp_max` annualize hourly pay, so a range renders only when `comp_raw` agrees it is annual
+  USD), plus a row chevron advertising the panel. **Description display** was added to the same block as
+  PR 2: a `postings.description` column (HTML→plain text) filled at insert and at extraction, since the
+  list-only ATSs currently discard the detail body they already fetch.
 
 ## Conventions for this repo
 

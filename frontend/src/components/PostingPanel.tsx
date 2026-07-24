@@ -54,6 +54,20 @@ export function PostingPanel({ p, onClose }: { p: PostingRow; onClose: () => voi
         </div>
       </dl>
 
+      {/* Salary gets its own block rather than a fourth `panel-meta` cell: when the guarded range
+          is suppressed we fall back to the posting's own wording, which is often a full sentence
+          and would blow out the meta grid (D-087). Always rendered, so "not listed" is a readable
+          answer rather than a missing feature. */}
+      <div className="panel-salary">
+        <span className="label">salary</span>
+        <p className="salary-value">{p.comp_display ?? p.comp_raw ?? "Not listed"}</p>
+        {/* The posting's own wording, kept whenever it says more than the formatted range does —
+            the range is derived, this is the source. */}
+        {p.comp_display && p.comp_raw && p.comp_raw !== p.comp_display && (
+          <p className="salary-raw">{p.comp_raw}</p>
+        )}
+      </div>
+
       {p.rationale && <p className="rationale">{p.rationale}</p>}
 
       {(p.fits?.length || p.gaps?.length) && (

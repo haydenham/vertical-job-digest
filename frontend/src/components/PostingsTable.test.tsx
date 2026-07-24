@@ -15,6 +15,10 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     apply_url: "https://example.com/apply",
     first_seen_at: "2026-06-20T00:00:00Z",
     source_updated_at: null,
+    comp_min: null,
+    comp_max: null,
+    comp_raw: null,
+    comp_display: null,
     verdict: "yes",
     score: 72,
     fits: ["power markets"],
@@ -100,5 +104,20 @@ describe("PostingsTable", () => {
     expect(container.querySelector('[aria-sort="descending"] .sort-btn.active')).toHaveTextContent(
       "match",
     );
+  });
+
+  // --- click affordance (D-087) ---------------------------------------------------------------
+
+  it("marks each row with a decorative chevron that AT never reads", () => {
+    const { container } = renderTable([row()]);
+    const chevrons = container.querySelectorAll(".cell-chevron");
+    expect(chevrons).toHaveLength(1);
+    // The row already carries role="button" + aria-expanded — the glyph must not double it up.
+    expect(chevrons[0]).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("marks the open row so the chevron can turn with it", () => {
+    const { container } = renderTable([row()], { selectedId: 1 });
+    expect(container.querySelector(".row.selected .cell-chevron")).not.toBeNull();
   });
 });
