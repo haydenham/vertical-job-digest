@@ -26,8 +26,9 @@ const SLIDES = [
   {
     title: "Open details and keep your résumé current",
     body:
-      "Click any row to see its rationale, fits, gaps, and apply link. When your résumé changes, " +
-      "recent roles re-match within minutes and the full refresh completes with the next nightly run.",
+      "Click any row — the ▸ on the right — to see its salary, rationale, fits, gaps, and apply " +
+      "link. When your résumé changes, recent roles re-match within minutes and the full refresh " +
+      "completes with the next nightly run.",
   },
 ] as const;
 

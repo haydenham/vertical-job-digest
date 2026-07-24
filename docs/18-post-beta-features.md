@@ -73,12 +73,21 @@ in-vertical-unbeatable claim.
 
 People love seeing salaries. Two phases, one rejected path.
 
-**Phase A — surface what we already extract (cheap, first).** `postings.comp_min`/`comp_max`/
-`comp_raw` are extracted by the Haiku pass and stored but never displayed — `PostingRow`
-(`src/vja/api/app.py:113`) omits them. Build: additive API fields → dashboard row (compact
-range) + side panel (raw string). **First step is a fill-rate query** (% of in-scope open
-postings with non-null `comp_min`) — pay-transparency states mean coverage should be
-meaningful, but the display treatment (chip vs. column) depends on the number.
+**Phase A — surface what we already extract (cheap, first). ✅ Built 2026-07-24 (D-095).** The
+fill-rate query ran first as planned: 172 of 314 in-scope open postings (55%) carry `comp_min`/
+`comp_max`, 176 carry `comp_raw`, and `comp_min` is never present without `comp_raw`.
+
+It also turned up the finding that reshaped the build: **the stored integers are not display-safe.**
+Haiku annualizes despite the prompt forbidding it (`$49.82/hour` → `103579/125258`; a ten-week
+internship at `$4,250 weekly` → `170000/170000`), stores non-USD amounts as bare integers, and
+sometimes sources figures that `comp_raw` never quotes. So Phase A shipped a **corroboration guard**
+(`vja.comp`) rather than a formatter: the range renders only when `comp_raw` agrees it is annual USD,
+else `comp_raw` shows verbatim. 157 of 176 comp-bearing rows display; all 19 suppressions are saves.
+
+Display treatment landed as **panel-only** — not the row chip or column this memo assumed — because
+~45% of rows have no salary and a half-empty column reads worse than a click. That put the load on
+panel discoverability, answered with a persistent row chevron + sharpened guide copy. The extraction
+prompt was tightened in the same PR (future extractions only; the guard is what makes display safe).
 
 **Phase B — H1B/DOL enrichment for comp-less postings.** The US DOL publishes quarterly
 LCA/H1B wage-disclosure files — real, per-company, per-role, per-location salaries, free and
@@ -93,7 +102,14 @@ closed for years; Indeed's publisher API is dead), and scraping them would viola
 ToS and our own politeness-is-policy invariant. Documented closed; do not re-litigate without
 an official partnership on the table.
 
-**Status:** planned, not started (Phase A is the recommended first build of the slate).
+**Status:** Phase A **built** (D-095, salary in the detail panel); Phase B planned, not started.
+
+**Added alongside Phase A (not originally in this slate): posting description display.** The
+description is never persisted today — `RawPosting.description` exists but only `raw_payload` is
+stored, and the list-only ATSs (~41% of in-scope open) discard their lazily-fetched detail body
+after extraction. A `postings.description` column (HTML normalized to plain text) filled at insert
+and at extraction gives full coverage going forward at zero new fetch and zero new LLM cost. See
+D-095; it ships as the second PR of the same block.
 
 ## F3 — Recurring-gaps report (novel)
 
@@ -140,7 +156,8 @@ wiring wait for a dedicated post-beta decision rather than riding the Luna cutov
 ## Sequencing (post-beta-exit)
 
 1. **Churn diagnosis** (D-085 queue — now blocking F1 + F4)
-2. **F2 Phase A** — salary surfacing (smallest visible win; days not weeks)
+2. ~~**F2 Phase A** — salary surfacing~~ ✅ built 2026-07-24 (D-095), with description display
+   added to the same block
 3. **F4** — lifespan intel (read-only, zero LLM; needs post-churn-fix data)
 4. **F1** — intraday freshness + instant alerts (flagship; own ADR superseding D-005)
 5. **F3** — recurring-gaps report

@@ -395,6 +395,12 @@ class DashboardPosting:
     apply_url: str | None
     first_seen_at: datetime
     source_updated_at: datetime | None
+    # Extracted compensation (F2 Phase A, D-087). Carried raw — the API layer decides whether the
+    # integers are safe to render as a range (`vja.comp`), because `comp_raw` is the only thing
+    # that corroborates them.
+    comp_min: int | None
+    comp_max: int | None
+    comp_raw: str | None
     # Match quality for this (profile, resume_version) — None when unassessed (LEFT JOIN miss).
     verdict: str | None
     score: int | None
@@ -451,6 +457,9 @@ def open_postings_with_match_quality(
             postings.c.apply_url,
             postings.c.first_seen_at,
             postings.c.source_updated_at,
+            postings.c.comp_min,
+            postings.c.comp_max,
+            postings.c.comp_raw,
             matches.c.verdict,
             matches.c.score,
             matches.c.fits,
@@ -489,6 +498,9 @@ def open_postings_with_match_quality(
             apply_url=row["apply_url"],
             first_seen_at=row["first_seen_at"],
             source_updated_at=row["source_updated_at"],
+            comp_min=row["comp_min"],
+            comp_max=row["comp_max"],
+            comp_raw=row["comp_raw"],
             verdict=row["verdict"],
             score=row["score"],
             fits=_loads(row["fits"]),

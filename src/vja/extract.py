@@ -68,7 +68,12 @@ only what the posting states; use the unknown/empty value when a field is absent
 Apply these literal rules:
 - level is unknown when the posting gives no level, seniority marker, or experience range.
 - for a remote role, location is its stated geographic eligibility; use null if none is stated.
-- comp_min / comp_max use only explicitly annual USD bounds; never annualize hourly compensation.
+- comp_min / comp_max are BOTH null unless the posting states an annual salary figure in US
+  dollars. Never convert to an annual figure: an hourly, daily, weekly, monthly, or per-semester
+  rate means comp_min and comp_max are null, no matter how easy the arithmetic looks. A figure in
+  any other currency (CAD, EUR, GBP, PLN, ...) also means both are null.
+- comp_min / comp_max must be the figures written in comp_raw. Never source them from elsewhere in
+  the posting: if the compensation text quotes no numbers, both are null.
 - posted_at is only a job publication/start date; never use graduation or candidate-eligibility
   dates.
 
@@ -77,8 +82,9 @@ Apply these literal rules:
 - remote: onsite | hybrid | remote | unknown.
 - work_auth: any visa / citizenship / clearance requirement stated, as a short phrase; else null.
 - stack: technologies/languages/tools named in the posting, as a list of strings ([] if none).
-- comp_min / comp_max: annual USD salary bounds as integers if given; null otherwise.
-- comp_raw: the compensation text exactly as written, if any; null otherwise.
+- comp_min / comp_max: annual USD salary bounds as integers, taken from comp_raw; null otherwise.
+- comp_raw: the compensation text exactly as written, if any; null otherwise. Always fill this when
+  the posting says anything about pay, even when comp_min / comp_max are null.
 - posted_at: the posting/start date if present (ISO 8601 preferred); null otherwise."""
 
 # The instruction prefix is stable across every posting in a run, so mark it cacheable. NB: Haiku

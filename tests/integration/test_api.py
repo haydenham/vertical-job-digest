@@ -55,7 +55,16 @@ def _employer(engine: Engine, *, vertical: str = _VERTICAL, name: str = "GridCo"
     return int(pk[0])
 
 
-def _posting(engine: Engine, employer_id: int, title: str, *, first_seen: datetime = _NOW) -> int:
+def _posting(
+    engine: Engine,
+    employer_id: int,
+    title: str,
+    *,
+    first_seen: datetime = _NOW,
+    comp_min: int | None = None,
+    comp_max: int | None = None,
+    comp_raw: str | None = None,
+) -> int:
     with begin(engine) as conn:
         result = conn.execute(
             postings.insert().values(
@@ -70,6 +79,9 @@ def _posting(engine: Engine, employer_id: int, title: str, *, first_seen: dateti
                 last_seen_at=first_seen,
                 extracted_at=first_seen,
                 in_scope=True,
+                comp_min=comp_min,
+                comp_max=comp_max,
+                comp_raw=comp_raw,
             )
         )
     pk = result.inserted_primary_key
@@ -135,6 +147,47 @@ def test_default_view_is_matched_only(migrated_engine: Engine) -> None:
     assert body["view"] == "matched"
     assert body["count"] == 1
     assert _titles(body) == ["matched"]
+
+
+def test_compensation_fields_and_guarded_display(migrated_engine: Engine) -> None:
+    """`comp_display` is the server's judgment, not the SPA's (F2 Phase A, D-087): an annual-USD
+    posting gets a formatted range, an hourly-annualized one gets `null` while `comp_raw` still
+    ships so the SPA can show the posting's own wording."""
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    annual = _posting(
+        migrated_engine,
+        emp,
+        "annual",
+        comp_min=105_000,
+        comp_max=131_325,
+        comp_raw="$105,000 and $131,325/year",
+    )
+    hourly = _posting(
+        migrated_engine,
+        emp,
+        "hourly",
+        comp_min=103_579,
+        comp_max=125_258,
+        comp_raw="$49.82 to $60.22 per hour",
+    )
+    none_stated = _posting(migrated_engine, emp, "none_stated")
+    for posting_id in (annual, hourly, none_stated):
+        _match(migrated_engine, posting_id, prof)
+
+    body = _client(migrated_engine).get("/api/postings", params={"vertical": _VERTICAL}).json()
+    rows = {p["title"]: p for p in body["postings"]}
+
+    assert rows["annual"]["comp_display"] == "$105,000 – $131,325"
+    assert rows["annual"]["comp_raw"] == "$105,000 and $131,325/year"
+    assert rows["annual"]["comp_min"] == 105_000
+
+    # The fabrication guard: integers still ship, but nothing formats them into a salary.
+    assert rows["hourly"]["comp_display"] is None
+    assert rows["hourly"]["comp_raw"] == "$49.82 to $60.22 per hour"
+
+    assert rows["none_stated"]["comp_display"] is None
+    assert rows["none_stated"]["comp_raw"] is None
 
 
 def test_cleaned_view_param(migrated_engine: Engine) -> None:

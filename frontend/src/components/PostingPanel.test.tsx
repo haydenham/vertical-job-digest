@@ -14,6 +14,10 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     apply_url: "https://example.com/apply",
     first_seen_at: "2026-06-20T00:00:00Z",
     source_updated_at: null,
+    comp_min: null,
+    comp_max: null,
+    comp_raw: null,
+    comp_display: null,
     verdict: "yes",
     score: 72,
     fits: ["power markets"],
@@ -73,5 +77,46 @@ describe("PostingPanel", () => {
     expect(screen.getByText("—")).toBeInTheDocument(); // unassessed match cell
     expect(screen.queryByText("fits")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  // --- salary (F2 Phase A, D-087) -------------------------------------------------------------
+
+  it("shows the server's guarded range, with the posting's own wording beneath it", () => {
+    render(
+      <PostingPanel
+        p={row({ comp_display: "$105,000 – $131,325", comp_raw: "$105,000 and $131,325/year" })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("salary")).toBeInTheDocument();
+    expect(screen.getByText("$105,000 – $131,325")).toBeInTheDocument();
+    expect(screen.getByText("$105,000 and $131,325/year")).toBeInTheDocument();
+  });
+
+  it("falls back to comp_raw verbatim when the server suppressed the range", () => {
+    // The hourly-annualization case: the panel must never render a $ range the server withheld.
+    render(
+      <PostingPanel
+        p={row({ comp_display: null, comp_raw: "$49.82 to $60.22 per hour" })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("$49.82 to $60.22 per hour")).toBeInTheDocument();
+  });
+
+  it("says the salary is not listed rather than hiding the block", () => {
+    render(<PostingPanel p={row({ comp_display: null, comp_raw: null })} onClose={vi.fn()} />);
+    expect(screen.getByText("salary")).toBeInTheDocument();
+    expect(screen.getByText("Not listed")).toBeInTheDocument();
+  });
+
+  it("does not repeat comp_raw when it is identical to the displayed range", () => {
+    render(
+      <PostingPanel
+        p={row({ comp_display: "$120,000", comp_raw: "$120,000" })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText("$120,000")).toHaveLength(1);
   });
 });

@@ -233,7 +233,7 @@ a:hover {
 }
 .row {
   display: grid;
-  grid-template-columns: 160px minmax(280px, 1fr) 200px 130px 120px;
+  grid-template-columns: 160px minmax(280px, 1fr) 200px 130px 120px 16px;
   gap: 12px;
   align-items: center;
   padding: 11px 16px;
@@ -298,8 +298,31 @@ a:hover {
 .sort-arrow {
   font-size: 8px;
 }
-.row.head span:last-child {
+.row.head .head-right {
   text-align: right;
+}
+
+/* click affordance — the row opens a detail panel, so say so without waiting for a hover (D-087) */
+.cell-chevron {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-dim);
+  text-align: right;
+  transition:
+    transform 120ms ease,
+    color 120ms ease;
+}
+.row:hover .cell-chevron {
+  color: var(--text-muted);
+}
+.row.selected .cell-chevron {
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-chevron {
+    transition: none;
+  }
 }
 
 .cell-company {
@@ -505,6 +528,20 @@ a:hover {
 }
 .gaps li {
   color: var(--accent-tint-text);
+}
+/* ---- salary block (F2 Phase A, D-087) ---- */
+.panel-salary .salary-value {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text);
+}
+/* the posting's own compensation wording under a derived range — secondary, and often a sentence */
+.panel-salary .salary-raw {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 /* ---- subbar filter ---- */
 .filter-input {

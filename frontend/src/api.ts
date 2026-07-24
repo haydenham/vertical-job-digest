@@ -22,6 +22,13 @@ export interface PostingRow {
   apply_url: string | null;
   first_seen_at: string;
   source_updated_at: string | null;
+  // Compensation (F2 Phase A, D-087). `comp_display` is the server's guarded annual-USD range —
+  // present only when `comp_raw` corroborates the extracted integers as annual USD (see
+  // `src/vja/comp.py`). When it is null, show `comp_raw` verbatim; never format the integers here.
+  comp_min: number | null;
+  comp_max: number | null;
+  comp_raw: string | null;
+  comp_display: string | null;
   verdict: Verdict | null;
   score: number | null;
   fits: string[] | null;

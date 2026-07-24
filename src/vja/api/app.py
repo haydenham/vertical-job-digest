@@ -41,7 +41,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -55,6 +55,7 @@ from vja.api.auth import (
     session_max_age,
     session_secret,
 )
+from vja.comp import annual_usd_display
 from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality
 from vja.db.profiles import (
@@ -132,11 +133,24 @@ class PostingRow(BaseModel):
     apply_url: str | None
     first_seen_at: datetime
     source_updated_at: datetime | None
+    comp_min: int | None
+    comp_max: int | None
+    comp_raw: str | None
     verdict: str | None
     score: int | None
     fits: list[str] | None
     gaps: list[str] | None
     rationale: str | None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def comp_display(self) -> str | None:
+        """The formatted annual-USD range, or `None` when the extracted integers aren't
+        corroborated as annual USD by `comp_raw` (`vja.comp` owns that judgment — see its module
+        docstring for why the raw string, not the integers, is the anchor). The SPA renders this
+        when present and falls back to `comp_raw` verbatim, so the decision stays server-side and
+        testable (F2 Phase A, D-087)."""
+        return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
 
 
 class ProfileCreated(BaseModel):

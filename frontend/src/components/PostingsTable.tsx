@@ -47,6 +47,11 @@ function Row({
       <span className="cell-location">{p.location ?? "—"}</span>
       <span className="cell-date">{activityDate(p)}</span>
       <MatchCell verdict={p.verdict} score={p.score} />
+      {/* Persistent affordance that the row opens a detail panel (D-087). Decorative only — the
+          row itself already carries role="button" + aria-expanded, so this is hidden from AT. */}
+      <span className="cell-chevron" aria-hidden="true">
+        ›
+      </span>
     </div>
   );
 }
@@ -73,7 +78,11 @@ export function PostingsTable({
     <div className="table">
       <div className="row head">
         {COLUMNS.map((c) => (
-          <span key={c.key} aria-sort={sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
+          <span
+            key={c.key}
+            className={c.right ? "head-right" : undefined}
+            aria-sort={sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+          >
             <button
               type="button"
               className={`sort-btn${c.right ? " sort-right" : ""}${sort.key === c.key ? " active" : ""}`}
@@ -84,6 +93,8 @@ export function PostingsTable({
             </button>
           </span>
         ))}
+        {/* spacer keeping the header aligned with the rows' chevron track */}
+        <span aria-hidden="true" />
       </div>
       {postings.map((p) => (
         <Row key={p.posting_id} p={p} selected={p.posting_id === selectedId} onSelect={onSelect} />

@@ -54,6 +54,9 @@ def _posting(
     source_updated: datetime | None = None,
     status: str = "open",
     in_scope: bool = True,
+    comp_min: int | None = None,
+    comp_max: int | None = None,
+    comp_raw: str | None = None,
 ) -> int:
     """Insert a posting. `in_scope` toggles the durable Stage-A+B floor (`in_scope IS TRUE`)."""
     with begin(engine) as conn:
@@ -71,6 +74,9 @@ def _posting(
                 source_updated_at=source_updated,
                 extracted_at=first_seen,
                 in_scope=in_scope,
+                comp_min=comp_min,
+                comp_max=comp_max,
+                comp_raw=comp_raw,
             )
         )
     pk = result.inserted_primary_key
@@ -233,3 +239,39 @@ def test_new_today_uses_first_seen_only(migrated_engine: Engine) -> None:
     rows = _query(migrated_engine, prof, cutoff=_MIDNIGHT, by_first_seen=True)
     # Only first_seen today — today_su (updated today, detected 06-01) excluded; = the digest.
     assert _titles(rows) == ["today_fs"]
+
+
+def test_compensation_columns_are_carried_through_untouched(migrated_engine: Engine) -> None:
+    """The query hands the API raw comp columns — the display judgment is `vja.comp`'s, not SQL's
+    (F2 Phase A, D-087). Includes a hourly-annualized row to prove the query doesn't filter it."""
+    employer_id = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    annual = _posting(
+        migrated_engine,
+        employer_id,
+        "annual",
+        first_seen=_NOW,
+        comp_min=105_000,
+        comp_max=131_325,
+        comp_raw="$105,000 and $131,325/year",
+    )
+    hourly = _posting(
+        migrated_engine,
+        employer_id,
+        "hourly",
+        first_seen=_NOW,
+        comp_min=103_579,
+        comp_max=125_258,
+        comp_raw="$49.82 to $60.22 per hour",
+    )
+    none_stated = _posting(migrated_engine, employer_id, "none_stated", first_seen=_NOW)
+    for posting_id in (annual, hourly, none_stated):
+        _match(migrated_engine, posting_id, prof, verdict="yes", score=70)
+
+    rows = {r.title: r for r in _query(migrated_engine, prof, cutoff=None)}  # type: ignore[attr-defined]
+    annual_row, hourly_row, bare_row = rows["annual"], rows["hourly"], rows["none_stated"]
+    assert (annual_row.comp_min, annual_row.comp_max) == (105_000, 131_325)  # type: ignore[attr-defined]
+    assert annual_row.comp_raw == "$105,000 and $131,325/year"  # type: ignore[attr-defined]
+    # Not filtered here — the API's guard is what suppresses its range.
+    assert hourly_row.comp_min == 103_579  # type: ignore[attr-defined]
+    assert (bare_row.comp_min, bare_row.comp_raw) == (None, None)  # type: ignore[attr-defined]

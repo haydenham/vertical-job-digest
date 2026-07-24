@@ -165,6 +165,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   nav button reopens it. User-facing controls say **Matched for you / All in-scope** and **New today /
   1 week / 2 weeks / All open** with native-title explanations; internal vertical keys remain stable
   and render through `verticalCopy()` (notably `aviation_software` → **Aviation Technology**).
+  **Rows advertise the detail panel** with a persistent right-edge chevron that rotates when the row
+  opens — decorative (`aria-hidden`; the row already carries `role="button"` + `aria-expanded`) — and
+  the `.table-guide` line names what the panel holds. The title stays an apply link (D-095).
   `GET /api/verticals` remains **only**
   the onboarding picker's source and is now **config-driven** (`available_verticals()`, joinable even with zero
   profiles — the B-4 fix), not active-profile-driven. **Prod ships as one multi-stage image** (`Dockerfile`; SPA
@@ -207,6 +210,15 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   *(Supersedes D-041's additive toggles; amends D-043's "rejected never shown.")* (D-045, D-043, D-037)
 - **Relevant verdicts = `models.RELEVANT_VERDICTS`** (strong_yes/yes/maybe) — one home, shared by
   the digest's `new` set and the dashboard's matched default. (D-037, D-041)
+- **A salary range is displayed only when the posting's own text corroborates it.** `comp_min`/
+  `comp_max` are extracted, not trusted: the model annualizes hourly/weekly pay despite the prompt
+  forbidding it. `vja.comp.annual_usd_display` (bottom layer, zero LLM) formats them **only** when
+  `comp_raw` agrees they are annual USD, suppressing on a non-annual pay period, a non-USD currency,
+  absent/digit-free `comp_raw`, an implausible annual figure, or an inverted range; ambiguity always
+  suppresses, because a false positive fabricates a salary while a false negative only hides a
+  format. The API serves the raw columns plus the computed `comp_display`, so the judgment is
+  server-side; the SPA renders `comp_display`, else `comp_raw` verbatim, else "Not listed", and
+  never formats the integers itself. **Salary is panel-only** — no row column. (D-095, D-087, D-008)
 - **The dashboard never triggers a match** (read-only, D-005), so its window has zero LLM cost —
   the 5-day cap governs only the signup backfill, decoupled from the dashboard window. (D-041, D-039)
 - **Recency windows key on the ATS posted/updated date:** `COALESCE(source_updated_at,
