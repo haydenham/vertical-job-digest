@@ -13,6 +13,7 @@ from vja.fetchers.phenom import PhenomFetcher
 from vja.fetchers.pinpoint import PinpointFetcher
 from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.registry import SUPPORTED_ATS_TYPES, get_fetcher
+from vja.fetchers.rippling import RipplingFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workable import WorkableFetcher
 from vja.fetchers.workday import WorkdayFetcher
@@ -33,6 +34,7 @@ def test_each_layer1_ats_maps_to_its_fetcher() -> None:
     assert isinstance(get_fetcher(AtsType.PHENOM), PhenomFetcher)
     assert isinstance(get_fetcher(AtsType.BAMBOOHR), BambooHRFetcher)
     assert isinstance(get_fetcher(AtsType.PINPOINT), PinpointFetcher)
+    assert isinstance(get_fetcher(AtsType.RIPPLING), RipplingFetcher)
 
 
 def test_returned_fetcher_reports_matching_ats_type() -> None:

@@ -44,10 +44,15 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   alert loudly rather than aborting the run. A digest that fails to send is itself an alert.
 - **An employer snapshot is validated before its DB transaction.** Every paginated fetcher must
   satisfy its pinned provider completeness contract and the final mapped row count must equal the
-  authoritative target exactly; every snapshot must also contain unique ATS `external_id` values.
+  authoritative target exactly; every snapshot must also resolve to unique ATS `external_id` values.
+  **One narrow exception, and only where the provider denormalizes its own list:** when a provider
+  emits one row per (job × work location) — Rippling — entries sharing an `external_id` that are
+  identical apart from that location field collapse into one posting with the locations merged (and
+  **sorted**, so a reordered board can't flip `content_hash` and fake a corpus-wide content change).
+  Entries sharing an `external_id` that disagree on *anything else* remain an integrity violation.
   Any violation is a failed employer fetch with zero posting mutations. Changed employers log
   fetched/new/reopened/updated/closed/unchanged counts; failures log the employer/provider and reason.
-  (D-088, D-092)
+  (D-088, D-092, D-096)
 
 ## Matching & extraction
 
@@ -351,10 +356,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 - **Fetcher build order:** Greenhouse/Lever/Ashby → Workday → Tier-B (**iCIMS + Workable +
   SmartRecruiters + Oracle + Paylocity done**) → Tier-C (**Radancy + Phenom done**) →
-  **BambooHR + Pinpoint done** → **demand-ranked next (D-078, from the 2026-07-12 coverage audit):
-  Radancy variants (L3Harris JSON / NRG / AA) →
-  JazzHR → Jobvite → Taleo singleton** → Layer-2 LLM-read for the custom tail + HN/niche. The
-  discovery-demand ledger in `docs/07` feeds this ranking. **Probe the multi-tenant platforms for a clean API before the
+  **BambooHR + Pinpoint + Rippling done** → **demand-ranked next (D-096, from the 2026-07-26 coverage
+  audit — supersedes D-078's ordering): JazzHR (3 rows, 21 jobs, HTML-parse — no feed exists) →
+  Jobvite → Taleo singleton → Radancy variants**, which *dropped* from D-078's rank 2 because live
+  probing killed the projection (American Airlines + National Grid 403, L3Harris JSON returns zero
+  results, Bombardier renders no table) → Layer-2 LLM-read for the custom tail + HN/niche. The
+  discovery-demand ledger in `docs/07` feeds this ranking. **The no-code activation backlog is spent** —
+  as of the D-096 audit no `proposed`/`approved` row is activatable without a new fetcher. **Probe the multi-tenant platforms for a clean API before the
   generic LLM-read** — the tail is mostly JS/bot-blocked, so a literal LLM-read-the-page has near-zero
   reach; route to a platform fetcher where one fits (D-017), Layer 2 for the rest. (D-018, D-048,
   D-049, D-050, D-051, D-052, D-076, D-078, D-079)
@@ -410,8 +418,17 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `external_id =` top-level posting `id`, with supplied apply URL, `location.name`, and no source date. The
   complete split job content is inline and joined for stable content hashing, so no lazy detail resolver.
   Aurora is curated seed config; Aireon activates through the D-077 proposal runbook after deploy. (D-079)
+- **Rippling fetcher targets the slug-derived board API** (`GET api.rippling.com/platform/api/ats/v1/
+  board/{slug}/jobs`). One **bare JSON array** is the complete set — the endpoint ignores
+  `limit`/`offset`/`page` and 404s an unknown slug — so it takes the single-response false-closure guard,
+  not paginate-or-fail. `external_id = uuid`; `apply_url` is **supplied** (`url`), never constructed;
+  `location` from `workLocation.label`; no list date (`createdOn` is detail-only). List-only: the body is
+  a lazy `…/jobs/{uuid}` fetch whose `description` is **split into `role` + `company`**, joined with
+  `role` first (the boilerplate must not open the panel). The list denormalizes one row per
+  (job × location) — see the snapshot-validation rule above. The Pinpoint custom-domain endpoint override
+  does **not** extend here: the slug always wins. (D-096, D-079, D-050, D-095)
 - **List-only ATSs' description is a lazy detail fetch, routed by `extract._DETAIL_RESOLVERS`**
-  (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom + BambooHR) — fetched only for in-scope
+  (Workday + SmartRecruiters + Oracle + Radancy + Paylocity + Phenom + BambooHR + Rippling) — fetched only for in-scope
   survivors (cost discipline); every other ATS carries the description in `raw_payload`. Adding a
   list-only ATS is a one-line map entry, no per-company branching. (D-050, D-051, D-052, D-076)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the

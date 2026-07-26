@@ -33,7 +33,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
 | `key_cities` | Hayden | free text | US hubs; useful for the location pre-filter |
 | `role_tilt` | Hayden | free text | tech flavor / what kind of roles to expect |
-| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`, `bamboohr`, `pinpoint`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
+| `ats_type` | Claude | Layer-1 providers include `greenhouse`, `lever`, `ashby`, `workday`, `icims`, `workable`, `oracle_hcm`, `smartrecruiters`, `radancy`, `paylocity`, `phenom`, `bamboohr`, `pinpoint`, `rippling`; all values live in `vja.models.AtsType` | which fetcher (or Layer 2) handles this employer |
 | `ats_slug` | Claude | free text | the company token in the ATS URL (e.g. Greenhouse `amperon`). For Workday: `tenant:dc:site` (e.g. `aes:wd1:AES_US`). Empty for portal-detected/custom rows. |
 | `careers_url` | Claude | URL | the company's job board / careers page ("the job domain"). Required for `workday`/`raw_html`. |
 | `endpoint` | derived | URL | constructed for slug-derived ATSs; explicit for Workday, Paylocity, and other per-tenant platforms. |
@@ -42,10 +42,15 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 | `verification` | Claude | `verified` \| `detected` \| `layer2` | confidence in the ATS resolution (see table above). |
 | `notes` | optional | free text | anything useful (parent company, ATS quirks, why included). |
 
-For Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR/Pinpoint the fetcher normally
+For Greenhouse/Lever/Ashby/Workable/SmartRecruiters/BambooHR/Pinpoint/Rippling the fetcher normally
 **constructs** the endpoint from `ats_type` + `ats_slug`; an explicit endpoint overrides the derived URL
-for provider-backed custom domains (Aurora's Pinpoint board). For Workday, Paylocity, and Phenom,
+for provider-backed custom domains (Aurora's Pinpoint board) — the override is **Pinpoint-only**, so a
+Rippling row's `endpoint` is ignored and its slug always wins. For Workday, Paylocity, and Phenom,
 `endpoint` holds the per-tenant URL/config. Portal-detected and custom rows carry `careers_url`.
+
+**Rippling rows:** the `ats_slug` is the board token in `ats.rippling.com/{slug}/jobs` (e.g.
+`raptor-maps-inc`), not the company name. Rippling lists one row per (job × work location), so the
+fetcher collapses them into one posting per job and joins the locations (D-096).
 
 ## Current seed status (grid/power vertical, 56 employers)
 After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8

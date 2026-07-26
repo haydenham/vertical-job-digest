@@ -15,7 +15,8 @@ from vja.models import AtsType, Employer
 # live 2026-06-24 — Workable's `?details=true` is required for the inline description;
 # SmartRecruiters' limit/offset are added per-page by the fetcher, so the template is bare;
 # BambooHR and Pinpoint expose slug-derived public careers APIs; an explicit endpoint
-# remains authoritative for custom-domain boards such as Aurora Energy Research's Pinpoint site).
+# remains authoritative for custom-domain boards such as Aurora Energy Research's Pinpoint site;
+# Rippling's board API is one canonical host keyed by slug, verified live 2026-07-26).
 _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.GREENHOUSE: "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     AtsType.LEVER: "https://api.lever.co/v0/postings/{slug}?mode=json",
@@ -24,6 +25,7 @@ _DERIVED_TEMPLATES: dict[AtsType, str] = {
     AtsType.SMARTRECRUITERS: "https://api.smartrecruiters.com/v1/companies/{slug}/postings",
     AtsType.BAMBOOHR: "https://{slug}.bamboohr.com/careers/list",
     AtsType.PINPOINT: "https://{slug}.pinpointhq.com/postings.json",
+    AtsType.RIPPLING: "https://api.rippling.com/platform/api/ats/v1/board/{slug}/jobs",
 }
 
 

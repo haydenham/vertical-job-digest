@@ -55,6 +55,23 @@ def test_pinpoint_url_is_derived_from_slug() -> None:
     assert url == "https://aireon.pinpointhq.com/postings.json"
 
 
+def test_rippling_url_is_derived_from_slug() -> None:
+    url = build_endpoint(_employer(AtsType.RIPPLING, slug="gridsight"))
+    assert url == "https://api.rippling.com/platform/api/ats/v1/board/gridsight/jobs"
+
+
+def test_rippling_redundant_endpoint_does_not_override_the_canonical_host() -> None:
+    # The custom-domain override stays scoped to Pinpoint (D-079): every Rippling board this
+    # audit found lives on the one canonical API host, and a stale `ats.rippling.com` page URL
+    # in an employer row must not be fetched in place of the JSON endpoint.
+    employer = _employer(
+        AtsType.RIPPLING, slug="gridsight", endpoint="https://ats.rippling.com/gridsight/jobs"
+    )
+    assert build_endpoint(employer) == (
+        "https://api.rippling.com/platform/api/ats/v1/board/gridsight/jobs"
+    )
+
+
 def test_explicit_endpoint_overrides_derived_url_for_custom_domain() -> None:
     endpoint = "https://careers.auroraer.com/postings.json"
     employer = _employer(AtsType.PINPOINT, endpoint=endpoint)

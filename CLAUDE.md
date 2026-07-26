@@ -82,7 +82,10 @@ Builder (Hayden) is the first user — actively recruiting into both verticals.
 
 Diff identity is the ATS `external_id`, never fuzzy title/company/location matching. A duplicate
 `external_id` inside one employer snapshot fails the snapshot before any DB mutation; it is never
-silently collapsed or LLM-adjudicated. (D-016, D-088)
+LLM-adjudicated. The one narrow exception is a provider that denormalizes its own list into one row
+per (job × work location) — Rippling: rows identical apart from the location field collapse into one
+posting with the locations merged and sorted; rows disagreeing on anything else still fail closed.
+(D-016, D-088, D-096)
 
 ## Stack
 
@@ -156,10 +159,16 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   config onboard ✅** (D-078 coverage audit, 2026-07-12; canonical host found, 1,455 postings validated;
   activates at the next seed import). **Pinpoint ✅** (D-079; Aurora seed onboarded; Aireon pending D-077
   activation). **SPAN + The Brattle Group curated seed onboard ✅** (2026-07-14; Ashby + Greenhouse,
-  **49 → 51 seed-fetchable**; production activates at the next seed import). **Next (D-078 re-rank):**
-  no-code runbook activations (6 validated discovery rows) →
-  Radancy variants (L3Harris JSON / NRG / AA) → JazzHR → Jobvite → Taleo,
-  then the Layer-2 LLM-read tail for what truly has no platform (demand ledger: `docs/07`).
+  **49 → 51 seed-fetchable**; production activates at the next seed import). **Rippling ✅** (D-096;
+  slug-derived bare-JSON board API, single-response + list-only + lazy detail; unlocks Raptor Maps +
+  Gridsight + Portside = 21 jobs, activated post-deploy via the D-077 runbook). **Comply365/Vistair
+  BambooHR curated seed onboard ✅** (D-096; the D-078 item-5 row validated in July and never
+  persisted — aviation seed-fetchable **15 → 16**). **Next (D-096 re-rank, supersedes D-078's order):**
+  JazzHR (3 rows / 21 jobs, HTML-parse — no feed exists) → Jobvite → Taleo → **Radancy variants, now
+  demoted**: live probing killed D-078's "+5" projection (American Airlines + National Grid 403,
+  L3Harris JSON returns zero results, Bombardier renders no table). Then the Layer-2 LLM-read tail for
+  what truly has no platform (demand ledger: `docs/07`). **The no-code activation queue is empty** — the
+  D-096 audit found no `proposed`/`approved` row activatable without a new fetcher.
 - **Phase 9 — Cloud migration + full product frontend (resequenced up; D-047).** The D-025 hosting/Postgres cutover
   (VPS + `VJA_DATABASE_URL` swap + `alembic upgrade`) **plus** the multi-user product surface: auth/login, resume
   upload (the D-033 adapter), vertical toggle, signup → backfill. Pulled ahead of the discovery agent to get real

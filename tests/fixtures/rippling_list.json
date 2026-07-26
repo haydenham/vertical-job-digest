@@ -1,0 +1,54 @@
+[
+  {
+    "uuid": "f7008ce4-5157-4ba9-b75b-ed2a6448b579",
+    "name": "Product Marketing Manager",
+    "department": {
+      "id": "Sales & Marketing",
+      "label": "Sales & Marketing"
+    },
+    "url": "https://ats.rippling.com/portside/jobs/f7008ce4-5157-4ba9-b75b-ed2a6448b579",
+    "workLocation": {
+      "label": "Remote (United States)",
+      "id": "Remote (United States)"
+    }
+  },
+  {
+    "uuid": "fb7cb353-0246-4172-ab3a-08701129f772",
+    "name": "Sales Executive",
+    "department": {
+      "id": "Sales & Marketing",
+      "label": "Sales & Marketing"
+    },
+    "url": "https://ats.rippling.com/portside/jobs/fb7cb353-0246-4172-ab3a-08701129f772",
+    "workLocation": {
+      "label": "Remote (United States)",
+      "id": "Remote (United States)"
+    }
+  },
+  {
+    "uuid": "6830240a-8bcc-40f9-9067-2b287a12dc71",
+    "name": "Senior Salesforce Software Engineer",
+    "department": {
+      "id": "Product & Engineering",
+      "label": "Product & Engineering"
+    },
+    "url": "https://ats.rippling.com/portside/jobs/6830240a-8bcc-40f9-9067-2b287a12dc71",
+    "workLocation": {
+      "label": "Canada",
+      "id": "Canada"
+    }
+  },
+  {
+    "uuid": "44ba927f-fa95-422e-bad1-df4fa1021174",
+    "name": "Strategic Sales Executive",
+    "department": {
+      "id": "Sales & Marketing",
+      "label": "Sales & Marketing"
+    },
+    "url": "https://ats.rippling.com/portside/jobs/44ba927f-fa95-422e-bad1-df4fa1021174",
+    "workLocation": {
+      "label": "Remote (United States)",
+      "id": "Remote (United States)"
+    }
+  }
+]
