@@ -8,7 +8,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -60,6 +60,10 @@ class BambooHRFetcher:
         if not isinstance(description, str) or not description.strip():
             raise FetchError(f"bamboohr detail for {employer.name!r} missing job description")
         return job
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload (`jobOpening.description`)."""
+        return joined_body(payload.get("description"))
 
     def _get_json(self, url: str, employer: Employer, operation: str) -> dict[str, Any]:
         client = self._client or httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT})

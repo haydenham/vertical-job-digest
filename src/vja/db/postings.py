@@ -18,6 +18,7 @@ from sqlalchemy.engine import Connection
 
 from vja.db.schema import employers, matches, postings
 from vja.models import RELEVANT_VERDICTS, AtsType, Employer, PostingStatus, RawPosting
+from vja.text import html_to_text
 
 
 def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
@@ -78,6 +79,9 @@ def insert_posting(
 
     `source_updated_at` is the caller-normalized L1 activity date (D-038), `None` for a source
     that gives no date (Workday) — extraction fills it later via `save_extraction`.
+
+    `description` is the fetcher's body normalized to plain text (D-095), `None` for the list-only
+    ATSs whose list endpoint omits it — extraction fills those from the detail it already fetches.
     """
     conn.execute(
         postings.insert().values(
@@ -88,6 +92,7 @@ def insert_posting(
             apply_url=posting.apply_url,
             title=posting.title,
             location=posting.location,
+            description=html_to_text(posting.description),
             status=PostingStatus.OPEN.value,
             first_seen_at=now,
             last_seen_at=now,
@@ -117,6 +122,11 @@ def reopen_posting(
     `extraction_model` are cleared so Layer-2 re-extracts against the new body (mirrors
     `update_changed`); the stale extracted fields + `in_scope` are left until that re-extraction
     overwrites them. When the body is identical, the cached extraction is preserved (D-035).
+
+    `description` follows the same cache logic (D-095): the fetcher's body wins whenever it has
+    one; a list-only ATS (no body in the list) clears it *only* when the content changed, so the
+    re-extraction that clearing triggers refills it. An unchanged reopen keeps the stored body,
+    exactly like the extraction it belongs to — there'd be no re-extraction to refill it.
     """
     values: dict[str, Any] = {
         "content_hash": content_hash,
@@ -131,6 +141,9 @@ def reopen_posting(
     }
     if source_updated_at is not None:
         values["source_updated_at"] = source_updated_at
+    description = html_to_text(posting.description)
+    if description is not None or content_changed:
+        values["description"] = description
     if content_changed:
         values["extracted_at"] = None
         values["extraction_model"] = None
@@ -174,6 +187,7 @@ def update_changed(
     raw_payload: dict[str, Any],
     now: datetime,
     *,
+    description: str | None,
     source_updated_at: datetime | None = None,
 ) -> None:
     """A still-present posting whose content changed: refresh hash + payload + last_seen.
@@ -182,10 +196,17 @@ def update_changed(
     (the cache-invalidation seam, P5.2). The stale extracted fields are left in place until that
     re-extraction overwrites them — avoids a transient window where level/location read NULL.
     `source_updated_at` is refreshed only when non-None (same rule as `bump_last_seen`).
+
+    `description` (the fetcher's raw body, normalized here) is written **unconditionally** —
+    including the `None` a list-only ATS gives — because the body is what changed. Nulling it is
+    correct: the stored text describes the old content, and the `extracted_at` clear on the line
+    above guarantees the re-extraction that refills it. Keyword-only and required so a new call
+    site cannot silently blank a body it simply forgot to pass. (D-095)
     """
     values: dict[str, Any] = {
         "content_hash": content_hash,
         "raw_payload": raw_payload,
+        "description": html_to_text(description),
         "last_seen_at": now,
         "extracted_at": None,
         "extraction_model": None,
@@ -287,21 +308,25 @@ def save_extraction(
 ) -> None:
     """Persist extracted fields + stamp `extraction_model` / `extracted_at` on a posting (P5.2).
 
-    Two extracted columns are **L1-authoritative** — they fill only when the existing value is NULL
-    and never overwrite a non-null L1 value, because the fetcher's structured field is more reliable
+    Three extracted columns are **L1-authoritative** — they fill only when the existing value is
+    NULL and never overwrite a non-null L1 value, because the fetcher's own field is more reliable
     than the model's best-effort body read:
     - `location`: the L1 location (e.g. Workday `locationsText` = "Mumbai, India") is set at insert;
       Haiku often returns null for it, and an unconditional write blanked it — which left Stage B
       and the matcher blind to geography. Extraction now only fills `location` when L1 left it null.
     - `source_updated_at`: the normalized extracted `posted_at` (D-038), filled only when L1 gave no
       date (Workday) so a clean L1 `updated_at` survives.
+    - `description`: the plain-text body (D-095). Passed only by the list-only ATSs, whose lazily
+      fetched detail is the *only* place their body exists; the NULL check means a rich-list body
+      already stored at insert is never replaced by a detail read.
     """
     values = dict(columns)
-    if "location" in values:
-        values["location"] = case(
-            (postings.c.location.is_(None), values["location"]),
-            else_=postings.c.location,
-        )
+    for l1_authoritative in ("location", "description"):
+        if l1_authoritative in values:
+            column = postings.c[l1_authoritative]
+            values[l1_authoritative] = case(
+                (column.is_(None), values[l1_authoritative]), else_=column
+            )
     if source_updated_at is not None:
         values["source_updated_at"] = case(
             (postings.c.source_updated_at.is_(None), source_updated_at),
@@ -407,6 +432,44 @@ class DashboardPosting:
     fits: list[str] | None
     gaps: list[str] | None
     rationale: str | None
+
+
+@dataclass(frozen=True)
+class PostingDetail:
+    """One posting's on-demand body for the dashboard panel (D-095).
+
+    Separate from `DashboardPosting` on purpose: descriptions run ~3 KB of plain text each, so
+    carrying them on the list response would turn a tens-of-KB payload into megabytes to serve
+    text the user opens on a handful of rows. `description` is `None` for a row whose body hasn't
+    been captured yet (no backfill — rows fill as they insert, change, reopen, or re-extract).
+    """
+
+    posting_id: int
+    description: str | None
+
+
+def posting_description(engine: Engine, posting_id: int, vertical: str) -> PostingDetail | None:
+    """One posting's stored body, or `None` when it isn't visible to `vertical`'s dashboard.
+
+    Scoped exactly like the list query minus the recency/match axes: the posting must belong to an
+    employer in this vertical and be `in_scope` (D-043), so an id from another vertical 404s at the
+    caller rather than leaking. Deliberately **not** filtered on `status`: a posting that closes
+    between the dashboard load and the click should still open its panel.
+    """
+    row = (
+        select(postings.c.id, postings.c.description)
+        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .where(
+            postings.c.id == posting_id,
+            employers.c.vertical == vertical,
+            postings.c.in_scope.is_(True),
+        )
+    )
+    with engine.connect() as conn:
+        result = conn.execute(row).mappings().first()
+    if result is None:
+        return None
+    return PostingDetail(posting_id=result["id"], description=result["description"])
 
 
 def _loads(value: Any) -> list[str] | None:

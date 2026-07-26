@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -53,6 +53,14 @@ _DETAIL_PATH = (
     "?onlyData=true&expand=all&finder=ById;Id={external_id},siteNumber={site}"
 )
 _SITE_NUMBER_RE = re.compile(r"siteNumber=(CX_\d+)")
+
+# The body fields of a detail item, in reading order. Deliberately external-only: the payload also
+# carries `Internal*Str` variants written for the employee-facing site (D-095).
+_EXTERNAL_BODY_FIELDS = (
+    "ExternalDescriptionStr",
+    "ExternalResponsibilitiesStr",
+    "ExternalQualificationsStr",
+)
 
 
 class OracleFetcher:
@@ -101,6 +109,14 @@ class OracleFetcher:
         if not isinstance(items, list) or not items or not isinstance(items[0], dict):
             raise FetchError(f"oracle detail for {employer.name!r} missing an 'items' entry")
         return items[0]
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload — the `External*Str` fields, joined.
+
+        ORC splits the body across parallel fields and also carries `Internal*Str` variants meant
+        for employees behind the internal site; only the external ones are ever read.
+        """
+        return joined_body(*(payload.get(field) for field in _EXTERNAL_BODY_FIELDS))
 
 
 def _paginate(

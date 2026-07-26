@@ -133,6 +133,7 @@ def sync_employer(
                     new_hash,
                     posting.raw,
                     stamp,
+                    description=posting.description,
                     source_updated_at=source_updated_at,
                 )
                 updated += 1

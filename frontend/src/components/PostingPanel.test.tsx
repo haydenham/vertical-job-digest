@@ -1,9 +1,22 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PostingRow } from "../api";
+import { fetchPostingDescription, type PostingDetail, type PostingRow } from "../api";
 import { PostingPanel } from "./PostingPanel";
+
+// The body is a per-open fetch (D-095), so every panel render hits this. Default: no stored body,
+// which is also the state most rows are in until the corpus fills.
+vi.mock("../api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api")>()),
+  fetchPostingDescription: vi.fn(),
+}));
+
+const mockFetch = vi.mocked(fetchPostingDescription);
+
+function detail(description: string | null): PostingDetail {
+  return { posting_id: 1, description };
+}
 
 function row(over: Partial<PostingRow> = {}): PostingRow {
   return {
@@ -27,9 +40,20 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
   };
 }
 
+function renderPanel(p: PostingRow = row(), onClose: () => void = vi.fn()) {
+  return render(<PostingPanel p={p} vertical="energy_software" onClose={onClose} />);
+}
+
+beforeEach(() => {
+  mockFetch.mockReset();
+  // Default: a request that never settles. The panel's other content renders regardless, and no
+  // late state update lands after a test that isn't about the body has finished.
+  mockFetch.mockReturnValue(new Promise<PostingDetail>(() => undefined));
+});
+
 describe("PostingPanel", () => {
   it("renders title, company, meta, rationale, fits/gaps, and the apply link", () => {
-    render(<PostingPanel p={row()} onClose={vi.fn()} />);
+    renderPanel();
     expect(screen.getByRole("dialog", { name: "Grid Engineer" })).toBeInTheDocument();
     expect(screen.getByText("GridCo")).toBeInTheDocument();
     expect(screen.getByText("Remote")).toBeInTheDocument();
@@ -50,7 +74,7 @@ describe("PostingPanel", () => {
     render(
       <div>
         <span>outside</span>
-        <PostingPanel p={row()} onClose={onClose} />
+        <PostingPanel p={row()} vertical="energy_software" onClose={onClose} />
       </div>,
     );
 
@@ -68,11 +92,15 @@ describe("PostingPanel", () => {
   });
 
   it("omits rationale/fits-gaps/apply when absent (unassessed posting)", () => {
-    render(
-      <PostingPanel
-        p={row({ verdict: null, score: null, rationale: null, fits: null, gaps: null, apply_url: null })}
-        onClose={vi.fn()}
-      />,
+    renderPanel(
+      row({
+        verdict: null,
+        score: null,
+        rationale: null,
+        fits: null,
+        gaps: null,
+        apply_url: null,
+      }),
     );
     expect(screen.getByText("—")).toBeInTheDocument(); // unassessed match cell
     expect(screen.queryByText("fits")).not.toBeInTheDocument();
@@ -82,12 +110,7 @@ describe("PostingPanel", () => {
   // --- salary (F2 Phase A, D-087) -------------------------------------------------------------
 
   it("shows the server's guarded range, with the posting's own wording beneath it", () => {
-    render(
-      <PostingPanel
-        p={row({ comp_display: "$105,000 – $131,325", comp_raw: "$105,000 and $131,325/year" })}
-        onClose={vi.fn()}
-      />,
-    );
+    renderPanel(row({ comp_display: "$105,000 – $131,325", comp_raw: "$105,000 and $131,325/year" }));
     expect(screen.getByText("salary")).toBeInTheDocument();
     expect(screen.getByText("$105,000 – $131,325")).toBeInTheDocument();
     expect(screen.getByText("$105,000 and $131,325/year")).toBeInTheDocument();
@@ -95,28 +118,70 @@ describe("PostingPanel", () => {
 
   it("falls back to comp_raw verbatim when the server suppressed the range", () => {
     // The hourly-annualization case: the panel must never render a $ range the server withheld.
-    render(
-      <PostingPanel
-        p={row({ comp_display: null, comp_raw: "$49.82 to $60.22 per hour" })}
-        onClose={vi.fn()}
-      />,
-    );
+    renderPanel(row({ comp_display: null, comp_raw: "$49.82 to $60.22 per hour" }));
     expect(screen.getByText("$49.82 to $60.22 per hour")).toBeInTheDocument();
   });
 
   it("says the salary is not listed rather than hiding the block", () => {
-    render(<PostingPanel p={row({ comp_display: null, comp_raw: null })} onClose={vi.fn()} />);
+    renderPanel(row({ comp_display: null, comp_raw: null }));
     expect(screen.getByText("salary")).toBeInTheDocument();
     expect(screen.getByText("Not listed")).toBeInTheDocument();
   });
 
   it("does not repeat comp_raw when it is identical to the displayed range", () => {
-    render(
-      <PostingPanel
-        p={row({ comp_display: "$120,000", comp_raw: "$120,000" })}
-        onClose={vi.fn()}
-      />,
-    );
+    renderPanel(row({ comp_display: "$120,000", comp_raw: "$120,000" }));
     expect(screen.getAllByText("$120,000")).toHaveLength(1);
+  });
+
+  // --- description (D-095 PR 2) ----------------------------------------------------------------
+
+  it("fetches the body for the open posting and renders it", async () => {
+    mockFetch.mockResolvedValue(detail("About the role\n\n- Python\n- SQL"));
+    renderPanel();
+
+    expect(mockFetch).toHaveBeenCalledWith(1, "energy_software", expect.any(AbortSignal));
+    expect(await screen.findByText("description")).toBeInTheDocument();
+    // Line structure is the only structure plain text has left, so it must survive to the DOM.
+    expect(await screen.findByText(/About the role/)).toHaveTextContent("- Python");
+  });
+
+  it("renders nothing in the description slot while the body is still in flight", () => {
+    // Regression (found in the D-095 live smoke): the loading state was the string "loading", and
+    // the render check was `typeof description === "string"` — so mid-fetch the panel printed the
+    // word "loading" to the user. The loading state must not be a string.
+    renderPanel(); // default mock never settles
+    expect(screen.queryByText("description")).not.toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+  });
+
+  it("renders no description block when the posting has no stored body", async () => {
+    mockFetch.mockResolvedValue(detail(null));
+    renderPanel();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(screen.queryByText("description")).not.toBeInTheDocument();
+  });
+
+  it("stays silent when the body request fails — the rest of the panel still stands", async () => {
+    mockFetch.mockRejectedValue(new Error("network"));
+    renderPanel();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(screen.queryByText("description")).not.toBeInTheDocument();
+    expect(screen.getByText("Strong on dispatch optimization.")).toBeInTheDocument();
+  });
+
+  it("refetches and aborts the previous request when the panel switches postings", async () => {
+    mockFetch.mockResolvedValue(detail("First body"));
+    const { rerender } = renderPanel();
+    expect(await screen.findByText("First body")).toBeInTheDocument();
+    const firstSignal = mockFetch.mock.calls[0][2];
+
+    mockFetch.mockResolvedValue(detail("Second body"));
+    rerender(
+      <PostingPanel p={row({ posting_id: 2 })} vertical="energy_software" onClose={vi.fn()} />,
+    );
+
+    expect(await screen.findByText("Second body")).toBeInTheDocument();
+    expect(firstSignal?.aborted).toBe(true); // the stale body can't land in the new panel
+    expect(mockFetch).toHaveBeenLastCalledWith(2, "energy_software", expect.any(AbortSignal));
   });
 });

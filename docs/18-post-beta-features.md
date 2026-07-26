@@ -104,12 +104,21 @@ an official partnership on the table.
 
 **Status:** Phase A **built** (D-095, salary in the detail panel); Phase B planned, not started.
 
-**Added alongside Phase A (not originally in this slate): posting description display.** The
-description is never persisted today — `RawPosting.description` exists but only `raw_payload` is
-stored, and the list-only ATSs (~41% of in-scope open) discard their lazily-fetched detail body
-after extraction. A `postings.description` column (HTML normalized to plain text) filled at insert
-and at extraction gives full coverage going forward at zero new fetch and zero new LLM cost. See
-D-095; it ships as the second PR of the same block.
+**Added alongside Phase A (not originally in this slate): posting description display. ✅ Built
+2026-07-24 (D-095 PR 2).** The description was never persisted — `RawPosting.description` existed
+but only `raw_payload` was stored, and the list-only ATSs (~41% of in-scope open) discarded their
+lazily-fetched detail body after handing it to the model. A `postings.description` column (HTML
+normalized to plain text by the new `vja.text`) filled at insert and at extraction gives full
+coverage going forward at zero new fetch and zero new LLM cost; existing rows fill as postings
+insert, change, reopen, or re-extract (**no backfill**).
+
+Sizing decided the read path: 184 of 314 in-scope open rows carry a body today, median ~3.2 KB of
+plain text (p90 5.5 KB), so inlining would push a tens-of-KB dashboard load past 1 MB to serve text
+opened on a handful of rows. It is therefore its own endpoint — **`GET /api/postings/{id}`**, fetched
+when the panel opens — and the list response is unchanged. Two findings shaped the normalizer:
+Greenhouse ships its `content` field as *escaped* HTML, and a newline-separator flatten shatters
+sentences around inline tags. The live smoke also caught a real defect the unit tests missed — a
+string `"loading"` sentinel rendering itself into the panel — now pinned by a regression test.
 
 ## F3 — Recurring-gaps report (novel)
 

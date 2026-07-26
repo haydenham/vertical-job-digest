@@ -258,3 +258,27 @@ def test_fetch_detail_http_error_raises() -> None:
     respx.get(url__startswith=_DETAIL_RESOURCE).mock(return_value=httpx.Response(404))
     with pytest.raises(FetchError):
         OracleFetcher().fetch_detail(_employer(), "16280")
+
+
+def test_detail_description_joins_the_external_body_fields() -> None:
+    item = _DETAIL["items"][0]
+    body = OracleFetcher().detail_description(item)
+
+    assert body is not None
+    assert item["ExternalDescriptionStr"][:40] in body
+
+
+def test_detail_description_never_reads_the_internal_fields() -> None:
+    # `Internal*Str` is written for the employee-facing site; it must never reach a candidate.
+    item = {
+        "ExternalDescriptionStr": "Public description.",
+        "InternalDescriptionStr": "INTERNAL ONLY — comp band + backfill reason.",
+        "InternalQualificationsStr": "INTERNAL ONLY",
+    }
+    body = OracleFetcher().detail_description(item)
+
+    assert body == "Public description."
+
+
+def test_detail_description_is_none_when_the_body_fields_are_empty() -> None:
+    assert OracleFetcher().detail_description({"ExternalDescriptionStr": "  "}) is None

@@ -18,7 +18,7 @@ from vja.db.engine import get_engine
 from vja.db.schema_guard import SchemaBehindError, ensure_schema_ready
 
 _PRE_BACKFILL_REVISION = "b2f4c1a9e07d"
-_PACKAGED_HEAD = "e91b3a6f2d04"
+_PACKAGED_HEAD = "a7c15e0b93d2"
 _ROOT = Path(__file__).resolve().parents[2]
 
 

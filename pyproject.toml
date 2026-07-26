@@ -106,7 +106,7 @@ layers = [
     "pipeline | extract | match | digest | discover | review",
     "fetchers | verticals | llm",
     "db",
-    "prefilter | scope | dates | diff | hashing | resume | comp",
+    "prefilter | scope | dates | diff | hashing | resume | comp | text",
     "models",
 ]
 # Grandfathered back-edge: db.employers reaches up to fetchers.registry for

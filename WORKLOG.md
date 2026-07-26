@@ -5,6 +5,64 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-24 — D-095 PR 2: posting description — persisted at zero new cost, served on demand
+
+**Context:** PR 1 merged as **#102**, clearing the "hold PR 2 until PR 1 merges" gate. This is the second
+half of D-095, and it closes the open read-path question PR 1 left: a detail endpoint vs. an inline snippet.
+
+**Scope decisions (Hayden, this session).** **Read path = `GET /api/postings/{id}`, fetched when the panel
+opens** — a fill query over the dev DB (314 in-scope open) found 184 rows (59%) carrying a body, median
+~3.2 KB plain text / p90 5.5 KB, so inlining would take a tens-of-KB dashboard load past **1 MB** to serve
+text a user opens on maybe three rows (a truncated snippet: still ~380 KB, and mostly "About us"). **No
+body ⇒ render nothing** — beta, and the corpus fills as postings turn over, so explanatory copy isn't worth
+it. **Paragraph-preserving plain text** (same work as collapsing; bullets are most of a job description).
+**No SPA-side cache** — one PK lookup isn't worth the state. Recorded as a PR 2 implementation note under
+D-095 (no new ADR).
+
+**Built on `feat/posting-description` (uncommitted; Hayden owns commit/PR).** New bottom-layer
+`src/vja/text.py` (`html_to_text`): block tags break lines (paragraph vs list-item spacing), inline markup
+stays with its sentence, `script`/`style` dropped, entities decoded, blank-line runs collapsed. Two real-ATS
+findings shaped it — **Greenhouse's `content` is *escaped* HTML** (`&lt;h3&gt;…`), so it is `html.unescape`d
+before parsing or users would read raw tags; and flattening with a `"\n"` separator shatters
+`We use <b>Python</b> and SQL` into one line per fragment, so the separator is empty and only block tags
+insert breaks. Migration `a7c15e0b93d2` adds nullable `postings.description`. Write path: insert writes the
+fetcher's body; `update_changed` writes it unconditionally (**required keyword-only** — it immediately caught
+a stale call site in the tests) so a list-only `None` clears the stale body while the same statement's
+`extracted_at` clear guarantees the refill; reopen preserves it when content didn't move; `save_extraction`
+fills only when NULL (the `location` L1-authoritative pattern, now a loop over both columns). Each list-only
+fetcher answers `detail_description(payload)` for its own shape behind a new `ListOnlyFetcher` protocol +
+`base.joined_body`, wired as `_DETAIL_DESCRIPTIONS` beside `_DETAIL_RESOLVERS`; Oracle reads **only**
+`External*Str` (the payload also carries `Internal*Str` written for the employee-facing site). `_source_text`
+became `_posting_source`, reading the payload **once** for both the model text and the body — a second read
+would double requests to a list-only board. API: `posting_description()` + `GET /api/postings/{id}` behind the
+same `_resolve_profile` gate as the list, floored on the caller's vertical + `in_scope`. Frontend:
+`fetchPostingDescription` (credentialed, abortable), panel `useEffect` keyed on posting id, body rendered last
+(after the match write-up, before apply) as `pre-wrap` with `overflow-wrap: anywhere`.
+
+**Two invariants the build had to protect.** `content_hash` still keys on the fetcher's **raw** description —
+normalizing into it would flip every stored posting's hash on one night (a corpus-wide false "content
+changed" + mass re-extraction, exactly D-088's churn); pinned by a regression test. And the extraction prompt
+input is byte-identical, so results and the prompt cache don't move.
+
+**Verification:** full default suite **691 passed, 31 deselected** (was 640; 51 new: `test_text.py` ×19, the
+seven fetchers' `detail_description` ×14, pipeline description/reopen/hash-stability ×6, extraction-run
+fill/never-clobber ×4, API detail endpoint ×7 incl. cross-vertical + out-of-scope + auth-required, plus the
+schema-guard head); ruff format/check, mypy (140 files), import-linter (1 kept / 0 broken), `uv lock --check`;
+alembic up/down/up on scratch SQLite; frontend eslint + `tsc -b` + vitest **139/139** (was 131) + production
+build. **Live smoke** on a scratch migrated DB (real write path, minted session cookie, `VJA_AUTH_REQUIRED=1`,
+served build, headless Chrome 1440×900): Greenhouse escaped-HTML body renders with paragraphs + bullets,
+list-only body arrives via extraction, the no-body row renders no block while the rest of the panel stands,
+exactly one detail request per open (none on list load), `pre-wrap` confirmed, no panel or document
+overflow, zero console errors. **The smoke caught a real defect the unit tests missed:** the loading state
+was the string `"loading"` and the render check was `typeof === "string"`, so mid-fetch the panel printed the
+word "loading" to the user — the state is now `undefined`, with a regression test. Docs: D-095 PR 2 note,
+INVARIANTS (description rule + SPA panel line), docs/18 F2, CLAUDE.
+
+**Next:** Hayden reviews/commits/PRs. **Schema-changing PR — run the Neon migration pre-merge (D-083):**
+explicitly `export VJA_DATABASE_URL=<Secret Manager Neon URL>` (Alembic does not read `.env`), then
+`alembic current` → `upgrade head` → `current`. Note that PR 1's still-open follow-up stands: the 55%
+comp fill-rate was measured on local dev data and was never re-run against Neon.
+
 ## 2026-07-24 — D-095 PR 1: salary display (F2 Phase A) + the panel click affordance
 
 **Context:** the D-094 compliance block is merged (#99/#100/#101) and the remaining beta-exit items are

@@ -83,6 +83,7 @@ def _posting(
     extracted: bool = False,
     source_updated_at: datetime | None = None,
     location: str | None = None,
+    description: str | None = None,
 ) -> None:
     with begin(engine) as conn:
         conn.execute(
@@ -97,6 +98,7 @@ def _posting(
                 first_seen_at=_NOW,
                 last_seen_at=_NOW,
                 source_updated_at=source_updated_at,
+                description=description,
                 extracted_at=_NOW if extracted else None,
                 extraction_model="old" if extracted else None,
             )
@@ -255,8 +257,72 @@ def test_content_change_reopens_extraction(migrated_engine: Engine) -> None:
     # A content change must clear the cache so the next pass re-extracts.
     with begin(migrated_engine) as conn:
         postings_repo.update_changed(
-            conn, _row(migrated_engine, "swe")["employer_id"], "swe", "h-new", {"d": "new"}, _NOW
+            conn,
+            _row(migrated_engine, "swe")["employer_id"],
+            "swe",
+            "h-new",
+            {"d": "new"},
+            _NOW,
+            description="A rewritten body.",
         )
     assert _row(migrated_engine, "swe")["extracted_at"] is None
     summary, _ = _run(migrated_engine)
     assert summary.extracted == 1  # the changed posting re-extracted
+
+
+# --- stored description (D-095 PR 2) -----------------------------------------------------------
+
+
+def test_list_only_ats_keeps_the_body_it_fetched_for_the_model(migrated_engine: Engine) -> None:
+    # The Workday detail is fetched anyway to feed extraction; before D-095 it was then thrown
+    # away, leaving those rows with no body at all.
+    _seed(migrated_engine)
+
+    _run(migrated_engine)
+
+    assert _row(migrated_engine, "/job/data-eng")["description"] == "Grid data engineering role."
+
+
+def test_extraction_does_not_touch_a_rich_list_bodys_row(migrated_engine: Engine) -> None:
+    # Greenhouse & co. carry the body in the list, so L1 already stored it at insert; extraction
+    # must leave it exactly as-is (the `location`/`source_updated_at` L1-authoritative rule).
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    _posting(migrated_engine, gh, "swe", "Software Engineer", description="The L1 body.")
+
+    _run(migrated_engine)
+
+    row = _row(migrated_engine, "swe")
+    assert row["extracted_at"] == _NOW  # it really did extract
+    assert row["description"] == "The L1 body."
+
+
+def test_extraction_never_overwrites_an_existing_body(migrated_engine: Engine) -> None:
+    # Same rule on the list-only path: a body already present wins over the detail read.
+    wd = _employer(migrated_engine, vertical="grid_power_software", name="WdCo", ats="workday")
+    _posting(
+        migrated_engine, wd, "/job/data-eng", "Data Engineer", description="Body already stored."
+    )
+
+    _run(migrated_engine)
+
+    assert _row(migrated_engine, "/job/data-eng")["description"] == "Body already stored."
+
+
+def test_detail_body_is_normalized_to_plain_text(migrated_engine: Engine) -> None:
+    wd = _employer(migrated_engine, vertical="grid_power_software", name="WdCo", ats="workday")
+    _posting(migrated_engine, wd, "/job/data-eng", "Data Engineer")
+
+    def resolver(employer: Any, external_path: str) -> dict[str, Any]:
+        return {"jobDescription": "<p>Grid role.</p><ul><li>Python</li><li>SQL</li></ul>"}
+
+    run_extraction(
+        migrated_engine,
+        "grid_power_software",
+        scope=_SCOPE,
+        prefilter=_PREFILTER,
+        client=cast("StructuredLLM", _FakeClient()),
+        resolve_detail=resolver,
+        now=_NOW,
+    )
+
+    assert _row(migrated_engine, "/job/data-eng")["description"] == "Grid role.\n\nPython\nSQL"

@@ -4,7 +4,9 @@ import {
   ApiError,
   deleteAccount,
   fetchMe,
+  fetchPostingDescription,
   loginUrl,
+  postingDetailPath,
   postingsPath,
   setDigestPaused,
   UPLOAD_TIMEOUT_MS,
@@ -38,14 +40,18 @@ describe("postingsPath", () => {
 
   it("maps recency + view toggles to their params", () => {
     const params = new URLSearchParams(
-      postingsPath({ ...base, window: "two_weeks", view: "cleaned" }).split("?")[1],
+      postingsPath({ ...base, window: "two_weeks", view: "cleaned" }).split(
+        "?",
+      )[1],
     );
     expect(params.get("window")).toBe("two_weeks");
     expect(params.get("view")).toBe("cleaned");
   });
 
   it("includes profile_id only when given", () => {
-    const params = new URLSearchParams(postingsPath({ ...base, profileId: 7 }).split("?")[1]);
+    const params = new URLSearchParams(
+      postingsPath({ ...base, profileId: 7 }).split("?")[1],
+    );
     expect(params.get("profile_id")).toBe("7");
   });
 });
@@ -79,12 +85,22 @@ describe("fetchMe", () => {
   });
 
   it("returns profile null when signed in but not onboarded", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { user: { email: "a@b.co", name: "A" }, profile: null }));
-    await expect(fetchMe()).resolves.toEqual({ user: { email: "a@b.co", name: "A" }, profile: null });
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        user: { email: "a@b.co", name: "A" },
+        profile: null,
+      }),
+    );
+    await expect(fetchMe()).resolves.toEqual({
+      user: { email: "a@b.co", name: "A" },
+      profile: null,
+    });
   });
 
   it("treats 401 as logged-out (null), not an error", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "not authenticated" }));
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { detail: "not authenticated" }),
+    );
     await expect(fetchMe()).resolves.toBeNull();
   });
 });
@@ -124,13 +140,18 @@ describe("uploadResume", () => {
     [422, "could not read résumé"],
     [429, "daily budget exceeded"],
     [401, "not authenticated"],
-  ])("maps %i to an ApiError carrying the server detail", async (status, detail) => {
-    fetchMock.mockResolvedValue(jsonResponse(status, { detail }));
-    const err = await uploadResume("grid_power_software", file).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).status).toBe(status);
-    expect((err as ApiError).message).toBe(detail);
-  });
+  ])(
+    "maps %i to an ApiError carrying the server detail",
+    async (status, detail) => {
+      fetchMock.mockResolvedValue(jsonResponse(status, { detail }));
+      const err = await uploadResume("grid_power_software", file).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(status);
+      expect((err as ApiError).message).toBe(detail);
+    },
+  );
 
   it("aborts a hung upload after the timeout (D-082)", async () => {
     vi.useFakeTimers();
@@ -138,12 +159,16 @@ describe("uploadResume", () => {
       (_path: string, init: RequestInit) =>
         new Promise((_resolve, reject) => {
           init.signal?.addEventListener("abort", () =>
-            reject(new DOMException("The operation was aborted.", "AbortError")),
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
           );
         }),
     );
     const pending = uploadResume("grid_power_software", file);
-    const assertion = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: "AbortError",
+    });
     await vi.advanceTimersByTimeAsync(UPLOAD_TIMEOUT_MS);
     await assertion;
     vi.useRealTimers();
@@ -161,7 +186,9 @@ describe("setDigestPaused / deleteAccount", () => {
 
   it("PATCHes /api/me credentialed with the JSON flag and returns the applied state", async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { digest_paused: true }));
-    await expect(setDigestPaused(true)).resolves.toEqual({ digest_paused: true });
+    await expect(setDigestPaused(true)).resolves.toEqual({
+      digest_paused: true,
+    });
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe("/api/me");
     expect(init).toMatchObject({ method: "PATCH", credentials: "include" });
@@ -169,7 +196,9 @@ describe("setDigestPaused / deleteAccount", () => {
   });
 
   it("maps a failed PATCH to an ApiError carrying the server detail", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "authentication required" }));
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { detail: "authentication required" }),
+    );
     const err = await setDigestPaused(true).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(401);
@@ -185,9 +214,53 @@ describe("setDigestPaused / deleteAccount", () => {
   });
 
   it("maps a failed DELETE to an ApiError", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "authentication required" }));
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { detail: "authentication required" }),
+    );
     const err = await deleteAccount().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(401);
+  });
+});
+
+// The posting body is its own endpoint (D-095) precisely so it stays off the list response; these
+// pin the URL shape and the credentialed fetch that resolves the session server-side.
+describe("fetchPostingDescription", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("builds the detail path with the vertical encoded", () => {
+    expect(postingDetailPath(42, "energy_software")).toBe(
+      "/api/postings/42?vertical=energy_software",
+    );
+  });
+
+  it("GETs the body credentialed, passing the abort signal through", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { posting_id: 42, description: "Body." }),
+    );
+    const controller = new AbortController();
+    await expect(
+      fetchPostingDescription(42, "energy_software", controller.signal),
+    ).resolves.toEqual({ posting_id: 42, description: "Body." });
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/postings/42?vertical=energy_software");
+    expect(init).toMatchObject({
+      credentials: "include",
+      signal: controller.signal,
+    });
+  });
+
+  it("raises an ApiError on a 404 (an id outside the caller's vertical)", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(404, { detail: "no posting 42" }));
+    const err = await fetchPostingDescription(42, "energy_software").catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
   });
 });

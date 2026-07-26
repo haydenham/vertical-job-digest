@@ -122,7 +122,9 @@ export function Dashboard({ vertical }: { vertical: string }) {
         <div className="notice">No postings match these filters</div>
       )}
 
-      {selected && <PostingPanel p={selected} onClose={() => setSelectedId(null)} />}
+      {selected && (
+        <PostingPanel p={selected} vertical={vertical} onClose={() => setSelectedId(null)} />
+      )}
     </>
   );
 }

@@ -311,3 +311,13 @@ def test_job_missing_externalpath_raises_fetcherror() -> None:
 def test_non_cxs_endpoint_raises_fetcherror() -> None:
     with pytest.raises(FetchError, match="not a cxs URL"):
         WorkdayFetcher().fetch(_employer(endpoint="https://example.com/careers"))
+
+
+def test_detail_description_reads_the_job_description() -> None:
+    # `fetch_detail` returns `jobPostingInfo`; the body extraction keeps (D-095) is one field of it.
+    info = {"jobDescription": "<p>Grid ops engineer.</p>", "startDate": "2026-06-01"}
+    assert WorkdayFetcher().detail_description(info) == "<p>Grid ops engineer.</p>"
+
+
+def test_detail_description_is_none_without_a_body() -> None:
+    assert WorkdayFetcher().detail_description({"startDate": "2026-06-01"}) is None

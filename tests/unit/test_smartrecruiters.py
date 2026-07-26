@@ -252,3 +252,17 @@ def test_fetch_detail_non_json_raises() -> None:
     respx.get(f"{_ENDPOINT}/x").mock(return_value=httpx.Response(200, text="nope"))
     with pytest.raises(FetchError):
         SmartRecruitersFetcher().fetch_detail(_employer(), "x")
+
+
+def test_detail_description_joins_the_job_ad_sections() -> None:
+    # The body lives split across titled `jobAd.sections`; extraction keeps it (D-095) instead of
+    # discarding the detail it already fetched.
+    body = SmartRecruitersFetcher().detail_description(_DETAIL)
+
+    assert body is not None
+    assert "Vitol is a leader in the energy sector" in body  # companyDescription
+    assert body.count("\n\n") >= 2  # several sections, each its own block
+
+
+def test_detail_description_is_none_without_sections() -> None:
+    assert SmartRecruitersFetcher().detail_description({"jobAd": {}}) is None

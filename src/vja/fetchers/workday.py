@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -230,6 +230,10 @@ class WorkdayFetcher:
         if not isinstance(info, dict):
             raise FetchError(f"workday detail for {employer.name!r} missing 'jobPostingInfo'")
         return info
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload — cxs keeps it in `jobDescription`."""
+        return joined_body(payload.get("jobDescription"))
 
 
 def _paginate(

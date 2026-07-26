@@ -239,9 +239,12 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   intel. The D-085 churn diagnosis blocks the freshness + lifespan builds. **F2 Phase A ✅ built 2026-07-24
   (D-095)** — salary in the detail panel behind the `vja.comp` corroboration guard (the extracted
   `comp_min`/`comp_max` annualize hourly pay, so a range renders only when `comp_raw` agrees it is annual
-  USD), plus a row chevron advertising the panel. **Description display** was added to the same block as
-  PR 2: a `postings.description` column (HTML→plain text) filled at insert and at extraction, since the
-  list-only ATSs currently discard the detail body they already fetch.
+  USD), plus a row chevron advertising the panel. **PR 2 ✅ built 2026-07-24** — description display: a
+  `postings.description` column (HTML→plain text via the new bottom-layer `vja.text`) filled at insert and,
+  for the list-only ATSs, at extraction from the detail body they already fetch and used to discard; served
+  on demand by **`GET /api/postings/{id}`** (bodies average ~3 KB, so they stay off the list response) and
+  rendered in the panel. `content_hash` still keys on the raw description — normalizing into it would fake a
+  corpus-wide content change. No backfill; rows fill as they insert/change/reopen/re-extract.
 
 ## Conventions for this repo
 

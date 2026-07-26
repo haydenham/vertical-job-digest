@@ -11,7 +11,7 @@ import pytest
 from vja.db.postings import ExtractionCandidate
 from vja.extract import (
     ExtractedFields,
-    _source_text,
+    _posting_source,
     extract_posting,
     fields_to_columns,
 )
@@ -109,9 +109,11 @@ def test_source_text_uses_raw_payload_for_rich_list_ats() -> None:
         calls.append((employer.name, external_path))
         return {"jobDescription": "should not be used"}
 
-    text = _source_text(_candidate(AtsType.GREENHOUSE), resolver)
-    assert "Build power-market software" in text  # from raw_payload
+    source = _posting_source(_candidate(AtsType.GREENHOUSE), resolver)
+    assert "Build power-market software" in source.text  # from raw_payload
     assert calls == []  # detail resolver NOT called for a rich-list ATS
+    # A rich-list body was already stored at insert, so extraction offers nothing (D-095).
+    assert source.description is None
 
 
 def test_source_text_fetches_detail_for_workday() -> None:
@@ -121,9 +123,11 @@ def test_source_text_fetches_detail_for_workday() -> None:
         calls.append((employer.name, external_path))
         return {"jobDescription": "Senior power trader, Houston.", "startDate": "2026-06-01"}
 
-    text = _source_text(_candidate(AtsType.WORKDAY, external_id="/job/X"), resolver)
+    source = _posting_source(_candidate(AtsType.WORKDAY, external_id="/job/X"), resolver)
     assert calls == [("Co", "/job/X")]  # detail fetched lazily with the externalPath
-    assert "Senior power trader" in text
+    assert "Senior power trader" in source.text
+    # The one fetch feeds both the model and the stored body — never a second request (D-095).
+    assert source.description == "Senior power trader, Houston."
 
 
 @pytest.mark.parametrize(
@@ -145,6 +149,6 @@ def test_source_text_fetches_detail_for_list_only_ats(ats: AtsType) -> None:
         calls.append((employer.name, external_id))
         return {"body": "Grid software engineer, Atlanta."}
 
-    text = _source_text(_candidate(ats, external_id="42"), resolver)
+    source = _posting_source(_candidate(ats, external_id="42"), resolver)
     assert calls == [("Co", "42")]  # detail fetched lazily
-    assert "Grid software engineer" in text
+    assert "Grid software engineer" in source.text

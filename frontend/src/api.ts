@@ -98,8 +98,8 @@ export class ApiError extends Error {
 
 // Every call is credentialed so the signed-cookie session (D-055) rides along: logged-in users
 // resolve to their own profile server-side; anonymous keeps the single-active default.
-async function getJson<T>(path: string): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const resp = await fetch(`${API_BASE}${path}`, { credentials: "include", signal });
   if (!resp.ok) {
     throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for ${path}`);
   }
@@ -126,6 +126,29 @@ export function fetchPostings(q: PostingsQuery): Promise<PostingsResponse> {
 
 export function fetchVerticals(): Promise<string[]> {
   return getJson<string[]>("/api/verticals");
+}
+
+// ---- posting body (D-095) ----
+
+// Mirrors `PostingDetailRow` in `app.py`. `description` is null for a posting whose body hasn't
+// been captured yet (no backfill — rows fill as they insert, change, reopen, or re-extract).
+export interface PostingDetail {
+  posting_id: number;
+  description: string | null;
+}
+
+export function postingDetailPath(postingId: number, vertical: string): string {
+  return `/api/postings/${postingId}?vertical=${encodeURIComponent(vertical)}`;
+}
+
+// Fetched only when a detail panel opens — bodies run ~3 KB each, so they are deliberately not on
+// the list response. `signal` lets a fast row-to-row click abandon the previous request.
+export function fetchPostingDescription(
+  postingId: number,
+  vertical: string,
+  signal?: AbortSignal,
+): Promise<PostingDetail> {
+  return getJson<PostingDetail>(postingDetailPath(postingId, vertical), signal);
 }
 
 // ---- auth ----

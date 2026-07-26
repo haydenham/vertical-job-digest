@@ -284,3 +284,18 @@ def test_fetch_detail_http_error_raises() -> None:
     respx.get(f"{_ENDPOINT}/job/x/1/").mock(return_value=httpx.Response(500))
     with pytest.raises(FetchError):
         RadancyFetcher().fetch_detail(_employer(), "x/1")
+
+
+@respx.mock
+def test_detail_description_reads_the_fetched_body() -> None:
+    eid = "North-Palm-Beach-Assumed-Reinsurance-Claims-Account-Manager-FL-33408/1340304000"
+    respx.get(f"{_ENDPOINT}/job/{eid}/").mock(return_value=httpx.Response(200, text=_DETAIL_HTML))
+    fetcher = RadancyFetcher()
+
+    body = fetcher.detail_description(fetcher.fetch_detail(_employer(), eid))
+
+    assert body is not None and "NextEra Energy" in body
+
+
+def test_detail_description_is_none_when_the_page_had_no_description_node() -> None:
+    assert RadancyFetcher().detail_description({"description": None, "url": "u"}) is None

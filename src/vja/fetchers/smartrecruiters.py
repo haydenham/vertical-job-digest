@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -96,6 +96,23 @@ class SmartRecruitersFetcher:
         if not isinstance(payload, dict):
             raise FetchError(f"smartrecruiters detail for {employer.name!r} is not an object")
         return payload
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload — `jobAd.sections`.
+
+        The body is split across titled sections (company description, job description,
+        qualifications, additional information) whose keys vary by tenant, so we walk them in
+        payload order rather than naming them, keeping each section's title as a heading.
+        """
+        job_ad = payload.get("jobAd")
+        sections = job_ad.get("sections") if isinstance(job_ad, dict) else None
+        if not isinstance(sections, dict):
+            return None
+        fragments: list[object] = []
+        for section in sections.values():
+            if isinstance(section, dict):
+                fragments.extend((section.get("title"), section.get("text")))
+        return joined_body(*fragments)
 
 
 def _paginate(client: httpx.Client, url: str, employer: Employer) -> list[RawPosting]:

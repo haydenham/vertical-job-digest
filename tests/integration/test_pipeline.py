@@ -38,7 +38,7 @@ def _posting(
     external_id: str,
     *,
     title: str = "Engineer",
-    description: str = "Build it.",
+    description: str | None = "Build it.",
     updated_at: str | None = None,
 ) -> RawPosting:
     return RawPosting(
@@ -408,3 +408,137 @@ def test_duplicate_external_ids_fail_before_any_db_mutation(
     assert result.status == "failed"
     assert result.error and "duplicate external_id" in result.error
     assert _by_id(migrated_engine) == before
+
+
+# --- stored description (D-095 PR 2) -----------------------------------------------------------
+
+
+def _set_description(engine: Engine, external_id: str, body: str | None) -> None:
+    """Write a body straight onto the row — how `save_extraction` fills a list-only ATS's."""
+    with begin(engine) as conn:
+        conn.execute(
+            postings.update().where(postings.c.external_id == external_id).values(description=body)
+        )
+
+
+def test_insert_stores_the_fetchers_body_as_plain_text(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    html = "<h3>About</h3><p>Build <b>grid</b> software.</p><ul><li>Python</li></ul>"
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description=html)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+
+    assert _by_id(migrated_engine)["a"]["description"] == (
+        "About\n\nBuild grid software.\n\nPython"
+    )
+
+
+def test_insert_leaves_description_null_for_a_list_only_ats(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # Workday and friends carry no body in the list; extraction fills it from the lazy detail.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description=None)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+
+    assert _by_id(migrated_engine)["a"]["description"] is None
+
+
+def test_normalization_never_moves_the_content_hash(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # The churn guard (D-088): the hash keys on the fetcher's RAW description. If normalization
+    # ever leaked into it, every stored posting would read as content-changed on one night —
+    # mass false "new"/re-extraction across the whole corpus.
+    html = "<p>Build <b>grid</b> software.</p>"
+    posting = _posting("a", title="SWE", description=html)
+    sync_employer(
+        migrated_engine, employer, FakeFetcher([posting]), now=datetime(2026, 6, 16, tzinfo=UTC)
+    )
+
+    assert _by_id(migrated_engine)["a"]["content_hash"] == content_hash(
+        title="SWE", location="Remote", description=html
+    )
+    # ...and a second identical fetch is still "unchanged", not an update.
+    result = sync_employer(
+        migrated_engine, employer, FakeFetcher([posting]), now=datetime(2026, 6, 17, tzinfo=UTC)
+    )
+    assert result.updated == 0 and result.unchanged == 1
+
+
+def test_content_change_replaces_the_stored_description(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="<p>Original body.</p>")]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description="<p>Rewritten body.</p>")]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+
+    assert _by_id(migrated_engine)["a"]["description"] == "Rewritten body."
+
+
+def test_content_change_clears_a_list_only_bodys_stale_text(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # The body stored for a list-only ATS describes the OLD content. Clearing it is correct
+    # because the same statement clears `extracted_at`, so re-extraction refills it this run.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", title="Engineer", description=None)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    _set_description(migrated_engine, "a", "Body of the old posting.")
+    _set_extracted(migrated_engine, "a", datetime(2026, 6, 16, tzinfo=UTC))
+
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", title="Senior Engineer", description=None)]),
+        now=datetime(2026, 6, 17, tzinfo=UTC),
+    )
+
+    row = _by_id(migrated_engine)["a"]
+    assert row["description"] is None
+    assert row["extracted_at"] is None  # the refill is guaranteed by this
+
+
+def test_reopen_with_identical_content_keeps_the_stored_description(
+    migrated_engine: Engine, employer: Employer
+) -> None:
+    # Mirrors the preserved extraction (D-035): with no re-extraction coming, clearing the body
+    # would strand the row with no description until its content happened to change.
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description=None)]),
+        now=datetime(2026, 6, 16, tzinfo=UTC),
+    )
+    _set_description(migrated_engine, "a", "Body fetched at extraction.")
+    _set_extracted(migrated_engine, "a", datetime(2026, 6, 16, tzinfo=UTC))
+    sync_employer(migrated_engine, employer, FakeFetcher([]), now=datetime(2026, 6, 17, tzinfo=UTC))
+
+    sync_employer(
+        migrated_engine,
+        employer,
+        FakeFetcher([_posting("a", description=None)]),
+        now=datetime(2026, 6, 20, tzinfo=UTC),
+    )
+
+    assert _by_id(migrated_engine)["a"]["description"] == "Body fetched at extraction."

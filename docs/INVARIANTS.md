@@ -63,6 +63,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **Extracted `location` is L1-authoritative.** The fetcher's structured location (e.g. Workday
   `locationsText`) is set at insert; extraction fills `location` only when it's still NULL and
   never overwrites a non-null L1 value (mirrors `source_updated_at`, D-038). (D-043)
+- **`postings.description` holds the body as plain text, L1-authoritative, and is never hashed.**
+  `vja.text.html_to_text` normalizes at persist (blocks become lines, inline markup stays inline,
+  Greenhouse's *escaped* HTML is unescaped first); `content_hash` still keys on the fetcher's **raw**
+  string, or every stored posting would read as content-changed on one night. Insert writes the
+  fetcher's body; `update_changed` writes it unconditionally (a list-only `None` clears the stale body
+  and the same statement's `extracted_at` clear guarantees the refill); reopen writes it when present,
+  clears it only when content changed, else preserves it; `save_extraction` fills **only when NULL**,
+  which is how the list-only ATSs get one — from the detail they already fetch for the model, at zero
+  new fetch and zero new LLM cost. Each list-only fetcher answers `detail_description(payload)` for its
+  own shape (`ListOnlyFetcher` protocol + `extract._DETAIL_DESCRIPTIONS`, parallel to
+  `_DETAIL_RESOLVERS`); Oracle reads only its `External*Str` fields. **No backfill** — rows fill as
+  they insert, change, reopen, or re-extract. (D-095, D-088, D-043, D-038)
 - **Matching is reasoning, not similarity.** Every rationale must state fits, gaps, and a
   verdict + score. Willingness to say *no* is a product requirement. (D-007, D-036)
 - **A match score is always 0–100, including at the model boundary.** Anthropic structured output
@@ -168,6 +180,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   **Rows advertise the detail panel** with a persistent right-edge chevron that rotates when the row
   opens — decorative (`aria-hidden`; the row already carries `role="button"` + `aria-expanded`) — and
   the `.table-guide` line names what the panel holds. The title stays an apply link (D-095).
+  **The panel loads the posting body on open** — `GET /api/postings/{id}?vertical=…` per open, aborted
+  when the panel switches rows, never cached client-side; the body renders last (after the match
+  write-up, before apply) as `white-space: pre-wrap`. A body that is absent, still loading, or failed
+  renders **nothing** — and the loading state is `undefined`, never a string, or a
+  `typeof === "string"` check prints the sentinel to the user (found in the D-095 smoke). (D-095)
   `GET /api/verticals` remains **only**
   the onboarding picker's source and is now **config-driven** (`available_verticals()`, joinable even with zero
   profiles — the B-4 fix), not active-profile-driven. **Prod ships as one multi-stage image** (`Dockerfile`; SPA
