@@ -5,6 +5,85 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-26 — D-096: coverage audit → the activation queue is empty → Rippling fetcher
+
+**Housekeeping on the previous entry (it was stale, not mid-thought).** D-095 PR 2 merged as **#103**;
+Neon is at head `a7c15e0b93d2` with `postings.description` present, so the D-083 pre-merge migration did
+run. **Still open from D-095 PR 1 and unrecorded anywhere:** the comp fill-rate re-run against Neon — the
+55% figure and the panel-only treatment were both chosen on local dev data.
+
+**Context:** the session task was "add more companies + audit for `proposed` rows we could activate."
+The audit answered the second half in the negative, which reshaped the first half.
+
+**The audit (read-only, prod/Neon; 182 employers — 145 active, 13 `proposed`, 14 parked `approved`, 10
+`retired`).** Of the 145 active, ~101 have a supported Layer-1 fetcher and **44 are active-but-
+structurally-unfetchable** (`custom` 35, successfactors 3, avature 2, jobvite 2, ukg 1, eightfold 1).
+**The no-code activation harvest is spent:** five of D-078's six runbook-activatable rows are already
+`active` (ASI, GridBeyond, CivilGrid, Emerald AI, AiDASH), and live probes of every remaining
+`proposed`/`approved` row on a supported ATS found **zero** cleanly activatable — Reliable Robotics and
+Gridmatic have genuinely empty Lever boards, Ascend Analytics 404s on the Greenhouse API (500 on the
+public board), Skydio has no working Greenhouse slug. So coverage required a **fetcher**, not a runbook.
+
+**Scope decisions (Hayden, this session).** **Aloft `#133` → rejected/`retired`** — its Greenhouse board
+is parent **Versaterm's** public-safety board (35 postings, "Chief Services and Delivery Officer",
+Ottawa/Mesa), so activating it would attribute non-aviation roles to Aloft. **Build Rippling**, chosen
+over JazzHR and Radancy variants on live-probe evidence. **Discovery run: Hayden runs `vja-discover`
+himself.**
+
+**The re-rank (supersedes D-078's fetcher ordering).** Probing beat the projection: **Radancy variants
+dropped from rank 2 to last** — American Airlines and National Grid both **403**, L3Harris's clean JSON
+endpoint returns `results_len=0`, NRG's aria total is a different format, Bombardier renders no table.
+**JazzHR is now next** (3 rows / 21 jobs) but has **no feed at all** (`/apply/jobs.xml` + `jobs.json`
+404, `/apply/feed` 410) — an HTML-parse build. **Correction on the record:** I first reported Rippling at
+44 postings; that counted denormalized rows, not jobs. The real figure is **21**, which *ties* JazzHR —
+Rippling won on contract quality and build risk, not coverage.
+
+**Built on `feat/rippling-fetcher` (uncommitted; Hayden owns commit/PR).** New
+`src/vja/fetchers/rippling.py`: slug-derived `GET api.rippling.com/platform/api/ats/v1/board/{slug}/jobs`
+returns a **bare JSON array** that is the complete set — it ignores `limit`/`offset`/`page` (a `?limit=5`
+still returned all 38 rows) and 404s an unknown slug — so it takes the **single-response false-closure
+guard** (Workable/Pinpoint/BambooHR), not paginate-or-fail. `external_id = uuid`; `apply_url` **supplied**,
+never constructed; `location` from `workLocation.label`; no list date (`createdOn` is detail-only,
+Pinpoint precedent). List-only: `fetch_detail` is `…/jobs/{uuid}` and `detail_description` joins the body.
+Wiring is the intended one-liner each: `AtsType.RIPPLING`, an `_DERIVED_TEMPLATES` entry, a `_FETCHERS`
+entry, one `_LIST_ONLY_FETCHERS` entry (`_DETAIL_RESOLVERS`/`_DETAIL_DESCRIPTIONS` derive). **No
+migration** — `ats_type` is a `native_enum=False` VARCHAR(15) with no CHECK and `"rippling"` fits, so
+**no Neon pre-merge step**.
+
+**Two real findings the live smoke caught that the fixtures could not.** (1) `description` is **not a
+string** — it is a dict of two HTML fragments, `role` (the posting) and `company` (identical boilerplate
+on every job at that employer), uniform across all three tenants. Joined via the existing
+`base.joined_body` with **`role` first**, so the panel doesn't open on "About us" (verified: on a real
+Gridsight posting the company fragment starts at char 4,177 of 5,584). (2) **Rippling denormalizes its
+list into one row per (job × work location)** — Gridsight's 38 rows are **15 jobs** — so the first build
+failed Gridsight closed under D-088's "a duplicate `external_id` … is never silently collapsed". **Ruled
+by Hayden:** narrow the guard rather than waive it — collapse on `uuid` and merge locations (the Workday
+`locationsText` / Oracle `secondaryLocations` treatment) **only when the rows are identical apart from
+`workLocation`**; rows disagreeing on anything else still fail the snapshot with zero mutation. The merged
+location is **sorted**, because `content_hash` keys on `location` — API order would let a reordered board
+flip every multi-location posting's hash and fake a corpus-wide content change, exactly the D-088 churn.
+
+**Also landed (no code): Comply365/Vistair** — D-078 item (5) validated it in July and it was never
+persisted. Re-probed at 10 open (BambooHR `vistairhr`, real US software roles incl. Beloit WI). Added as a
+**curated seed CSV** row, not a proposal correction (it has never been in the DB — D-077 reserves the CSV
+for exactly this). Aviation seed-fetchable **15 → 16**.
+
+**Verification:** full default suite **735 passed, 35 deselected** (was 691; 44 new: `test_rippling.py`
+×41 incl. the collapse/order-independence/conflict cases, plus registry + endpoints + extract list-only
+pins); ruff format/check, mypy (143 files), import-linter (1 kept / 0 broken), `uv lock --check`.
+**Live smoke** (`tests/live/test_rippling_live.py`, 4 passed) against all three real tenants, plus an
+**end-to-end scratch-DB run** through `sync_employer`: 21 postings / 21 distinct `external_id`s
+(Gridsight 15 + Portside 4 + Raptor Maps 2), and a **second sync returned all-`unchanged`** — the churn
+check the D-088 sort exists for. Docs: D-096, INVARIANTS (snapshot-validation rule narrowed + Rippling
+contract + build order **replaced**), docs/07 (third-edition demand ledger), seed README, CLAUDE.
+
+**Next:** Hayden reviews/commits/PRs. **Sequencing constraint — the three activations must wait for merge
++ CD deploy**, because `approve` → `active` means the nightly Job fetches them:
+`vja-review set-ats 103 --ats-type rippling --slug raptor-maps-inc` (then `139`/`gridsight`,
+`141`/`portside`) → `vja-review approve 103 139 141`. Aloft `#133` was rejected in prod this session.
+Flagged but **not** acted on: retired Aerovy `#111` (ashby `aerovy`) has 2 live Seattle software roles
+today — reversing a human rejection is Hayden's call. Next fetcher block: **JazzHR**.
+
 ## 2026-07-24 — D-095 PR 2: posting description — persisted at zero new cost, served on demand
 
 **Context:** PR 1 merged as **#102**, clearing the "hold PR 2 until PR 1 merges" gate. This is the second

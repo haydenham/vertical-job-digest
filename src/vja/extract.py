@@ -8,7 +8,7 @@ once, then pennies a night. Synchronous calls (latency lands in-process; the abs
 pennies).
 
 Source text per posting: the **list-only** ATSs (Workday, SmartRecruiters, Oracle HCM, Radancy,
-Paylocity, Phenom, BambooHR —
+Paylocity, Phenom, BambooHR, Rippling —
 their list endpoints omit the job description) fetch it lazily, per in-scope survivor, via their
 `fetch_detail` (routed by `_DETAIL_RESOLVERS`); every other ATS carries the description in
 `raw_payload`.
@@ -45,6 +45,7 @@ from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.paylocity import PaylocityFetcher
 from vja.fetchers.phenom import PhenomFetcher
 from vja.fetchers.radancy import RadancyFetcher
+from vja.fetchers.rippling import RipplingFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
 from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult, sum_catalog_costs
@@ -107,6 +108,7 @@ _LIST_ONLY_FETCHERS: dict[AtsType, ListOnlyFetcher] = {
     AtsType.PAYLOCITY: PaylocityFetcher(),
     AtsType.PHENOM: PhenomFetcher(),
     AtsType.BAMBOOHR: BambooHRFetcher(),
+    AtsType.RIPPLING: RipplingFetcher(),
 }
 
 #: The **list-only** ATSs whose list endpoint omits the job description, keyed to the fetcher method

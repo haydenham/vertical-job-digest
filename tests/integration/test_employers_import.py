@@ -135,7 +135,8 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # Grid: 6 Greenhouse + 3 Lever + 2 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
     # + 1 Oracle + 1 Radancy + 1 Pinpoint = 36. Aviation: 2 Greenhouse + 1 Lever +
     # 1 Ashby + 5 Workday + 2 iCIMS
-    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle = 15. Total 51,
+    # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle
+    # + Comply365/Vistair BambooHR (D-096, the D-078 item-5 add) = 16. Total 51,
     # of which 8 are Greenhouse, 3 Ashby, 22 Workday, 6 iCIMS/Jibe, 2 Workable,
     # 1 SmartRecruiters (Vitol),
     # 2 Oracle ORC (Southern Company + Honeywell, canonical host found at the 2026-07-12 coverage
@@ -144,7 +145,7 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # fails paginate-or-fail (61 of 62) → Layer 2; Delta/Avature is bot-challenged → Layer 2;
     # NRG/National Grid/L3Harris Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
     # Robotics adds 24 verified Layer-1 rows: 10 Greenhouse, 5 Lever, 8 Ashby, 1 Workday.
-    assert len(fetchable) == 75
+    assert len(fetchable) == 76
     assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 18
     assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 9
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 11
@@ -156,6 +157,7 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     assert sum(1 for e in fetchable if e.ats_type == AtsType.RADANCY) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.PHENOM) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.PINPOINT) == 1
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.BAMBOOHR) == 1
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
     # Every fetchable row can build its endpoint: a slug (GH/Lever/Ashby/Workable/SR) OR an explicit
     # endpoint (Workday/iCIMS/Oracle/Radancy/Pinpoint custom-domain — per-tenant, no slug).
@@ -170,7 +172,7 @@ def test_aviation_vertical_is_fetchable_without_code_change(migrated_engine: Eng
     aviation = active_fetchable_employers(migrated_engine, vertical="aviation_software")
     by_type = Counter(e.ats_type for e in aviation)
 
-    assert len(aviation) == 15
+    assert len(aviation) == 16
     assert by_type[AtsType.GREENHOUSE] == 2
     assert by_type[AtsType.LEVER] == 1
     assert by_type[AtsType.ASHBY] == 1

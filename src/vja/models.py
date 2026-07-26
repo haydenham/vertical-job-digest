@@ -32,6 +32,7 @@ class AtsType(StrEnum):
     PHENOM = "phenom"
     BAMBOOHR = "bamboohr"
     PINPOINT = "pinpoint"
+    RIPPLING = "rippling"
     JOBVITE = "jobvite"
     SUCCESSFACTORS = "successfactors"
     AVATURE = "avature"

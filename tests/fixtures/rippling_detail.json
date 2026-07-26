@@ -1,0 +1,54 @@
+{
+  "uuid": "f7008ce4-5157-4ba9-b75b-ed2a6448b579",
+  "name": "Product Marketing Manager",
+  "description": {
+    "company": "<meta><p style=\"font-family:&quot;Basel Grotesk&quot;,Arial,sans-serif;font-size:11pt;font-weight:400;line-height:1.6;letter-spacing:0.25px;margin:4px 0px;padding:0px;\"><b><strong style=\"font-size:18pt;white-space:pre-wrap;\">About Portside</strong></b></p><p style=\"font-family:&quot;Basel Grotesk&quot;,Arial,sans-serif;font-size:11pt;font-weight:400;line-height:1.6;letter-spacing:0.25px;margin:4px…",
+    "role": "<meta><p style=\"font-family:&quot;Basel Grotesk&quot;,Arial,sans-serif;font-size:11pt;font-weight:400;line-height:1.6;letter-spacing:0.25px;margin:4px 0px;padding:0px;\"><br></p><p style=\"font-family:&quot;Basel Grotesk&quot;,Arial,sans-serif;font-size:18pt;font-weight:400;line-height:1.6;letter-spacing:0.25px;margin:4px 0px;padding:0px;\"><b><strong style=\"font-size:18pt;white-space:pre-wrap;\">Job …"
+  },
+  "workLocations": [
+    "Remote (United States)"
+  ],
+  "department": {
+    "name": "Sales & Marketing",
+    "base_department": "Sales & Marketing",
+    "department_tree": [
+      "Sales & Marketing"
+    ]
+  },
+  "employmentType": {
+    "label": "SALARIED_FT",
+    "id": "Salaried, full-time"
+  },
+  "createdOn": "2026-06-12T12:45:15.898000-07:00",
+  "url": "https://ats.rippling.com/portside/jobs/f7008ce4-5157-4ba9-b75b-ed2a6448b579",
+  "board": {
+    "boardType": "RIPPLING",
+    "slug": "portside",
+    "logo": {
+      "name": "portside-logo-dark-RGB_small.png",
+      "url": "https://prod-images.rippling.com/b6456aa7fada37702db39bad2b7f80fcae82fe4c.png?Expires=1785173423&Signature=xu5VJQsfLPScuWDt~NtHK1atwN1Zc8QiZf4RM4-QmHFtTHY6HQ-C6Fg8G0UkwWZjlKeLdxyyRR6wM1NzCkPtw4UjiHSEWLMbaxMfDq0Og9A2BfuzRpEIXvFvI2VQ3HrGMuguRSaGZpJx11yscM~IKWxGUSDk60ITHJSUO3-RcN~n8X6UzDY~gOklEPM3pa1LCTtDOogVdOs0a8mAZHlNufpx5GlXtB7XNq4D2v7iriTNkeft~5w3DEjgqkzcovFSIZ9z44MrjxthHdOXNdERKB8vIkQ88SdgQ9JAQaK872bfExjF7f1uN1OyLLesIuHZdKNHbVa2V3P2YEkJs~h~UQ__&Key-Pair-Id=K2Y26R2ZPP26PH",
+      "type": "image/png"
+    },
+    "banner": {
+      "name": "",
+      "url": null,
+      "type": ""
+    },
+    "title": "Open Roles",
+    "subtitle": "",
+    "boardURL": "https://ats.rippling.com/portside/jobs",
+    "fontType": "ARIAL_SANS_SERIF",
+    "linkColor": "#1075bb",
+    "buttonColor": "#f26e5b",
+    "buttonTextColor": "#ffffff",
+    "legalNotice": "<meta name=\"rteConfig\" content=\"{&quot;version&quot;:&quot;0.193.0&quot;}\"><p style=\"font-style:normal;font-weight:400;font-size:11pt;line-height:1.38;font-family:&quot;Basel Grotesk&quot;,Arial,sans-serif;margin-right:0px;padding:0px;margin-top:0px;margin-bottom:0px;\"><br></p>",
+    "noOpeningsMessage": null,
+    "groupJobsByLocation": true,
+    "showBoardLogoOnJobPost": false,
+    "showCompanyInfoUnderJobPost": false,
+    "companyName": "Portside, Inc."
+  },
+  "payRangeDetails": [],
+  "companyName": "Portside, Inc.",
+  "unlistedFromSearch": false
+}
