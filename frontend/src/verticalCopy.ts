@@ -23,6 +23,11 @@ const COPY: Record<string, VerticalCopy> = {
     name: "Robotics",
     blurb: "Autonomy, industrial robotics, and the software that moves real machines.",
   },
+  trading_software: {
+    name: "Trading & Markets",
+    blurb:
+      "Market makers and prop shops, quant funds, exchanges, and the low-latency systems they trade on.",
+  },
 };
 
 export function verticalCopy(slug: string): VerticalCopy {

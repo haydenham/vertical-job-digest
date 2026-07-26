@@ -27,7 +27,7 @@ See `docs/07-ats-routing.md` for the full platform distribution and fetcher buil
 ## Columns
 | column | who fills | values | notes |
 |---|---|---|---|
-| `vertical` | Hayden | `aviation_software` \| `grid_power_software` \| `robotics_software` | which vertical this employer belongs to |
+| `vertical` | Hayden | `aviation_software` \| `grid_power_software` \| `robotics_software` \| `trading_software` | which vertical this employer belongs to. Rows are keyed on (`vertical`, `name`), so a company that is a genuine target in two universes may hold one row per vertical — see the trading section below (D-097) |
 | `name` | Hayden | free text | company display name |
 | `tier` | Hayden | `Tier 1`…`Tier 5` \| `Bonus` | priority signal; drives crawl ordering / volume estimates |
 | `category` | Hayden | free text | e.g. Utility / IPP, Trading / Merchant, Quant Fund, Data SaaS |
@@ -110,3 +110,33 @@ remain owned by Aviation; the seed deliberately does not duplicate companies acr
 
 The initial deterministic coverage is **80% (24/30)**. Agent discovery is expected to propose the smaller
 company tail later; it is not part of this curated starter set.
+
+## Current seed status (trading vertical, 44 employers — D-097)
+
+The fourth and (for now) last vertical, curated across market makers / prop trading · quant funds ·
+exchanges & market infrastructure · trading technology · crypto & digital assets · prediction markets.
+Scope is the shared one: US early-career software/data.
+
+- **36 verified and fetchable today (82%):** Greenhouse (26), Ashby (4 — Voleon, Kraken, Kalshi,
+  Polymarket), Workday (3 — CME Group, Nasdaq, Cboe), iCIMS/Jibe (2 — SIG, ICE), Lever (1 — Belvedere).
+- **2 detected** (platform known, no generic fetcher): Two Sigma (Avature), Millennium (Eightfold).
+- **6 layer2:** Citadel, Citadel Securities, D. E. Shaw, Bridgewater, Balyasny, Trading Technologies —
+  custom or bot-blocked careers sites, retained without inventing an endpoint.
+
+**Eight rows are deliberate cross-vertical duplicates (D-097):** Jane Street, Citadel, DRW,
+SIG (Susquehanna), Millennium, Balyasny, CME Group, and ICE also exist under `grid_power_software`,
+where they were curated for their *energy desks*. Because a user has exactly one vertical (D-064),
+each universe carries its own row with identical ATS wiring — two `employer_id`s, two posting sets, two
+independent diffs. Five of the eight are fetchable, so this costs **five extra nightly fetches** and a
+duplicate extraction of the same bodies. The physical energy merchants (Shell, BP, Vitol, Trafigura,
+Macquarie, Hartree, Freepoint, Castleton, Mercuria, Glencore, EDF Trading, Koch, Tenaska) stay
+**grid-only** — power/gas trading is grid's thesis, not this vertical's.
+
+Slug gotchas worth knowing before editing these rows: Optiver's US board is `optiverus` (plain `optiver`
+is a near-empty global shell) · CTC is `chicagotrading` · Five Rings `fiveringsllc` · Headlands
+`headlandstechnologiesllc` · MarketAxess `marketaxesscorporation` · Galaxy `galaxydigitalservices` ·
+Kraken's Ashby slug is literally `kraken.com` · Radix splits campus (`radixuniversity`, in scope) from
+experienced (`radixexperienced`) · Kalshi answers on both a stale Greenhouse board and Ashby — **Ashby is
+pinned** · Cboe's public careers site is a Phenom front-end over its Workday tenant and **Workday is
+pinned** · Hudson River Trading's only public API is its **campus/talent-community** Greenhouse board, so
+two of its three entries are "join our talent community" placeholders that the Stage-A gate drops.

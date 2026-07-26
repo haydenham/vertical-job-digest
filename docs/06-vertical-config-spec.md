@@ -1,8 +1,9 @@
 # Vertical Config Spec
 
 *Build spec for D-004 ("nothing vertical-specific in code"). Aviation proved the architecture test first;
-Robotics repeats it: spinning up a vertical = one config file + curated seed rows + a matching profile, zero
-application-code changes. Any forced application-code change is a defect.*
+Robotics repeated it, and Trading (D-097) is the third repeat — spinning up a vertical = one config file +
+curated seed rows + a matching profile, zero application-code changes. Any forced application-code change
+is a defect.*
 
 ## What a vertical is, concretely
 
@@ -23,10 +24,12 @@ vertical-job-agent-starter/
       grid_power_software.yaml
       aviation_software.yaml
       robotics_software.yaml
+      trading_software.yaml
       profiles/
         hayden_grid_resume.md
         hayden_aviation_resume.md
         hayden_robotics_resume.md
+        hayden_trading_resume.md
   data/
     seed/
       employers_seed.csv            # all verticals, one file, `vertical` column partitions it
@@ -94,3 +97,11 @@ Adding a vertical must be exactly:
 
 Application-code changes are a defect to fix, not part of adding a vertical. Tests and documentation should
 still pin the newly configured input.
+
+**One curation rule the trading add established (D-097).** Employers are keyed on (`vertical`, `name`), so
+the same company *may* be curated into two verticals when it is a genuine target in both — a user has
+exactly one vertical (D-064), so the alternative is hiding the employer from one audience. Each row is
+independent (own `employer_id`, own postings, own diff) and costs one extra nightly fetch plus one extra
+extraction of the same body. Keep it to deliberately chosen rows, record them in the ADR, and note them in
+the seed README; one employer row spanning many verticals is a parked schema change, not a workaround to
+reach for.

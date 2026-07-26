@@ -2,7 +2,7 @@ import { loginUrl } from "../api";
 
 // Logged-out landing at `/` (D-065) — the Linear-style marketing page (UI rework PR 1, D-080).
 // Static only: no endpoints, no state; the sole live element is the Google sign-in anchor. Copy
-// decisions (coverage-led hero, section set, three-verticals-as-served) are Hayden's, recorded in
+// decisions (coverage-led hero, section set, verticals-as-served) are Hayden's, recorded in
 // docs/16. Renders inside the App shell, so the global header/nav stays above.
 
 // The hero's product visual — a CSS-built miniature of the real dashboard on live v2 tokens
@@ -82,7 +82,7 @@ const PILLARS = [
     title: "Find roles beyond the obvious employers",
     body:
       "Explore technology opportunities at airline tech arms, grid operators, robotics startups, " +
-      "and other specialized employers that broad job boards bury or miss.",
+      "trading firms, and other specialized employers that broad job boards bury or miss.",
   },
   {
     title: "Apply while opportunities are fresh",
@@ -126,6 +126,10 @@ const VERTICALS = [
     name: "Robotics",
     body: "Autonomy, industrial robotics, and the software that moves real machines.",
   },
+  {
+    name: "Trading & Markets",
+    body: "Market makers and prop shops, quant funds, exchanges, and the low-latency systems they trade on.",
+  },
 ];
 
 export function Landing() {
@@ -134,9 +138,9 @@ export function Landing() {
       <section className="hero">
         <h1 className="hero-title">The technology jobs the big boards miss.</h1>
         <p className="hero-sub">
-          Rolefeed watches company career pages across aviation, energy, and robotics — surfacing
-          overlooked technology roles and matching every new posting to your résumé, fresh each
-          morning.
+          Rolefeed watches company career pages across aviation, energy, robotics, and trading —
+          surfacing overlooked technology roles and matching every new posting to your résumé, fresh
+          each morning.
         </p>
         <div className="hero-actions">
           <a className="btn btn-primary" href={loginUrl()}>
@@ -155,7 +159,7 @@ export function Landing() {
           <span className="stat-label">employers watched</span>
         </div>
         <div className="stat">
-          <span className="stat-value">3</span>
+          <span className="stat-value">4</span>
           <span className="stat-label">verticals served</span>
         </div>
         <div className="stat">

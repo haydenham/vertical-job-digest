@@ -25,16 +25,26 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   *One grandfathered back-edge:* `db.employers → fetchers.registry` (see `pyproject.toml`).
 - **Nothing vertical-specific in code.** A vertical = config (employer list, sources,
   matching profile). Adding a vertical must cost only curation + config; any forced code
-  change is a defect. (D-004; **proven** by the Phase-7 aviation add — shipped config-only
-  end-to-end, D-046)
+  change is a defect. (D-004; **proven three times** — the Phase-7 aviation add, D-046; robotics;
+  and the trading add, D-097, which needed no `src/` change at all)
+- **Four verticals are configured:** `grid_power_software`, `aviation_software`, `robotics_software`,
+  `trading_software` (**last one planned for now**). A company may hold one row per vertical when it is a
+  genuine target in both universes — the eight D-097 rows (Jane Street, Citadel, DRW, SIG, Millennium,
+  Balyasny, CME, ICE) are the only sanctioned duplicates; the physical energy merchants stay grid-only.
+  One employer row spanning many verticals is a **parked** schema change, not today's shape. (D-097,
+  D-064, D-022)
 - **No per-company scrapers.** Route each employer to a generic platform fetcher; if none
   fits, it's Layer 2 — never a bespoke scraper. (D-017)
 
 ## Execution & pipeline
 
 - **All fetching, API keys, and LLM calls run server-side in the nightly pipeline.** Users
-  only read precomputed DB results. Each ATS endpoint is hit once per day total,
-  regardless of user count. (D-005)
+  only read precomputed DB results. Each ATS endpoint is hit **once per day per employer row**,
+  regardless of user count — the rule is user-count independence, not one row per company. A company
+  curated in two verticals is two rows (`UNIQUE(vertical, name)`) and costs one extra fetch plus one
+  extra extraction of the same body (`postings_needing_extraction` keys on `extracted_at IS NULL` per
+  row, so there is no cross-row content-hash reuse); this is permitted **only** for the eight
+  D-097 cross-vertical rows. (D-005, D-097)
 - **Pipeline order is fetch → diff → extract → match → verify → send.** (D-003, D-005)
 - **The nightly job is `vja-nightly`** (one process: run → extract → match → digest per
   profile, alert on hard failure). `vja-run`/`vja-extract`/`vja-match`/`vja-digest` are
@@ -432,7 +442,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   survivors (cost discipline); every other ATS carries the description in `raw_payload`. Adding a
   list-only ATS is a one-line map entry, no per-company branching. (D-050, D-051, D-052, D-076)
 - **Grid/power (energy) is the first-built, seeded/verified vertical;** aviation is the
-  Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. (D-022, D-002, D-046)
+  Week-4 architecture test — **shipped config-only in Phase 7 (D-046)**. Robotics and trading followed
+  the same path; **trading is 36-of-44 fetchable (82%)** on existing fetchers, its highest-volume boards
+  being Greenhouse. (D-022, D-002, D-046, D-097)
 
 ## Discovery (Layer 3)
 
