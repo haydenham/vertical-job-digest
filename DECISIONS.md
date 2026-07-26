@@ -2011,3 +2011,81 @@ VARCHAR(15) with no CHECK (`db/schema.py`), and `"rippling"` fits, so there is *
 (D-083). The three proposal activations (`set-ats` → `approve` on `#103`/`#139`/`#141`) must run **after
 merge + CD deploy**, or the next nightly logs three failed employers. References D-078, D-077, D-079,
 D-050, D-049, D-016, D-088, D-095, D-017, D-070, D-071.
+
+---
+
+### D-097 · Vertical expansion · Trading vertical (fourth, last for now) + narrow cross-vertical employer duplication · accepted · 2026-07-26
+**Decision 1 — `trading_software` is the fourth vertical, and the last planned for now.** 44 curated
+employers across market makers/prop trading, quant funds, exchanges/market infrastructure, trading
+technology, crypto/digital assets, and prediction markets. Scope stays the shared one: **US,
+early-career software/data**, same Stage-B knobs as the other three verticals. Built the D-004 way —
+seed rows + one YAML + one matching profile, **zero `src/` changes** (`git diff --stat` shows none;
+`AtsType` already carried every value the curation needed, including `avature` and `eightfold`).
+**36 of 44 (82%) are fetchable today** through existing generic Layer-1 fetchers: 26 Greenhouse, 4 Ashby,
+3 Workday, 2 iCIMS, 1 Lever. Two are `detected` on platforms with no fetcher (Two Sigma/Avature,
+Millennium/Eightfold) and six are `layer2` (Citadel, Citadel Securities, D. E. Shaw, Bridgewater,
+Balyasny, Trading Technologies).
+
+**Decision 2 — the marquee financial-trading firms are duplicated across verticals, not moved.** The
+grid/power universe already owned ~17 trading-and-markets employers, curated for their *energy desks*
+(D-022). Because a user has exactly one vertical (D-064), a trading user would otherwise see **none** of
+the field's most iconic employers. Three options were weighed: curate only net-new firms (robotics'
+no-duplication precedent — cheapest, but ships a trading vertical without Jane Street or Citadel);
+**move** the pure-financial rows out of grid (grid loses employers it holds for good reason, and prod
+needs retire + re-insert surgery under `UNIQUE(vertical, name)`, stranding existing postings); or
+**duplicate**. **Ruled (Hayden): duplicate, and only the eight** — Jane Street, Citadel, DRW,
+SIG (Susquehanna), Millennium, Balyasny, CME Group, ICE. The **physical merchants stay grid-only**
+(Shell, BP, Vitol, Trafigura, Macquarie, Hartree, Freepoint, Castleton, Mercuria, Glencore, EDF Trading,
+Koch, Tenaska) — power/gas trading is grid's own thesis, not this vertical's.
+
+A duplicated employer is **two independent rows** keyed on `(vertical, name)` with identical ATS wiring:
+separate `employer_id`, separate posting rows, separate diff. Verified end-to-end on a scratch DB —
+Jane Street's 221 `external_id`s exist under both rows with no `UNIQUE(employer_id, external_id)`
+collision, and a re-sync of the grid row returned **all-`unchanged`** (the D-088 churn check).
+
+**Decision 3 — what that costs, stated honestly (amends the D-005 wording).** D-005's "each ATS endpoint
+is hit once per day **total**, regardless of user count" is a rule about *user-count independence* — it
+was never a claim about one row per company. Cross-vertical duplication makes it **once per employer
+row**: five extra nightly fetches (Jane Street/DRW Greenhouse, SIG/ICE iCIMS, CME Workday; the other
+three are `layer2`/`detected` and fetch nothing). An earlier note in this session claimed the duplicated
+postings would re-extract for free because extraction is content_hash-cached. **That was wrong and is
+corrected here:** `postings_needing_extraction` selects on `extracted_at IS NULL` **per posting row**,
+so there is no cross-row reuse of an identical body — the duplicate pays a second Haiku extraction.
+Cheap, but not zero.
+
+**Decision 4 — multi-vertical membership as a schema change stays parked.** One employer row belonging
+to many verticals (and one fetch feeding both) is the correct long-term shape; robotics already deferred
+it to "a separate design PR" and this ADR does not unpark it. Duplication is the interim, and it is
+bounded to eight curated rows.
+
+**Curation notes that shaped rows.** Probing beat guessing on nine of them: Optiver's US board is
+`optiverus` (the `optiver` board is a near-empty global shell); CTC is `chicagotrading`; Five Rings is
+`fiveringsllc`; Headlands `headlandstechnologiesllc`; MarketAxess `marketaxesscorporation`; Galaxy
+`galaxydigitalservices`; Kraken's Ashby slug is literally `kraken.com`; Radix splits **campus**
+(`radixuniversity`) from **experienced** (`radixexperienced`) boards and the campus board is the one in
+scope; Kalshi answers on **both** a stale Greenhouse board (27) and Ashby (36) — the careers site links
+Ashby, so Ashby is pinned. **Cboe** is a Phenom front-end over a Workday tenant: both return 64 and
+**Workday is pinned** (list-only + paginate-or-fail + a real `postedOn` date). **Hudson River Trading's
+only public API is its campus/talent-community Greenhouse board** (3 entries, two of them "join our
+talent community" placeholders); it is included because the Stage-A gate drops the two placeholders on
+its own — no per-employer rule, no fake postings in a digest (D-008). Excluded for duplicate coverage
+(the Jeppesen/Boeing precedent): **Cumberland** rides DRW's board and **Jump Crypto** rides Jump's.
+Dropped for want of any locatable careers page: **Squarepoint**. Sell-side bank trading tech and the
+market-data incumbents (Goldman/JPM/Bloomberg/Broadridge/FactSet) are **out of the universe** — the big
+boards cover them well, and their whole-company boards would swamp the diff for little signal.
+
+**Stage-A tuning, measured not guessed.** Over the 2,871 postings the first real pass fetched, the
+shared software/data baseline kept 1,074; the trading vocabulary (`quantitative`, `quant`, `trading`,
+`trader`, `algorithmic`, `systematic`, `research`, `low latency`) added **+348**, and `trader` is
+deliberately included — excluding it would drop the flagship "Quantitative Trader — New Grad" pipeline a
+CS + Econ candidate is a real applicant for. `experienced` was then added to the excludes: trading firms
+label their non-campus track literally "Experienced Hire", and it removed **69** survivors, every one
+genuinely non-early-career. Final Stage-A share: **1,353 of 2,871 (47%)**, which is a one-time Haiku
+extraction backlog of roughly that size when the vertical is imported to prod.
+
+**Status:** built on `feat/trading-vertical`. **No migration** and no `src/` change, so no Neon pre-merge
+step (D-083). `main` auto-deploys (D-068) and `/api/verticals` is config-driven, so **the picker offers
+Trading & Markets the moment this merges while Neon holds zero trading employers** — the seed import must
+follow the deploy promptly. Do **not** run `vja-load-profiles` against prod (it would add a fourth active
+profile for the operator's own email). References D-004, D-002, D-005, D-022, D-064, D-016, D-088,
+D-008, D-023, D-068, D-083, D-096.

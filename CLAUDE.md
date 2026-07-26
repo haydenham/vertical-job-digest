@@ -7,8 +7,8 @@ of a small, bounded employer universe (~40 companies per vertical), diffs postin
 daily, and delivers a digest of new/closed roles with LLM-written match rationale
 against the user's resume. NOT a live chat agent. NOT a horizontal job board.
 
-Launch verticals (both planned day one; **grid/power is built first** — it's the seeded/verified one. Aviation is
-the Week-4 architecture-test add. See Build sequence + D-022):
+Launch verticals (the first two planned day one; **grid/power is built first** — it's the seeded/verified one.
+Aviation is the Week-4 architecture-test add. See Build sequence + D-022):
 1. **Aviation software** — airline ops/tech arms (United, Delta, JetBlue, Southwest,
    Alaska), platforms (Sabre, Amadeus, Navitaire), data/tracking (FlightAware,
    Cirium, Flightradar24), startups (FLYR, Volantio). Scope: early-career
@@ -18,7 +18,18 @@ the Week-4 architecture-test add. See Build sequence + D-022):
    power trading/analytics, nuclear revival, utility innovation arms.
    Deliberately NOT broad "climate tech" (Climatebase owns that).
 
-Builder (Hayden) is the first user — actively recruiting into both verticals.
+Added later, config-only (each one a fresh proof of D-004):
+3. **Robotics software** — humanoid/embodied AI, warehouse/logistics, industrial, field/agriculture,
+   medical/service robotics. 30 employers, 24 fetchable.
+4. **Trading software** (**D-097; the last vertical planned for now**) — market makers/prop trading
+   (Jane Street, Jump, Optiver, IMC, HRT, DRW, SIG), quant funds (Point72, Two Sigma, AQR, WorldQuant),
+   exchanges/market infrastructure (CME, ICE, Nasdaq, Cboe, IEX, MEMX), trading technology, crypto
+   (Coinbase, Kraken, Galaxy) and prediction markets (Kalshi, Polymarket). 44 employers, 36 fetchable.
+   **Eight are deliberate cross-vertical duplicates** of grid/power rows curated for their energy desks —
+   a user gets one vertical (D-064), so each universe carries its own row; the physical energy merchants
+   stay grid-only.
+
+Builder (Hayden) is the first user — actively recruiting into these verticals.
 
 ## Architecture (three layers — cheap deterministic path always tried first)
 
@@ -54,7 +65,8 @@ Builder (Hayden) is the first user — actively recruiting into both verticals.
 
 - **Nothing vertical-specific in code.** A vertical = config: employer list
   (ATS type + endpoint), niche sources, matching profile (resume + domain
-  vocabulary). Adding vertical #2 must cost only curation + config.
+  vocabulary). Adding a vertical must cost only curation + config — held for aviation (D-046),
+  robotics, and trading (D-097, zero `src/` changes).
 - **The diff is the product.** Never show stale listing walls; show what changed.
   Mark vanished postings closed (never delete) — death detection keeps dead links
   out of the digest and yields posting-lifespan stats per company.
@@ -134,6 +146,9 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   (in-scope/matched-default, the two match-status toggles + expandable rationale; D-042). Frontend gate = eslint +
   tsc + vitest (CI + pre-commit).
 - **Phase 7 — Aviation vertical.** The architecture test — config + curation only, **any forced code change is a defect** (D-004).
+  Repeated twice since, both config-only: **robotics** (30 employers, 24 fetchable) and **trading ✅**
+  (D-097, 2026-07-26 — 44 employers / 36 fetchable / 2,871 postings on the first real pass; the last
+  vertical planned for now, and the add that established the narrow cross-vertical duplication rule).
 - **Phase 8 — Remaining coverage.** Tier-B fetchers (iCIMS/Workable/Oracle/SmartRecruiters), then Layer-2 LLM-read
   for the custom tail + HN/niche sources. *(Likely opens new doors/decisions — kept first because more coverage
   makes the user-facing launch worth more.)* **iCIMS ✅** (D-048) — via the iCIMS **Career Sites (Jibe)**

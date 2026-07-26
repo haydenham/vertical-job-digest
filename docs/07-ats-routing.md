@@ -93,10 +93,21 @@ ranking below is the whole coverage roadmap, not a supplement to a runbook.
 | **Radancy variants** | up to 5, but **demoted from D-078 #2 → D-096 #4** | live re-probe 2026-07-26 killed the projection: **American Airlines 403** · **National Grid 403** · L3Harris `/en/search-jobs/results` returns valid JSON with **`results_len=0`** · NRG aria total is a different format ("Results 1 – 10") · Bombardier renders no `searchresults` table. Five targets, five distinct problems |
 | **BambooHR (validated, no DB row)** | Comply365/Vistair (`vistairhr`, **10 postings** live 2026-07-26) | **onboarded (D-096)** — curated seed CSV row, aviation seed-fetchable 15 → 16 |
 | re-validate when boards repopulate | Reliable Robotics (lever `reliable`, 0) · Gridmatic (lever `gridmatic`, 0) · Ascend Analytics (greenhouse `ascendanalytics` — API **404**, public board 500) · Skydio (greenhouse evidence, **no working slug**: `skydio`/`skydioinc`/`skydio1` all 404) | fetch OK but 0 postings, or slug unresolved — `set-ats` needs ≥1 |
-| Eightfold / UKG / Avature / TriNet / Gusto / Kula / Personio | 1 each | singleton tail — opportunistic; SuccessFactors (JetBlue, Dominion, Indra) stays deferred (auth-gated) |
+| Eightfold / UKG / Avature / TriNet / Gusto / Kula / Personio | 1 each, **except Avature → 3** after D-097 | singleton tail — opportunistic; SuccessFactors (JetBlue, Dominion, Indra) stays deferred (auth-gated) |
 | Getro / YC Work-at-a-Startup | (portfolio boards) | **not employer ATSs** — parked; revisit as non-employer `sources` (Phase 10) |
 | email-only / bot-blocked / EU-only / dead | ~30 rows | retire slate — Hayden-executed runbook (audit chat, 2026-07-12) |
 | flagged, not acted on | Aerovy `#111` (ashby `aerovy`, **2 live Seattle software roles**) is `retired` | a human rejection; reversing it is Hayden's call, not an audit action |
+
+**Addendum — what the trading vertical added to this ledger (D-097, 2026-07-26).** The 44 curated rows
+resolved **36 fetchable on existing fetchers** (26 Greenhouse, 4 Ashby, 3 Workday, 2 iCIMS, 1 Lever), so
+trading needed no new fetcher — the highest same-day yield of any vertical add, because prop shops and quant
+funds are overwhelmingly Greenhouse. Its unfetched tail nudges two ranking rows above: **Avature rises to 3
+companies** (Koch + Delta + **Two Sigma**, a large engineering org — the strongest case yet for an Avature
+build, though Delta's bot-challenge suggests the platform fights server-side fetches), and Eightfold stays
+at 1 *company* (Millennium, now holding two rows). Four new `custom`/Layer-2 rows join the tail: **Citadel
+Securities**, **D. E. Shaw**, **Bridgewater**, **Trading Technologies** — all four bot-block or JS-render,
+which is the same wall D-052's Step-0 probe hit, so they are Layer-2-LLM-read candidates, not fetcher
+candidates. Build order is **unchanged**: JazzHR remains #1.
 
 ## Recommended build order
 1. **Greenhouse, Lever, Ashby** (Weeks 1–2) — 9 companies, trivial, already verified. Proves the loop. ✅

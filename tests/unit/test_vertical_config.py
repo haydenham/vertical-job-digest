@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import vja.verticals as verticals_module
+from vja.scope import in_scope
 from vja.verticals import ConfigError, load_vertical_config
 
 
@@ -51,6 +52,46 @@ def test_loads_real_robotics_config() -> None:
     assert "technician" in cfg.scope.exclude
     assert cfg.prefilter_locations == ("US",)
     assert "new_grad" in cfg.prefilter_levels
+
+
+def test_loads_real_trading_config() -> None:
+    """D-097: Trading is the fourth config-only vertical add — same loader, no code change."""
+    cfg = load_vertical_config("trading_software")
+    assert cfg.key == "trading_software"
+    assert cfg.user_email == "haydenham10@gmail.com"
+    assert "Hayden" in cfg.resume_text
+    assert "Quantitative Trading & Market Microstructure" in cfg.resume_text
+    assert "market microstructure" in cfg.domain_vocabulary
+    assert "quantitative" in cfg.scope.role_include
+    assert "trading" in cfg.scope.role_include
+    assert "compliance" in cfg.scope.exclude  # trading-specific non-software exclusion
+    assert "experienced" in cfg.scope.exclude  # the "Experienced Hire" non-campus track
+    assert cfg.prefilter_locations == ("US",)
+    assert "new_grad" in cfg.prefilter_levels
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Quantitative Trader - New Grad", True),  # `trader` is deliberately in scope (D-097)
+        ("Quantitative Researcher", True),
+        ("Software Engineer, Core Trading Systems", True),
+        # HRT's only public board is a campus/talent-community pool: the two placeholder entries
+        # carry no role keyword, so Stage A drops them without a per-employer rule (D-097).
+        ("HRT Talent Community", False),
+        ("Campus Talent Community", False),
+        ("FPGA Verification and Developer (Internships and Campus Full-time)", True),
+        ("Sales Trader", False),  # excluded despite `trader`
+        ("Compliance Analyst", False),
+        ("Senior Software Engineer", False),
+        # "Experienced Hire" is the industry's own label for the non-campus track
+        ("Quantitative Researcher | Experienced Hire", False),
+        ("C++ Developer | Trading Strategies | Experienced Hire", False),
+    ],
+)
+def test_real_trading_scope_gate(title: str, expected: bool) -> None:
+    """The trading Stage-A gate over real board titles — config only, no code path of its own."""
+    assert in_scope(title, load_vertical_config("trading_software").scope) is expected
 
 
 def _write(dir_: Path, key: str, body: str, *, resume: str | None = "r.md") -> None:

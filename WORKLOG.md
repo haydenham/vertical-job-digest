@@ -5,6 +5,91 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-26 — D-097: trading vertical (the fourth, last for now) + cross-vertical duplication
+
+**Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs" is **done** — the Rippling
+work merged as **#104** (`1f48005`) and `main` is clean. Still open from it: the three Rippling activations
+(`vja-review set-ats` → `approve` on `#103`/`#139`/`#141`), and from D-095 PR 1 the comp fill-rate re-run
+against Neon. Hayden confirmed **robotics is live in prod**, so trading's import is the only pending cutover.
+
+**Task:** add a trading vertical. The interesting part was not curation — it was that **grid/power already
+owned ~17 trading-and-markets employers**, curated for their *energy desks* (Jane Street, Citadel, DRW, SIG,
+Millennium, Balyasny, CME, ICE, plus the physical merchants). One vertical per user (D-064) means a trading
+user would see **none** of them, and robotics' precedent was explicitly "never duplicate a company".
+
+**Scope decisions (Hayden, this session).** **Duplicate the marquee 8** (Jane Street, Citadel, DRW, SIG,
+Millennium, Balyasny, CME, ICE) rather than curate around them or move them out of grid — moving would
+strip employers grid holds for good reason and force retire + re-insert surgery on prod under
+`UNIQUE(vertical, name)`. Physical merchants stay grid-only. Key `trading_software`, display **"Trading &
+Markets"**. Universe ~35–40. **Crypto + prediction markets in**, **sell-side bank tech + Bloomberg/
+Broadridge/FactSet out**. Frontend copy ships in this branch. Recorded as **D-097**.
+
+**One correction on the record.** When presenting the duplication option I said the duplicated postings
+would re-extract for free, since extraction is content_hash-cached. Wrong: `postings_needing_extraction`
+keys on `extracted_at IS NULL` **per posting row**, so there is no cross-row reuse of an identical body —
+each duplicate pays a second Haiku extraction. Real cost of the decision: **5 extra nightly fetches** (3 of
+the 8 are `layer2`/`detected`) plus that duplicate extraction. Corrected in D-097 and INVARIANTS; the
+judgment didn't change.
+
+**Built on `feat/trading-vertical` (uncommitted; Hayden owns commit/PR) — zero `src/` changes.** 44 seed
+rows + `config/verticals/trading_software.yaml` + `profiles/hayden_trading_resume.md`. `AtsType` already
+carried every value the curation needed (`avature`, `eightfold`), so D-004 held with **no code diff at
+all**. CSV rows were appended by rewriting the file on **bytes** (it is 87 CRLF / 37 LF lines; Edit would
+rewrite all of them) — `git diff --numstat` reads a clean `44  0`.
+
+**Curation: 31 of 35 net-new candidates resolved to a live board (89%), so the universe overshot the ~35–40
+target to 44** (36 net-new + 8 duplicates). Honoring the range would have meant deleting *verified
+fetchable* boards, so instead the five marginal unfetchables were dropped (Peak6, Wolverine, IBKR,
+Tradeweb, Quantlab/Jobvite) and the marquee unfetchables kept. **36 of 44 fetchable (82%)**: 26 Greenhouse,
+4 Ashby, 3 Workday, 2 iCIMS, 1 Lever · 2 `detected` (Two Sigma/Avature, Millennium/Eightfold) · 6 `layer2`.
+
+**Nine rows where probing beat guessing.** Optiver's US board is `optiverus` (plain `optiver` is a
+near-empty global shell, 0 postings) · CTC `chicagotrading` · Five Rings `fiveringsllc` · Headlands
+`headlandstechnologiesllc` · MarketAxess `marketaxesscorporation` · Galaxy `galaxydigitalservices` ·
+**Kraken's Ashby slug is literally `kraken.com`** · Radix splits campus (`radixuniversity`, in scope) from
+experienced · **Kalshi answers on both a stale Greenhouse board (27) and Ashby (36)** — careers site links
+Ashby, so Ashby is pinned. **Cboe** is a Phenom front-end over a Workday tenant; both return 64 and Workday
+is pinned (real `postedOn`, established contract). **HRT's only public API is its campus/talent-community
+Greenhouse board** — 3 entries, two of them "join our talent community" placeholders. Included *because the
+Stage-A gate drops those two on its own* (verified), so no per-employer rule and no fake postings (D-008).
+Excluded for duplicate coverage: Cumberland (rides DRW's board), Jump Crypto (rides Jump's). Dropped for no
+locatable careers page: Squarepoint.
+
+**Stage-A tuned on measured data, not taste.** Over the 2,871 postings the first real pass fetched: shared
+software/data baseline kept 1,074; the trading vocabulary added **+348** → 1,422. `trader` is deliberately
+**in** (excluding it drops the "Quantitative Trader — New Grad" pipeline a CS+Econ candidate genuinely
+applies to). Then `experienced` went into the excludes — trading firms label their non-campus track
+literally **"Experienced Hire"** — dropping **69** survivors, all inspected and all genuinely
+non-early-career. Final: **1,353 of 2,871 (47%)** in scope, which is the size of the one-time Haiku
+extraction backlog when this vertical lands in prod.
+
+**Verification.** Full default suite **749 passed, 35 deselected** (was 735); ruff format/check, mypy (143
+files), import-linter (1 kept / 0 broken), `uv lock --check`; frontend eslint + `tsc -b` + vitest
+**139/139** + production build. New/changed tests: real-config load + an 11-case Stage-A gate over real
+board titles (incl. the HRT placeholders and "Experienced Hire"), the trading fetchable-subset counter, a
+**cross-vertical duplication contract** test (same name under both verticals, same ATS wiring, different
+`employer_id`), corpus totals 76→112, the `/api/verticals` picker set, and the frontend copy/landing
+assertions. **Live end-to-end on a scratch migrated DB:** `vja-run --vertical trading_software` →
+**36 employers, 0 failures, 2,871 postings**, every board clean on the first try. Then grid's Jane Street +
+CME rows synced into the same DB: **221 Jane Street `external_id`s exist under both employer rows** with no
+`UNIQUE(employer_id, external_id)` collision, and a re-sync of the grid row returned **all-`unchanged`**
+(the D-088 churn check). No LLM calls, no prod DB, no deploy. Docs: D-097, INVARIANTS (D-005 wording
+amended + a four-verticals rule), docs/06 (the duplication curation rule), docs/07 (demand-ledger addendum
+— Avature rises to 3 companies incl. Two Sigma; build order unchanged, JazzHR still #1), seed README, CLAUDE.
+
+**Flagged, not fixed (pre-existing, reproduces on clean `main`):** running `tests/unit/test_vertical_config.py`
+together with `tests/integration/test_api.py::test_upload_unknown_vertical_404` fails with a `ConfigError` —
+`test_config_dir_honors_env_override` reloads `vja.verticals`, and the API module's bound reference doesn't
+survive it. The full default suite's ordering avoids it, so it isn't a gate failure; I left it alone rather
+than fold an unrelated test-isolation fix into this branch.
+
+**Next:** Hayden reviews/commits/PRs. **Sequencing matters:** `main` auto-deploys (D-068) and
+`/api/verticals` is config-driven, so the picker offers **Trading & Markets** the moment this merges while
+Neon holds zero trading employers — export the Neon `VJA_DATABASE_URL` and run
+`vja-import-employers data/seed/employers_seed.csv` right after the deploy, then let the next nightly set
+the baseline. **No migration.** Do **not** run `vja-load-profiles` against prod (it would add a fourth
+active profile for haydenham10@gmail.com and a fourth digest).
+
 ## 2026-07-26 — D-096: coverage audit → the activation queue is empty → Rippling fetcher
 
 **Housekeeping on the previous entry (it was stale, not mid-thought).** D-095 PR 2 merged as **#103**;

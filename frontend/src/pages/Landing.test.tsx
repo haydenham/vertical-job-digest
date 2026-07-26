@@ -41,12 +41,14 @@ describe("Landing", () => {
     expect(screen.getByRole("heading", { name: /extract, match, and deliver/i })).toBeInTheDocument();
   });
 
-  it("renders the three served verticals", () => {
+  it("renders the four served verticals", () => {
     render(<Landing />);
     expect(screen.getByRole("heading", { name: /aviation technology/i })).toBeInTheDocument();
     expect(screen.queryByText(/aerospace & aviation/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /energy & grid/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^robotics$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /trading & markets/i })).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument(); // the stats band counts them
   });
 
   it("renders the founder story and the no-auto-apply footer", () => {

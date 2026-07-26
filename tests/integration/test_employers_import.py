@@ -145,12 +145,15 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # fails paginate-or-fail (61 of 62) → Layer 2; Delta/Avature is bot-challenged → Layer 2;
     # NRG/National Grid/L3Harris Radancy bases not yet live-confirmed → parked `proposed`, D-052.)
     # Robotics adds 24 verified Layer-1 rows: 10 Greenhouse, 5 Lever, 8 Ashby, 1 Workday.
-    assert len(fetchable) == 76
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 18
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 9
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 11
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 23
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 6
+    # Trading adds 36 (D-097): 26 Greenhouse, 1 Lever, 4 Ashby, 3 Workday, 2 iCIMS — five of them
+    # (Jane Street, DRW, SIG, CME, ICE) are second rows for companies grid already fetches, so the
+    # corpus total counts them twice on purpose: one employer row per (vertical, name).
+    assert len(fetchable) == 112
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 44
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 10
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 15
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 26
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 8
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
     assert sum(1 for e in fetchable if e.ats_type == AtsType.SMARTRECRUITERS) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ORACLE_HCM) == 2
@@ -196,3 +199,44 @@ def test_robotics_vertical_is_fetchable_without_code_change(migrated_engine: Eng
     assert by_type[AtsType.ASHBY] == 8
     assert by_type[AtsType.WORKDAY] == 1
     assert all(e.ats_slug or e.endpoint for e in robotics)
+
+
+def test_trading_vertical_is_fetchable_without_code_change(migrated_engine: Engine) -> None:
+    """D-097/D-004: Trading is the fourth vertical to resolve purely from config + seed data."""
+    import_employers_from_csv(migrated_engine, _SEED)
+
+    trading = active_fetchable_employers(migrated_engine, vertical="trading_software")
+    by_type = Counter(e.ats_type for e in trading)
+
+    assert len(trading) == 36
+    assert by_type[AtsType.GREENHOUSE] == 26
+    assert by_type[AtsType.LEVER] == 1
+    assert by_type[AtsType.ASHBY] == 4
+    assert by_type[AtsType.WORKDAY] == 3  # CME (shared with grid), Nasdaq, Cboe
+    assert by_type[AtsType.ICIMS] == 2  # SIG, ICE (both shared with grid)
+    assert all(e.ats_slug or e.endpoint for e in trading)
+
+
+def test_cross_vertical_employers_are_independent_rows(migrated_engine: Engine) -> None:
+    """D-097: a company curated in two verticals is two rows, keyed on (vertical, name).
+
+    The marquee financial-trading firms are targets in both grid/power (energy desks) and trading,
+    and D-064 gives a user exactly one vertical — so each universe carries its own row. The rows
+    are independent: same ATS config, separate identity, separate diff.
+    """
+    import_employers_from_csv(migrated_engine, _SEED)
+    shared = ["Jane Street", "Citadel", "DRW", "SIG (Susquehanna)", "CME Group"]
+    with migrated_engine.connect() as conn:
+        rows = conn.execute(select(employers).where(employers.c.name.in_(shared))).mappings().all()
+
+    by_name: dict[str, set[str]] = {}
+    for row in rows:
+        by_name.setdefault(row["name"], set()).add(row["vertical"])
+    for name in shared:
+        assert by_name[name] == {"grid_power_software", "trading_software"}, name
+
+    # Same ATS wiring on both sides — the duplication is curation, not a second integration.
+    jane = {r["vertical"]: r for r in rows if r["name"] == "Jane Street"}
+    assert jane["trading_software"]["ats_type"] == jane["grid_power_software"]["ats_type"]
+    assert jane["trading_software"]["ats_slug"] == jane["grid_power_software"]["ats_slug"]
+    assert jane["trading_software"]["id"] != jane["grid_power_software"]["id"]

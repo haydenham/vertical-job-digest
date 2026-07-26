@@ -1,0 +1,92 @@
+# Vertical config — "a vertical is config" (D-004, docs/06). The employer list lives in
+# data/seed/employers_seed.csv (filtered by `vertical`); this file holds the matching profile,
+# Stage-A scope rules, and Stage-B prefilter knobs.
+key: trading_software
+
+matching_profile:
+  user_email: haydenham10@gmail.com
+  resume: profiles/hayden_trading_resume.md   # path relative to config/verticals/
+  domain_vocabulary:                          # steers the match prompt (5.3)
+    - market microstructure
+    - low-latency systems
+    - quantitative research
+    - market data
+    - order books / matching engines
+    - execution algorithms
+    - derivatives & options pricing
+    - risk systems
+    - time-series analysis
+    - C++ / Python / Rust
+    - exchange connectivity (FIX)
+    - backtesting / simulation
+
+# Stage A — free, resume-independent title gate (D-023). Keep a title iff it matches a
+# role_include keyword AND no exclude keyword (whole-word, case-insensitive). The shared
+# software/data baseline is unchanged; the additions catch trading-specific title families.
+scope:
+  role_include:
+    - software
+    - engineer
+    - developer
+    - data
+    - analyst
+    - scientist
+    - machine learning
+    - programmer
+    - backend
+    - frontend
+    - full stack
+    - fullstack
+    - devops
+    - platform
+    - infrastructure
+    - embedded
+    - firmware
+    # trading-specific title families
+    - quantitative
+    - quant
+    - trading
+    - trader
+    - algorithmic
+    - systematic
+    - research
+    - low latency
+  exclude:
+    # seniority (we target early-career)
+    - senior
+    - sr
+    - staff
+    - principal
+    - lead
+    - manager
+    - director
+    - vp
+    - vice president
+    - head
+    - chief
+    # trading firms label their non-campus track literally: "Experienced Hire" (69 of 1,422
+    # Stage-A survivors on the 2026-07-26 corpus, every one genuinely non-early-career)
+    - experienced
+    # non-software roles common on trading / financial-services whole-company boards
+    - sales
+    - marketing
+    - recruiter
+    - counsel
+    - attorney
+    - paralegal
+    - compliance
+    - audit
+    - auditor
+    - tax
+    - accountant
+    - accounting
+    - controller
+    - executive assistant
+    - receptionist
+    - technician
+    - operator
+
+# Stage B — cheap deterministic pre-filter before the strong model (D-023; consumed in 5.3).
+prefilter:
+  locations: [US]
+  levels: [intern, new_grad, early_career]
