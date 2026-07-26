@@ -6,7 +6,12 @@ import { fetchPostings, type BackfillStatus, type PostingsResponse } from "../ap
 import { useAuth, type AuthState } from "../auth/useAuth";
 import { Dashboard } from "./Dashboard";
 
-vi.mock("../api", () => ({ fetchPostings: vi.fn() }));
+// `fetchPostingDescription` is stubbed to never settle: the panel fires it on open (D-095), and
+// these tests are about the dashboard's own behavior, not the body it loads.
+vi.mock("../api", () => ({
+  fetchPostings: vi.fn(),
+  fetchPostingDescription: vi.fn(() => new Promise(() => undefined)),
+}));
 vi.mock("../auth/useAuth", () => ({ useAuth: vi.fn() }));
 
 const mockPostings = vi.mocked(fetchPostings);

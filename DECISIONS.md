@@ -1893,4 +1893,43 @@ prompts** — no regression, and the new prompt returns a more faithful verbatim
 "$81,456 - $122,184 per-year-salary" — i.e. that row was never a fabrication, just an under-informative
 stored quote. Outputs preserved in the session log. **Hayden signed off on this evidence before merge.**
 
-References D-087, D-008, D-005, D-035, D-036, D-038, D-043, D-052, D-080, D-082, D-083, D-090, D-093.
+**PR 2 implementation notes (built 2026-07-24; scope decisions Hayden's, this session).**
+
+*Read path — a detail endpoint, not a list column.* Measured on the dev DB (314 in-scope open): 184 rows
+(59%) carry a body, median ~3.2 KB of plain text, p90 5.5 KB. Inlining the full body would take a
+tens-of-KB dashboard load past **1 MB** to serve text a user opens on maybe three rows; a truncated
+snippet would still add ~380 KB *and* show mostly "About us" boilerplate. So **`GET /api/postings/{id}`**,
+fetched when the panel opens, behind the same `_resolve_profile` gate as the list (401 when
+`VJA_AUTH_REQUIRED`; the query is floored on the caller's vertical + `in_scope`, so an id from another
+vertical 404s rather than leaking). No SPA-side cache — one PK lookup is not worth the state.
+
+*Empty state — render nothing.* With no backfill, most rows have no body on day one. Rejected an
+explanatory "not captured yet" line: we're in beta, the rows fill as postings turn over, and the panel
+already carries match, salary, and apply.
+
+*Fidelity — block structure survives, inline structure does not.* `vja.text.html_to_text` (new bottom-layer
+module) gives paragraphs/headings a blank line, list items one line each, and keeps inline markup on its own
+sentence; rendered `white-space: pre-wrap`. Two findings forced its shape: Greenhouse's `content` field is
+**escaped** HTML (`&lt;h3&gt;…`), so it is `html.unescape`d before parsing or the user would read raw tags;
+and flattening with a newline separator shatters `We use <b>Python</b> and SQL` into one line per fragment,
+so the separator is empty and only block tags insert breaks.
+
+*Two invariants the build had to preserve.* (1) **`content_hash` still keys on the fetcher's raw
+description** — normalizing before hashing would flip every stored posting's hash on one night, a
+corpus-wide false "content changed" plus mass re-extraction (D-088 churn); pinned by a regression test.
+(2) **The extraction prompt input is unchanged** — the model still sees the same JSON blob, so results and
+the prompt cache don't move; `_source_text` was refactored to `_posting_source`, which reads the payload
+**once** and returns both the model text and the body (a second read would double the requests to a
+list-only board).
+
+*Write rule.* L1 wins, extraction fills the gap: insert writes the fetcher's body; `update_changed` writes
+it unconditionally (a list-only `None` *clears* the stale body, and the `extracted_at` clear in the same
+statement guarantees the refill); reopen writes it when present, clears it only when the content changed,
+and otherwise preserves it alongside the preserved extraction; `save_extraction` fills only when NULL. Each
+list-only fetcher answers `detail_description(payload)` for its own provider shape (new `ListOnlyFetcher`
+protocol + `_DETAIL_DESCRIPTIONS` map beside `_DETAIL_RESOLVERS`), so adding a list-only ATS stays a
+wire-up. Oracle reads **only** its `External*Str` fields — the payload also carries `Internal*Str` written
+for the employee-facing site.
+
+References D-087, D-008, D-005, D-035, D-036, D-038, D-043, D-052, D-080, D-082, D-083, D-088, D-090,
+D-093.

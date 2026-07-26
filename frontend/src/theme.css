@@ -543,6 +543,23 @@ a:hover {
   line-height: 1.5;
   color: var(--text-dim);
 }
+/* ---- description block (D-095): the posting's own text, fetched when the panel opens ---- */
+.panel-description .description-text {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  /* The stored body is plain text whose blank lines and bullet lines are the only structure it
+     has left, so they have to survive rendering. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere; /* an unbroken URL in a posting must not widen the panel */
+}
+/* Holds the block's height for the one frame the fetch usually takes, so the apply button
+   doesn't jump under the cursor when the text lands. */
+.panel-description-loading {
+  height: 40px;
+}
+
 /* ---- subbar filter ---- */
 .filter-input {
   font-family: var(--font-ui);

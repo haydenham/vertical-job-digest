@@ -13,7 +13,9 @@ their list endpoints omit the job description) fetch it lazily, per in-scope sur
 `fetch_detail` (routed by `_DETAIL_RESOLVERS`); every other ATS carries the description in
 `raw_payload`.
 Either way the raw payload is handed to the model, which extracts from messy input — the point of
-all-LLM extraction.
+all-LLM extraction. That same fetched body is also *kept* for the list-only ATSs (D-095): it is
+normalized to plain text and persisted as `postings.description`, since this is the only place
+their body is ever in hand.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from vja.db.postings import (
     save_extraction,
 )
 from vja.fetchers.bamboohr import BambooHRFetcher
+from vja.fetchers.base import ListOnlyFetcher
 from vja.fetchers.oracle import OracleFetcher
 from vja.fetchers.paylocity import PaylocityFetcher
 from vja.fetchers.phenom import PhenomFetcher
@@ -48,6 +51,7 @@ from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult, sum_catalog_
 from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
+from vja.text import html_to_text
 
 logger = logging.getLogger("vja.extract")
 
@@ -92,25 +96,38 @@ Apply these literal rules:
 # won't trigger today — kept as the correct pattern (the token meter now shows whether it caches).
 # The real extraction lever (unique descriptions are uncacheable) is the Batch API, not caching.
 DetailResolver = Callable[[Employer, str], dict[str, Any]]
+DetailDescriber = Callable[[dict[str, Any]], str | None]
+
+#: The list-only fetchers, instantiated once so the two maps below stay in step.
+_LIST_ONLY_FETCHERS: dict[AtsType, ListOnlyFetcher] = {
+    AtsType.WORKDAY: WorkdayFetcher(),
+    AtsType.SMARTRECRUITERS: SmartRecruitersFetcher(),
+    AtsType.ORACLE_HCM: OracleFetcher(),
+    AtsType.RADANCY: RadancyFetcher(),
+    AtsType.PAYLOCITY: PaylocityFetcher(),
+    AtsType.PHENOM: PhenomFetcher(),
+    AtsType.BAMBOOHR: BambooHRFetcher(),
+}
 
 #: The **list-only** ATSs whose list endpoint omits the job description, keyed to the fetcher method
 #: that lazily fetches one posting's full body (called only for in-scope survivors — cost
 #: discipline, D-035). Membership here *is* "needs a lazy detail fetch"; every other ATS carries the
 #: description in `raw_payload`. One map, so adding a list-only ATS is a one-line wire-up (no `if`).
 _DETAIL_RESOLVERS: dict[AtsType, DetailResolver] = {
-    AtsType.WORKDAY: WorkdayFetcher().fetch_detail,
-    AtsType.SMARTRECRUITERS: SmartRecruitersFetcher().fetch_detail,
-    AtsType.ORACLE_HCM: OracleFetcher().fetch_detail,
-    AtsType.RADANCY: RadancyFetcher().fetch_detail,
-    AtsType.PAYLOCITY: PaylocityFetcher().fetch_detail,
-    AtsType.PHENOM: PhenomFetcher().fetch_detail,
-    AtsType.BAMBOOHR: BambooHRFetcher().fetch_detail,
+    ats_type: fetcher.fetch_detail for ats_type, fetcher in _LIST_ONLY_FETCHERS.items()
+}
+
+#: The parallel "where does the body live in *that* payload" map (D-095). Only the provider knows,
+#: so each fetcher answers for its own shape; extraction keeps the body it already paid to fetch
+#: instead of discarding it after the model call.
+_DETAIL_DESCRIPTIONS: dict[AtsType, DetailDescriber] = {
+    ats_type: fetcher.detail_description for ats_type, fetcher in _LIST_ONLY_FETCHERS.items()
 }
 
 
 def _default_detail_resolver(employer: Employer, external_id: str) -> dict[str, Any]:
     """Route a list-only employer to its ATS's `fetch_detail`. Only called for ATSs in
-    `_DETAIL_RESOLVERS` (see `_source_text`), so the lookup always hits."""
+    `_DETAIL_RESOLVERS` (see `_posting_source`), so the lookup always hits."""
     return _DETAIL_RESOLVERS[employer.ats_type](employer, external_id)
 
 
@@ -155,15 +172,39 @@ def fields_to_columns(fields: ExtractedFields) -> dict[str, Any]:
     }
 
 
-def _source_text(candidate: ExtractionCandidate, resolve_detail: DetailResolver) -> str:
-    """The text handed to the model: the raw payload, or — for the list-only ATSs
-    (`_DETAIL_RESOLVERS`) — the lazily-fetched detail body."""
-    if candidate.employer.ats_type in _DETAIL_RESOLVERS:
+@dataclass(frozen=True)
+class _PostingSource:
+    """What one posting's payload yields: the model's input, and the body worth keeping.
+
+    Both come from a *single* read of the payload — for a list-only ATS that read is a network
+    fetch, so asking for the description separately would double the requests to the board.
+    """
+
+    text: str
+    #: Plain-text body to persist, or `None` when the row already has one from L1 (D-095).
+    description: str | None
+
+
+def _posting_source(
+    candidate: ExtractionCandidate, resolve_detail: DetailResolver
+) -> _PostingSource:
+    """The raw payload, or — for the list-only ATSs (`_DETAIL_RESOLVERS`) — the lazily-fetched
+    detail body, rendered as the model's source text plus the description to store.
+
+    Rich-list ATSs return `description=None`: their body was written straight from the fetcher at
+    insert, and `save_extraction` would not overwrite it anyway (L1 wins). The model's input is
+    unchanged by any of this — it is still the same JSON blob, so extraction results and the
+    prompt cache do not move.
+    """
+    ats_type = candidate.employer.ats_type
+    description: str | None = None
+    if ats_type in _DETAIL_RESOLVERS:
         payload: Any = resolve_detail(candidate.employer, candidate.external_id)
+        description = html_to_text(_DETAIL_DESCRIPTIONS[ats_type](payload))
     else:
         payload = candidate.raw_payload
     blob = json.dumps(payload, ensure_ascii=False)[:_MAX_SOURCE_CHARS]
-    return f"Title: {candidate.title}\n\n{blob}"
+    return _PostingSource(text=f"Title: {candidate.title}\n\n{blob}", description=description)
 
 
 def extract_posting(client: StructuredLLM, source_text: str) -> StructuredResult[ExtractedFields]:
@@ -211,7 +252,8 @@ def run_extraction(
     cost_usd: float | None = 0.0
     for candidate in candidates:
         try:
-            call = extract_posting(cli, _source_text(candidate, detail))
+            source = _posting_source(candidate, detail)
+            call = extract_posting(cli, source.text)
         except (
             Exception
         ) as exc:  # deliberate per-posting isolation boundary (logged, not swallowed)
@@ -228,6 +270,10 @@ def run_extraction(
             candidate.location if candidate.location is not None else fields.location
         )
         columns["in_scope"] = passes_prefilter(fields.level.value, effective_location, prefilter)
+        # The list-only ATSs' body exists nowhere else — keep it (D-095). `save_extraction` only
+        # fills a NULL, so this can never displace a body L1 already stored.
+        if source.description is not None:
+            columns["description"] = source.description
         with begin(engine) as conn:
             save_extraction(
                 conn,

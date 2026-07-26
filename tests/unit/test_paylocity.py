@@ -111,3 +111,13 @@ def test_fetch_detail_without_description_fails_loudly() -> None:
     respx.get(url).mock(return_value=httpx.Response(200, text="<html></html>"))
     with pytest.raises(FetchError, match="no description"):
         PaylocityFetcher().fetch_detail(_employer(), "4324344")
+
+
+def test_detail_description_reads_the_fetched_body() -> None:
+    assert PaylocityFetcher().detail_description({"description": "Field tech.", "url": "u"}) == (
+        "Field tech."
+    )
+
+
+def test_detail_description_is_none_without_a_body() -> None:
+    assert PaylocityFetcher().detail_description({"url": "u"}) is None

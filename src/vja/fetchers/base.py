@@ -7,7 +7,7 @@ satisfies `Fetcher`; adding an employer = adding a seed row.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from vja.models import AtsType, Employer, RawPosting
 
@@ -41,3 +41,38 @@ class Fetcher(Protocol):
         Raises `FetchError` on any non-200 / unparseable response.
         """
         ...
+
+
+@runtime_checkable
+class ListOnlyFetcher(Protocol):
+    """A `Fetcher` whose list endpoint omits the job body, so the body is a second, lazy call.
+
+    Extraction fetches that detail per in-scope survivor (cost discipline, D-035) and then asks
+    the same fetcher where the body lives inside it — the provider shape is the fetcher's business,
+    not extraction's. Both methods take their id positionally: Workday's is an `externalPath`, the
+    others a bare id.
+    """
+
+    def fetch_detail(self, employer: Employer, external_id: str, /) -> dict[str, Any]:
+        """Return one posting's full detail payload. Raises `FetchError` on failure."""
+        ...
+
+    def detail_description(self, payload: dict[str, Any], /) -> str | None:
+        """Return the posting body held in a `fetch_detail` payload, or `None` (D-095)."""
+        ...
+
+
+def joined_body(*fragments: object) -> str | None:
+    """Join a detail payload's body fragments into one description string, or `None`.
+
+    The list-only ATSs each expose `detail_description(payload)` beside their `fetch_detail`, so
+    extraction can keep the body it already fetched (D-095) instead of discarding it. Their
+    payloads differ only in *where* the text lives — one field (Workday), a handful of parallel
+    fields (Oracle), or titled sections (SmartRecruiters) — so this holds the one shared rule:
+    non-string and blank fragments are dropped, survivors are separated by a blank line, and an
+    empty result is `None` rather than `""` (the column means "no body", not "an empty body").
+    Fragments are returned in the provider's own shape — HTML included; normalization to plain
+    text happens once, at the `vja.text` boundary.
+    """
+    parts = [fragment.strip() for fragment in fragments if isinstance(fragment, str)]
+    return "\n\n".join(part for part in parts if part) or None

@@ -1,14 +1,43 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { PostingRow } from "../api";
+import { fetchPostingDescription, type PostingRow } from "../api";
 import { activityIso } from "../postingsView";
 import { MatchCell } from "./Verdict";
+
+// The posting body, loaded on open (D-095). `undefined` is "still loading" — deliberately NOT a
+// string sentinel, which a `typeof === "string"` render check would happily print into the panel.
+// `null` covers both "no stored body" and "the request failed"; either way nothing renders.
+type Description = string | null | undefined;
 
 // Overlay detail panel (PR 3, D-080): slides over the right side of the table — the table keeps
 // full width underneath. Esc or a click outside closes; clicking another row closes on mousedown
 // then re-selects on click, so the panel switches postings in place.
-export function PostingPanel({ p, onClose }: { p: PostingRow; onClose: () => void }) {
+export function PostingPanel({
+  p,
+  vertical,
+  onClose,
+}: {
+  p: PostingRow;
+  vertical: string;
+  onClose: () => void;
+}) {
   const ref = useRef<HTMLElement>(null);
+  const [description, setDescription] = useState<Description>(undefined);
+
+  // The body is fetched per open rather than carried on the list response (~3 KB a row would cost
+  // megabytes per dashboard load). Keyed on the posting id, so switching rows in place refetches;
+  // the abort keeps a fast click-through from landing a stale body in the new panel.
+  useEffect(() => {
+    const controller = new AbortController();
+    setDescription(undefined);
+    fetchPostingDescription(p.posting_id, vertical, controller.signal)
+      .then((detail) => setDescription(detail.description))
+      // A missing body is not worth an error state — the panel's other content stands alone.
+      .catch(() => {
+        if (!controller.signal.aborted) setDescription(null);
+      });
+    return () => controller.abort();
+  }, [p.posting_id, vertical]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -88,6 +117,16 @@ export function PostingPanel({ p, onClose }: { p: PostingRow; onClose: () => voi
               ))}
             </ul>
           </div>
+        </div>
+      )}
+
+      {/* The posting's own words, last: the match write-up above is what this product adds, the
+          description is the source it reasoned over. Absent bodies render nothing at all. */}
+      {description === undefined && <div className="panel-description-loading" aria-hidden />}
+      {typeof description === "string" && (
+        <div className="panel-description">
+          <span className="label">description</span>
+          <p className="description-text">{description}</p>
         </div>
       )}
 

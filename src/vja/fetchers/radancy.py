@@ -37,13 +37,14 @@ to an ISO date (a D-030 freshness win). ``description = None`` (lazy — see ``f
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -103,6 +104,14 @@ class RadancyFetcher:
         soup = BeautifulSoup(response.text, "html.parser")
         desc = soup.select_one("div.jobdescription") or soup.select_one("[itemprop=description]")
         return {"description": desc.get_text(" ", strip=True) if desc else None, "url": url}
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload.
+
+        Already plain text — this fetcher flattens the job page itself, and that flattened string
+        is what `content_hash` keys on, so its shape must not change here (D-095).
+        """
+        return joined_body(payload.get("description"))
 
 
 def _origin(url: str) -> str:

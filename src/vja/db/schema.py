@@ -158,6 +158,12 @@ postings = Table(
     Column("content_hash", String, nullable=False),
     Column("raw_payload", JSON, nullable=False),
     Column("apply_url", String),
+    # The posting body as readable plain text (`vja.text.html_to_text`), for the dashboard's
+    # detail panel. L1-authoritative like `location`: written from the fetcher's description at
+    # insert/update, and filled at extraction *only when still NULL* — which is how the list-only
+    # ATSs (whose list endpoint omits the body) get one, from the detail they already fetch.
+    # NOT part of `content_hash`, which keys on the fetcher's raw string. (D-095)
+    Column("description", Text),
     Column(
         "status",
         _enum(PostingStatus, "posting_status"),

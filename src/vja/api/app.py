@@ -57,7 +57,7 @@ from vja.api.auth import (
 )
 from vja.comp import annual_usd_display
 from vja.db.engine import get_engine
-from vja.db.postings import open_postings_with_match_quality
+from vja.db.postings import open_postings_with_match_quality, posting_description
 from vja.db.profiles import (
     BackfillStatus,
     Profile,
@@ -151,6 +151,19 @@ class PostingRow(BaseModel):
         when present and falls back to `comp_raw` verbatim, so the decision stays server-side and
         testable (F2 Phase A, D-087)."""
         return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
+
+
+class PostingDetailRow(BaseModel):
+    """`GET /api/postings/{id}` — the posting body, fetched only when a panel opens (D-095).
+
+    Its own endpoint rather than a field on `PostingRow`: bodies average ~3 KB of text, so putting
+    them on the list would cost megabytes per dashboard load to show a handful. `description` is
+    `null` for a row whose body hasn't been captured yet; the SPA renders nothing in that case."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    posting_id: int
+    description: str | None
 
 
 class ProfileCreated(BaseModel):
@@ -508,6 +521,26 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             count=len(rows),
             postings=[PostingRow.model_validate(r) for r in rows],
         )
+
+    @app.get("/api/postings/{posting_id}")
+    def posting_detail(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User | None, Depends(get_current_user)],
+        posting_id: int,
+        vertical: str,
+    ) -> PostingDetailRow:
+        """One posting's body, fetched when the dashboard panel opens (D-095).
+
+        Same visibility gate as the list — `_resolve_profile` applies the auth rule (401 with
+        `VJA_AUTH_REQUIRED`, and a caller can only read the vertical they have a profile in), and
+        the query itself is floored on that vertical's in-scope set. A posting id from another
+        vertical is a 404, not a body. Read-only (D-005).
+        """
+        _resolve_profile(engine, vertical, None, user)
+        detail = posting_description(engine, posting_id, vertical)
+        if detail is None:
+            raise HTTPException(404, f"no posting {posting_id} in {vertical!r}")
+        return PostingDetailRow.model_validate(detail)
 
     @app.post("/api/profiles", status_code=202)
     async def create_profile(

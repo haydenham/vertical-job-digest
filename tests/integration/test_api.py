@@ -64,6 +64,8 @@ def _posting(
     comp_min: int | None = None,
     comp_max: int | None = None,
     comp_raw: str | None = None,
+    description: str | None = None,
+    in_scope: bool = True,
 ) -> int:
     with begin(engine) as conn:
         result = conn.execute(
@@ -78,7 +80,8 @@ def _posting(
                 first_seen_at=first_seen,
                 last_seen_at=first_seen,
                 extracted_at=first_seen,
-                in_scope=True,
+                in_scope=in_scope,
+                description=description,
                 comp_min=comp_min,
                 comp_max=comp_max,
                 comp_raw=comp_raw,
@@ -699,3 +702,95 @@ def test_me_backfill_status_null_for_unstamped_profile(migrated_engine: Engine) 
     _profile(migrated_engine, email="me@example.com")
     body = _authed_client(migrated_engine, "me@example.com").get("/api/me").json()
     assert body["profile"]["backfill_status"] is None
+
+
+# --- posting body: GET /api/postings/{id} (D-095 PR 2) -----------------------------------------
+# Its own endpoint so ~3 KB bodies stay off the list response; same visibility gate as the list.
+
+
+def test_posting_detail_returns_the_stored_body(migrated_engine: Engine) -> None:
+    _profile(migrated_engine)
+    employer_id = _employer(migrated_engine)
+    posting_id = _posting(migrated_engine, employer_id, "swe", description="About the role\n\nGo.")
+
+    resp = _client(migrated_engine).get(
+        f"/api/postings/{posting_id}", params={"vertical": _VERTICAL}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"posting_id": posting_id, "description": "About the role\n\nGo."}
+
+
+def test_posting_detail_returns_null_for_a_row_with_no_body_yet(migrated_engine: Engine) -> None:
+    # The no-backfill state (D-095): a real posting, no body captured yet. Not an error.
+    _profile(migrated_engine)
+    posting_id = _posting(migrated_engine, _employer(migrated_engine), "swe")
+
+    resp = _client(migrated_engine).get(
+        f"/api/postings/{posting_id}", params={"vertical": _VERTICAL}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["description"] is None
+
+
+def test_posting_detail_404s_an_unknown_id(migrated_engine: Engine) -> None:
+    _profile(migrated_engine)
+    resp = _client(migrated_engine).get("/api/postings/999", params={"vertical": _VERTICAL})
+    assert resp.status_code == 404
+
+
+def test_posting_detail_404s_an_id_from_another_vertical(migrated_engine: Engine) -> None:
+    # Enumerating ids must not read across verticals — the query is floored on the caller's own.
+    _profile(migrated_engine)
+    other = _employer(migrated_engine, vertical="aviation_software", name="AirCo")
+    posting_id = _posting(migrated_engine, other, "avia-swe", description="Другой vertical.")
+
+    resp = _client(migrated_engine).get(
+        f"/api/postings/{posting_id}", params={"vertical": _VERTICAL}
+    )
+
+    assert resp.status_code == 404
+
+
+def test_posting_detail_404s_an_out_of_scope_posting(migrated_engine: Engine) -> None:
+    # The dashboard universe is the in-scope set (D-043); the body endpoint uses the same floor.
+    _profile(migrated_engine)
+    posting_id = _posting(
+        migrated_engine, _employer(migrated_engine), "ops", description="x", in_scope=False
+    )
+
+    resp = _client(migrated_engine).get(
+        f"/api/postings/{posting_id}", params={"vertical": _VERTICAL}
+    )
+
+    assert resp.status_code == 404
+
+
+def test_posting_detail_requires_auth_when_enforced(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_AUTH_REQUIRED", "1")
+    _profile(migrated_engine)
+    posting_id = _posting(migrated_engine, _employer(migrated_engine), "swe", description="Body.")
+
+    resp = _client(migrated_engine).get(
+        f"/api/postings/{posting_id}", params={"vertical": _VERTICAL}
+    )
+
+    assert resp.status_code == 401
+
+
+def test_list_response_still_carries_no_body(migrated_engine: Engine) -> None:
+    # The whole point of the separate endpoint: a dashboard load must not ship descriptions.
+    _profile(migrated_engine)
+    _posting(migrated_engine, _employer(migrated_engine), "swe", description="A long body.")
+
+    body = (
+        _client(migrated_engine)
+        .get("/api/postings", params={"vertical": _VERTICAL, "view": "cleaned"})
+        .json()
+    )
+
+    assert body["count"] == 1
+    assert "description" not in body["postings"][0]

@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import httpx
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -75,6 +75,10 @@ class PhenomFetcher:
         ):
             raise FetchError(f"phenom detail for {employer.name!r} missing job description")
         return job
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload (`jobDetail` guarantees it)."""
+        return joined_body(payload.get("description"))
 
 
 def _paginate(client: httpx.Client, config: _TenantConfig, employer: Employer) -> list[RawPosting]:

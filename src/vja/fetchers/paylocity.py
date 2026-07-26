@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from vja.fetchers.base import FetchError
+from vja.fetchers.base import FetchError, joined_body
 from vja.fetchers.endpoints import build_endpoint
 from vja.models import AtsType, Employer, RawPosting
 
@@ -84,6 +84,10 @@ class PaylocityFetcher:
         if description is None:
             raise FetchError(f"paylocity detail for {employer.name!r} has no description section")
         return {"description": description.get_text(" ", strip=True), "url": detail_url}
+
+    def detail_description(self, payload: dict[str, Any]) -> str | None:
+        """The posting body out of a `fetch_detail` payload — already flattened to text above."""
+        return joined_body(payload.get("description"))
 
 
 def _parse_page_data(html: str, employer: Employer) -> dict[str, Any]:

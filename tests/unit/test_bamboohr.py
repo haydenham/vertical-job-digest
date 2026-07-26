@@ -177,3 +177,15 @@ def test_detail_http_and_non_json_fail_loudly() -> None:
     route.mock(return_value=httpx.Response(200, text="not json"))
     with pytest.raises(FetchError, match="non-JSON"):
         BambooHRFetcher().fetch_detail(_employer(), "125")
+
+
+def test_detail_description_reads_the_job_opening_body() -> None:
+    job = _DETAIL["result"]["jobOpening"]
+    body = BambooHRFetcher().detail_description(job)
+
+    assert body is not None
+    assert body == job["description"].strip()
+
+
+def test_detail_description_is_none_without_a_body() -> None:
+    assert BambooHRFetcher().detail_description({"id": "1"}) is None

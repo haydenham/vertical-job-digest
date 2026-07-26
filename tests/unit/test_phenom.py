@@ -201,3 +201,12 @@ def test_job_missing_required_field_fails_loudly() -> None:
     respx.post(_WIDGET_URL).mock(return_value=_page([{"title": "No id"}], total=1))
     with pytest.raises(FetchError, match="jobId"):
         PhenomFetcher().fetch(_employer())
+
+
+def test_detail_description_reads_the_job_body() -> None:
+    job = _DETAIL["jobDetail"]["data"]["job"]
+    assert PhenomFetcher().detail_description(job) == job["description"].strip()
+
+
+def test_detail_description_is_none_without_a_body() -> None:
+    assert PhenomFetcher().detail_description({"jobId": "1"}) is None
