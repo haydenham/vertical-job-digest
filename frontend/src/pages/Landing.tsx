@@ -1,4 +1,11 @@
+import { useRef, type CSSProperties } from "react";
+
 import { loginUrl } from "../api";
+import { useScrollReveal } from "../useScrollReveal";
+
+// Stagger index for the shared reveal/hero keyframe (theme.css). Both the native scroll-driven
+// path and the observer fallback read `--i`; the markup's only job is to number the items.
+const step = (i: number) => ({ "--i": i }) as CSSProperties;
 
 // Logged-out landing at `/` (D-065) — the Linear-style marketing page (UI rework PR 1, D-080).
 // Static only: no endpoints, no state; the sole live element is the Google sign-in anchor. Copy
@@ -56,7 +63,7 @@ const MOCK_ROWS: {
 
 function HeroMock() {
   return (
-    <div className="hero-mock" aria-hidden="true">
+    <div className="hero-mock" aria-hidden="true" style={step(3)}>
       <div className="hero-mock-bar">
         <span className="label">new today</span>
         <span className="hero-mock-count">4 new postings</span>
@@ -133,16 +140,23 @@ const VERTICALS = [
 ];
 
 export function Landing() {
+  const pageRef = useRef<HTMLDivElement>(null);
+  useScrollReveal(pageRef);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={pageRef}>
+      {/* The hero animates on load (theme.css `.hero > *`), so it carries stagger indices but
+          never the `reveal` class — it is above the fold and has no scroll position to arrive at. */}
       <section className="hero">
-        <h1 className="hero-title">The technology jobs the big boards miss.</h1>
-        <p className="hero-sub">
+        <h1 className="hero-title" style={step(0)}>
+          The technology jobs the big boards miss.
+        </h1>
+        <p className="hero-sub" style={step(1)}>
           Rolefeed watches company career pages across aviation, energy, robotics, and trading —
           surfacing overlooked technology roles and matching every new posting to your résumé, fresh
           each morning.
         </p>
-        <div className="hero-actions">
+        <div className="hero-actions" style={step(2)}>
           <a className="btn btn-primary" href={loginUrl()}>
             Sign in with Google
           </a>
@@ -154,38 +168,42 @@ export function Landing() {
       </section>
 
       <section className="stats" aria-label="Rolefeed in numbers">
-        <div className="stat">
+        <div className="stat reveal" style={step(0)}>
           <span className="stat-value">100+</span>
           <span className="stat-label">employers watched</span>
         </div>
-        <div className="stat">
+        <div className="stat reveal" style={step(1)}>
           <span className="stat-value">4</span>
           <span className="stat-label">verticals served</span>
         </div>
-        <div className="stat">
+        <div className="stat reveal" style={step(2)}>
           <span className="stat-value">daily</span>
           <span className="stat-label">every apply link verified</span>
         </div>
-        <div className="stat">
+        <div className="stat reveal" style={step(3)}>
           <span className="stat-value">90%</span>
           <span className="stat-label">of interviews go to first-day applicants — LinkedIn</span>
         </div>
       </section>
 
       <section className="pillars">
-        {PILLARS.map((p) => (
-          <div className="card" key={p.title}>
+        {PILLARS.map((p, i) => (
+          <div className="card reveal" key={p.title} style={step(i)}>
             <h3 className="card-title">{p.title}</h3>
             <p className="card-body">{p.body}</p>
           </div>
         ))}
       </section>
 
+      {/* Heading and grid share one stagger sequence, so the block reads as a single arrival
+          rather than two. Same shape in the verticals section below. */}
       <section className="how" id="how-it-works">
-        <h2 className="section-title">How it works</h2>
+        <h2 className="section-title reveal" style={step(0)}>
+          How it works
+        </h2>
         <ol className="steps">
           {STEPS.map((s, i) => (
-            <li className="step" key={s.title}>
+            <li className="step reveal" key={s.title} style={step(i + 1)}>
               <span className="step-num">{String(i + 1).padStart(2, "0")}</span>
               <h3 className="card-title">{s.title}</h3>
               <p className="card-body">{s.body}</p>
@@ -195,13 +213,15 @@ export function Landing() {
       </section>
 
       <section className="verticals">
-        <h2 className="section-title">Built vertical by vertical</h2>
-        <p className="section-sub">
+        <h2 className="section-title reveal" style={step(0)}>
+          Built vertical by vertical
+        </h2>
+        <p className="section-sub reveal" style={step(0)}>
           Deep coverage of a few industries beats shallow coverage of all of them.
         </p>
         <div className="vertical-cards">
-          {VERTICALS.map((v) => (
-            <div className="card" key={v.name}>
+          {VERTICALS.map((v, i) => (
+            <div className="card reveal" key={v.name} style={step(i + 1)}>
               <h3 className="card-title">{v.name}</h3>
               <p className="card-body">{v.body}</p>
             </div>
@@ -209,7 +229,7 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="founder">
+      <section className="founder reveal">
         <h2 className="section-title">Why I built this</h2>
         <p className="founder-body">
           My name is Hayden, and I am a senior at the University of Wisconsin–Madison. I study
@@ -224,7 +244,7 @@ export function Landing() {
         <p className="founder-sig">— Hayden, founder</p>
       </section>
 
-      <footer className="landing-footer">
+      <footer className="landing-footer reveal">
         <div className="wordmark">
           <span className="mark" aria-hidden="true" />
           Rolefeed

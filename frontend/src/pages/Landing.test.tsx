@@ -66,4 +66,34 @@ describe("Landing", () => {
     render(<Landing />);
     expect(screen.getByRole("link", { name: /privacy/i })).toHaveAttribute("href", "/privacy");
   });
+
+  // Scroll motion: section blocks and card grids reveal on scroll, the hero does not — it is
+  // above the fold and animates on load instead (theme.css `.hero > *`). Pinning the marker
+  // classes keeps that split from drifting as sections are added.
+  it("marks section blocks as scroll-reveal targets but never the hero", () => {
+    const { container } = render(<Landing />);
+
+    const hero = container.querySelector(".hero")!;
+    expect(hero.querySelectorAll(".reveal")).toHaveLength(0);
+    expect(hero.classList.contains("reveal")).toBe(false);
+
+    // every below-the-fold block participates
+    expect(container.querySelectorAll(".stats .reveal")).toHaveLength(4);
+    expect(container.querySelectorAll(".pillars .reveal")).toHaveLength(3);
+    expect(container.querySelectorAll(".how .reveal")).toHaveLength(4); // heading + 3 steps
+    expect(container.querySelectorAll(".verticals .reveal")).toHaveLength(6); // heading + sub + 4
+    expect(container.querySelector(".founder")).toHaveClass("reveal");
+    expect(container.querySelector(".landing-footer")).toHaveClass("reveal");
+  });
+
+  it("staggers each grid within the cap, so the last card never arrives late", () => {
+    const { container } = render(<Landing />);
+    const indices = [...container.querySelectorAll<HTMLElement>(".reveal")].map((el) =>
+      Number(el.style.getPropertyValue("--i")),
+    );
+
+    expect(indices.every((i) => Number.isInteger(i))).toBe(true);
+    // --stagger is 70ms, so the budget of ~400ms tops out at index 5
+    expect(Math.max(...indices)).toBeLessThanOrEqual(5);
+  });
 });

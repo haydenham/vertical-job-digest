@@ -5,6 +5,76 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-26 — D-098: UI motion — token set + app-wide transitions (#106) + landing scroll reveals
+
+**Housekeeping on the previous entry:** D-097's "Next: Hayden reviews/commits/PRs" is **done** — trading
+merged as **#105** (`fe4f6a2`) and `main` is clean. **Still open from it, and it is an ops step, not code:**
+`main` auto-deploys and `/api/verticals` is config-driven, so the picker has been offering **Trading &
+Markets** since that merge while Neon holds zero trading employers — export the Neon `VJA_DATABASE_URL` and
+run `vja-import-employers data/seed/employers_seed.csv`. Also still open: the three Rippling activations
+(`vja-review set-ats` → `approve` on `#103`/`#139`/`#141`) and D-095 PR 1's comp fill-rate re-run against Neon.
+
+**Task:** usability/display polish. Session brief was a landing-page motion upgrade, then em-dash removal,
+then back buttons on the non-dashboard pages.
+
+**The audit inverted the brief, which is the interesting part.** The prompt described a Tailwind codebase to
+de-sludge — strip `transition-all`, kill 300ms hovers, move `height`/`top` animations off the layout path.
+**None of it existed.** `frontend/` is one hand-written `theme.css` with **five motion declarations in 1433
+lines**: zero `transition-all`, zero layout-property animation, zero scroll listeners, zero
+`IntersectionObserver`, zero `will-change`, and only 4 distinct durations (in two unit conventions) and 3
+keyword easings. The clunk was the **absence** of motion: **30 hover/focus/checked/selected states defined,
+exactly 2 transitioned**. The dashboard row was worst — hover background and the 3px verdict spine both
+flipped at 0ms, so scanning the table strobed. Hayden rescoped off the audit.
+
+**Scope decisions (Hayden, this session).** Transitions **app-wide, not landing-only** (`.btn`/`.card`/`a`
+are shared, and the dashboard row needed it most) · em-dash removal covers **rendered frontend copy + the
+digest email**, not code comments or docs · the three `—` **empty-value glyphs stay** (`PostingsTable:47`,
+`PostingPanel:78`, `Verdict:20` — a typographic "no value" marker, not prose) · back buttons on **Settings
+and Privacy, both pointing at `/`**, the smart root, which already routes a profiled user, an unprofiled
+user, and a logged-out visitor correctly (D-065). Recorded as **D-098**.
+
+**PR 1 — foundation (merged #106, `22918ad`), `theme.css` only, +96/−14.** The six motion tokens into
+`:root`; **every** duration and curve in the file now resolves to one, including the three pre-existing
+ones that disagreed (`120ms ease`, `0.15s ease`, `160ms ease-out`). Sixteen base rules gained explicit
+property lists at `--dur-fast` — every property named is a colour, `transform` or `opacity`, so nothing
+reflows mid-transition. First `:focus-visible` styling in the project's history (it appeared **zero** times;
+every control fell back to a UA outline that is near-unreadable on `#08090c`), scoped to real interactive
+elements so the two programmatically-focused dialog shells keep their deliberate `outline: none`. Global
+`prefers-reduced-motion` block replacing one that had covered a single property on a single element.
+
+**PR 2 — landing motion, this branch (`feat/landing-scroll-motion`, uncommitted).** Hero animates on load
+with a 70ms stagger (last child lands at 210ms + 700ms); stats, pillars, how-it-works, verticals, founder
+and footer reveal on scroll. **Three judgments that deviate from the obvious implementation, each for a
+concrete failure it avoids.** (1) The reveal **never hides what it cannot un-hide**: the native
+`animation-timeline: view()` path needs no JS, and the `IntersectionObserver` fallback sets its arming class
+`js-reveal` on `<html>` *only after* confirming an observer exists — no JS, no observer, no support means
+the page renders finished, not blank. (2) **`animation-range` ends on `entry`, not `cover`**: the brief's
+`cover 35%` strands bottom-of-document blocks, because once scrolling stops a footer can never reach a cover
+percentage and sits permanently half-faded; `entry 10% entry 90%` is reachable everywhere. (3) Reduced
+motion needs an explicit `animation: none` for the reveals — scroll-driven animations are scrubbed by scroll
+position, so the global `animation-duration: 0.01ms` does not touch them. The spinner is the one deliberate
+reduced-motion exception (keeps turning, slower; freezing it would report a hang on a live request).
+Stagger is `--i` per item, read by both paths, max index 4 → 280ms tail, inside the ~400ms budget.
+**No dependency added:** CSS plus one 48-line hook. `scroll-behavior: smooth` + `scroll-margin-top` on the
+landing's one jump link; **no sticky header exists** (`position: sticky` has zero hits), so that value is
+breathing room, not header compensation.
+
+**Verification.** eslint + `tsc -b` + vitest **146/146** (was 139; +5 hook tests, +2 Landing structural)
++ production build. New tests pin the safety invariant (no observer ⇒ `js-reveal` never set, so content is
+never hidden), threshold 0.15, unobserve-after-fire so scrolling back up never replays, unmount cleanup,
+the native-support no-op path, and that **the hero carries no `.reveal`** while every below-fold block does.
+*One flake seen and diagnosed, not a real failure:* the first full run took 374s under machine load and
+`Upload.test.tsx`'s retry test blew its 3000ms window; standalone it passes in 1.45s and every clean run
+since is green. CSS is not loaded in jsdom, so no test can see the stylesheet either way.
+
+**Next:** Hayden reviews/commits/PRs this branch. Then **PR 3** — em dashes (27 in rendered frontend copy,
+5 in `digest/render.py`, which will move pinned digest tests) + the Settings/Privacy back buttons.
+**Flagged, not fixed:** the posting panel has an entrance animation but no exit (it unmounts instantly), and
+the tour + delete-confirm modals have neither; making them symmetric needs a delayed-unmount state change in
+React, not CSS, so it stayed out of a motion-only branch.
+
+---
+
 ## 2026-07-26 — D-097: trading vertical (the fourth, last for now) + cross-vertical duplication
 
 **Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs" is **done** — the Rippling

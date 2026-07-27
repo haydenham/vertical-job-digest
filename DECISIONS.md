@@ -2089,3 +2089,47 @@ Trading & Markets the moment this merges while Neon holds zero trading employers
 follow the deploy promptly. Do **not** run `vja-load-profiles` against prod (it would add a fourth active
 profile for the operator's own email). References D-004, D-002, D-005, D-022, D-064, D-016, D-088,
 D-008, D-023, D-068, D-083, D-096.
+
+### D-098 · Beta hardening · UI motion: one token set, transitions everywhere, landing scroll reveals · accepted · 2026-07-26
+The "the scroll and transition behavior feels clunky" item was scoped from an audit of the real code rather
+than the brief's assumptions, and the audit **inverted the premise**. The brief described a Tailwind-shaped
+codebase to be de-sludged: strip `transition-all`, kill 300ms hovers, convert `height`/`top` animations off
+the layout path. None of that existed. `frontend/` is one hand-written stylesheet (`theme.css`, no Tailwind,
+no CSS-in-JS, no inline styles) that contained **five motion declarations in 1433 lines**: zero
+`transition-all`, zero animation on a layout property, zero scroll listeners, zero `IntersectionObserver`,
+zero `will-change`. The app did not feel clunky because motion was slow. It felt clunky because **30 hover /
+focus / checked / selected states were defined and exactly 2 of them transitioned** — everything else,
+including the dashboard row's hover background and its 3px verdict spine, flipped at 0ms.
+
+**Scope decisions (Hayden, this session, by questionnaire).** **Transitions go app-wide, not landing-only** —
+`.btn`, `.card` and `a:hover` are shared between the marketing page and the app, so scoping to `.landing`
+would have meant duplicating rules, and the dashboard row was the worst offender anyway. **The six motion
+tokens are the whole vocabulary** (`--ease-out-expo` / `--ease-in-out`, `--dur-fast` 150ms / `--dur-mid`
+300ms / `--dur-slow` 700ms, `--reveal-distance` 18px, `--stagger` 70ms); no one-off duration or curve
+survives anywhere in the file, including the three pre-existing ones that disagreed with each other
+(`120ms ease`, `0.15s ease` written in seconds, `160ms ease-out`). **Scroll reveals are native-first.**
+
+**Built in two merged units.** PR 1 (**#106**) is the foundation: tokens, sixteen base rules given explicit
+property lists at `--dur-fast`, the first `:focus-visible` styling in the project's history (it appeared
+**zero** times before — every control fell back to a UA outline that is near-unreadable on `#08090c`), and a
+global `prefers-reduced-motion` block replacing one that had covered a single property on a single element.
+PR 2 is the landing motion: hero on load, everything below the fold on scroll.
+
+**Three engineering judgments worth recording, because each deviates from the obvious implementation.**
+(1) **The reveal never hides what it cannot un-hide.** The native path (`animation-timeline: view()` inside
+`@supports`) needs no JS at all; the `IntersectionObserver` fallback arms the hidden state by setting
+`js-reveal` on `<html>` *only after* it has confirmed an observer exists. A browser with neither path, or
+with JS off, renders the finished page rather than a blank one. (2) **`animation-range` ends on `entry`,
+not `cover`.** The brief's `entry 10% cover 35%` strands any block near the bottom of the document: once
+scrolling stops, a footer can never reach a cover percentage and stays permanently half-faded. `entry 10%
+entry 90%` is reachable everywhere. (3) **Reduced motion needs an explicit `animation: none` for the
+reveals.** Scroll-driven animations are scrubbed by scroll position, so the global block's
+`animation-duration: 0.01ms` does not touch them. The upload spinner is the one deliberate exception to
+reduced motion and keeps turning, slower — freezing it would report a hang on a request still in flight.
+
+**Stagger** is `--i` set per item in the markup, read by both paths (`transition-delay` in the fallback,
+a per-item `animation-range` start offset natively, since `animation-delay` does nothing on a scroll
+timeline). Max index is 4, so the tail lands at 280ms, inside the ~400ms budget. **Above-the-fold hero
+content animates on load, never on scroll**, and reveals are applied to section blocks and card grids only.
+**No dependency was added** — the whole thing is CSS plus one 48-line hook. Frontend-only, no API contract
+moves, no migration. References D-080, D-081, D-042, D-021.
