@@ -24,6 +24,20 @@
   --radius-sm: 6px;
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.25);
 
+  /* ---- motion ----
+     The single source of truth for every duration and curve in this file. Two curves: expo-out
+     for things that arrive (entrances, scroll reveals), a symmetric in-out for states that flip
+     back and forth (hover, focus, toggles). Three durations, by what the motion is doing:
+     fast = a state change under the cursor, mid = a surface that moves and stops, slow = a
+     reveal the reader is watching. No one-off value belongs anywhere below. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 150ms;
+  --dur-mid: 300ms;
+  --dur-slow: 700ms;
+  --reveal-distance: 18px;
+  --stagger: 70ms;
+
   color-scheme: dark;
 }
 
@@ -50,9 +64,24 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-in-out);
 }
 a:hover {
   color: var(--accent-hover);
+}
+
+/* Keyboard focus was invisible before this: nothing in the file styled focus, so every control
+   fell back to the UA outline, which is near-unreadable on a #08090c ground. Scoped to real
+   interactive elements so the two programmatically-focused dialog shells below keep their
+   deliberate `outline: none`. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
 }
 
 ::selection {
@@ -119,6 +148,7 @@ a:hover {
 .nav-link {
   color: var(--text-muted);
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-in-out);
 }
 .nav-link:hover {
   color: var(--text);
@@ -140,6 +170,9 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: 50%;
   font-weight: 600;
+  transition:
+    color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out);
 }
 .tour-help:hover {
   border-color: var(--border-hover);
@@ -194,6 +227,9 @@ a:hover {
   border-right: 1px solid var(--border);
   padding: 6px 12px;
   cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-in-out),
+    background-color var(--dur-fast) var(--ease-in-out);
 }
 .segmented button:last-child {
   border-right: 0;
@@ -240,6 +276,11 @@ a:hover {
   border-bottom: 1px solid var(--border);
   border-left: 3px solid transparent;
   cursor: pointer;
+  /* Scanning the table used to strobe: hover and the selected 3px verdict spine both flipped
+     at 0ms. Colour only, so no row reflows while the pointer travels. */
+  transition:
+    background-color var(--dur-fast) var(--ease-in-out),
+    border-left-color var(--dur-fast) var(--ease-in-out);
 }
 .row:last-child {
   border-bottom: 0;
@@ -288,6 +329,7 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  transition: color var(--dur-fast) var(--ease-in-out);
 }
 .sort-btn:hover {
   color: var(--text-muted);
@@ -309,8 +351,8 @@ a:hover {
   color: var(--text-dim);
   text-align: right;
   transition:
-    transform 120ms ease,
-    color 120ms ease;
+    transform var(--dur-fast) var(--ease-in-out),
+    color var(--dur-fast) var(--ease-in-out);
 }
 .row:hover .cell-chevron {
   color: var(--text-muted);
@@ -318,11 +360,6 @@ a:hover {
 .row.selected .cell-chevron {
   color: var(--accent);
   transform: rotate(90deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .cell-chevron {
-    transition: none;
-  }
 }
 
 .cell-company {
@@ -423,7 +460,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  animation: panel-in 160ms ease-out;
+  animation: panel-in var(--dur-mid) var(--ease-out-expo);
 }
 @keyframes panel-in {
   from {
@@ -462,6 +499,9 @@ a:hover {
   line-height: 1;
   padding: 6px 8px;
   cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out);
 }
 .panel-close:hover {
   color: var(--text);
@@ -505,6 +545,7 @@ a:hover {
   font-size: 13px;
   padding: 8px 16px;
   border-radius: var(--radius-sm);
+  transition: background-color var(--dur-fast) var(--ease-in-out);
 }
 .panel-apply:hover {
   background: var(--accent-hover);
@@ -571,12 +612,14 @@ a:hover {
   padding: 7px 12px;
   width: 280px;
   max-width: 100%;
+  transition: border-color var(--dur-fast) var(--ease-in-out);
 }
 .filter-input::placeholder {
   color: var(--text-dim);
 }
+/* The accent border is the mouse-focus cue; the global :focus-visible ring above adds the
+   keyboard one, so the outline is no longer suppressed here. */
 .filter-input:focus {
-  outline: none;
   border-color: var(--accent);
 }
 
@@ -665,6 +708,7 @@ a:hover {
   height: 3px;
   border-radius: 999px;
   background: var(--border-hover);
+  transition: background-color var(--dur-fast) var(--ease-in-out);
 }
 .tour-dots span.active {
   background: var(--accent);
@@ -752,6 +796,11 @@ a:hover {
   color: var(--text);
   cursor: pointer;
   justify-self: start;
+  transition:
+    background-color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out),
+    color var(--dur-fast) var(--ease-in-out),
+    opacity var(--dur-fast) var(--ease-in-out);
 }
 .btn:hover:not(:disabled) {
   border-color: var(--border-hover);
@@ -849,6 +898,9 @@ a:hover {
   background: var(--surface-raised);
   padding: 14px 16px;
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out);
 }
 .vertical-card:hover:not(.locked) {
   border-color: var(--border-hover);
@@ -863,6 +915,7 @@ a:hover {
 .vertical-name {
   font-weight: 600;
   font-size: 14px;
+  transition: color var(--dur-fast) var(--ease-in-out);
 }
 .vertical-card.checked .vertical-name {
   color: var(--accent-tint-text);
@@ -877,6 +930,9 @@ a:hover {
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
+  transition:
+    background-color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out);
 }
 .dropzone:hover {
   border-color: var(--border-hover);
@@ -955,7 +1011,7 @@ a:hover {
   border: 2px solid var(--border-hover);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 700ms linear infinite;
+  animation: spin var(--dur-slow) linear infinite;
 }
 @keyframes spin {
   to {
@@ -970,6 +1026,7 @@ a:hover {
   color: var(--accent-tint-text);
   cursor: pointer;
   text-decoration: underline;
+  transition: color var(--dur-fast) var(--ease-in-out);
 }
 .link-button:hover {
   color: var(--accent-hover);
@@ -1345,8 +1402,8 @@ a:hover {
   position: relative;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+    background-color var(--dur-fast) var(--ease-in-out),
+    border-color var(--dur-fast) var(--ease-in-out);
 }
 .settings-toggle input::after {
   content: "";
@@ -1358,8 +1415,8 @@ a:hover {
   border-radius: 50%;
   background: var(--text-muted);
   transition:
-    transform 0.15s ease,
-    background 0.15s ease;
+    transform var(--dur-fast) var(--ease-in-out),
+    background-color var(--dur-fast) var(--ease-in-out);
 }
 .settings-toggle input:checked {
   background: var(--accent);
@@ -1430,4 +1487,29 @@ a:hover {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* ---- reduced motion ----
+   Replaces the old block that covered one property on one element. Everything above is a
+   colour, transform, or opacity change, so collapsing durations to a hair loses no meaning:
+   the end state is identical, it just arrives immediately.
+   Kept last so it wins regardless of what is added above it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The one deliberate exception: the upload spinner is not decoration, it is the only signal
+     that the request is still in flight. Freezing it would report a hang. It keeps turning,
+     slower. */
+  .spinner {
+    animation-duration: 1400ms !important;
+    animation-iteration-count: infinite !important;
+  }
 }
