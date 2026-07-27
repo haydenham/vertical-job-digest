@@ -67,11 +67,42 @@ the native-support no-op path, and that **the hero carries no `.reveal`** while 
 `Upload.test.tsx`'s retry test blew its 3000ms window; standalone it passes in 1.45s and every clean run
 since is green. CSS is not loaded in jsdom, so no test can see the stylesheet either way.
 
-**Next:** Hayden reviews/commits/PRs this branch. Then **PR 3** — em dashes (27 in rendered frontend copy,
-5 in `digest/render.py`, which will move pinned digest tests) + the Settings/Privacy back buttons.
-**Flagged, not fixed:** the posting panel has an entrance animation but no exit (it unmounts instantly), and
-the tour + delete-confirm modals have neither; making them symmetric needs a delayed-unmount state change in
-React, not CSS, so it stayed out of a motion-only branch.
+**PR 2 review turned up a tuning miss, fixed on `fix/landing-reveal-tuning`.** Live on the deployed
+landing the reveals read as "nothing different whatsoever". Not a bug — prod CSS was byte-identical to the
+local build (23,321 bytes, same hash) with every rule present. **Two separate causes.** (1) *Hayden could not
+see the page at all:* `App.tsx` `Root()` redirects an authed user straight to `/dashboard`, and `/` is the
+only route that renders `Landing`, so landing-only work is invisible to a signed-in reviewer — **review it
+logged-out or in a private window.** Worth remembering for every future landing change. (2) *The motion
+genuinely finished too early:* `entry 90%` completes while the block is still at the viewport edge, so the
+whole animation played in peripheral vision. Range now ends at **`entry 100%`** and `--reveal-distance` goes
+**18px → 32px**. Mechanism unchanged; D-098 amended in place rather than superseded, since no decision was
+re-litigated. Gate re-run green (146/146 + build).
+
+**PR 3 folded into the same branch (D-099): em dashes + back buttons.** **Em dashes removed from everything
+a user reads and nothing else** — 27 rendered frontend sites + 5 in `digest/render.py`. The digest was
+included *because* it is the primary surface (D-010); comments and docstrings keep theirs (~58 frontend,
+several hundred in `src/vja`) since cleaning them is a whole-repo mechanical diff for zero user-visible gain.
+**Three kept on purpose** (`PostingsTable:47`, `PostingPanel:78`, `Verdict:20`) — the "no value" glyph for a
+missing location or unscored posting, not prose. That is why the **regression pins are per-page, not global**:
+`Landing` + `Privacy` + the digest each assert their own rendered output is em-dash-free, while the dashboard
+components legitimately still carry one. Digest separators became `Company · Title (Location)` (reusing the
+middot the file already uses for `[verdict · score]`) and `Company: N` in the closure rollups; structure,
+D-056 thresholds and the subject line are untouched. **Back buttons on Settings + Privacy both point at `/`,
+not `/dashboard`** — `/settings` is login-gated only (D-094), so an unprofiled signed-in user can be there and
+`/dashboard` would bounce them to `/onboarding`; the smart root handles all three cases. Privacy's is a plain
+`<a>`, preserving its Router-free property (its test renders with no `MemoryRouter`). `/upload` keeps
+`/dashboard`, correctly — that route is already profile-gated.
+
+**Verification (both gates, this branch).** Frontend: eslint + `tsc -b --noEmit` + vitest **151/151** (was
+146; +2 back-link, +2 em-dash pins, +1 unprofiled case) + production build. Python: ruff format + check,
+mypy (143 files), import-linter (1 kept / 0 broken), pytest **750 passed, 35 deselected** (was 749).
+**Two frontend assertions moved with the copy** (`Upload.test.tsx:188`, `Dashboard.test.tsx:163`) and **five
+digest assertions** in `test_digest_render.py`; both were caught by running the suites, not by reading.
+
+**Next:** Hayden reviews/commits/PRs this branch (motion tuning + D-099 together). **Flagged, not fixed:**
+the posting panel has an entrance animation but no exit (it unmounts instantly), and the tour +
+delete-confirm modals have neither; making them symmetric needs a delayed-unmount state change in React, not
+CSS, so it stayed out of a motion-only branch.
 
 ---
 

@@ -25,7 +25,7 @@ const MOCK_ROWS: {
 }[] = [
   {
     company: "flightaware",
-    title: "Software Engineer — Backend",
+    title: "Software Engineer, Backend",
     location: "Austin, TX",
     date: "2026-07-13",
     verdict: "strong_yes",
@@ -94,8 +94,8 @@ const PILLARS = [
   {
     title: "Apply while opportunities are fresh",
     body:
-      "Start from newly opened roles, verified links, and a clear view of what has already closed " +
-      "— so your time goes toward opportunities that are still real.",
+      "Start from newly opened roles, verified links, and a clear view of what has already closed, " +
+      "so your time goes toward opportunities that are still real.",
   },
   {
     title: "Know where you stand",
@@ -152,7 +152,7 @@ export function Landing() {
           The technology jobs the big boards miss.
         </h1>
         <p className="hero-sub" style={step(1)}>
-          Rolefeed watches company career pages across aviation, energy, robotics, and trading —
+          Rolefeed watches company career pages across aviation, energy, robotics, and trading,
           surfacing overlooked technology roles and matching every new posting to your résumé, fresh
           each morning.
         </p>
@@ -182,7 +182,7 @@ export function Landing() {
         </div>
         <div className="stat reveal" style={step(3)}>
           <span className="stat-value">90%</span>
-          <span className="stat-label">of interviews go to first-day applicants — LinkedIn</span>
+          <span className="stat-label">of interviews go to first-day applicants (LinkedIn)</span>
         </div>
       </section>
 
@@ -241,7 +241,7 @@ export function Landing() {
           <a href="mailto:haydenham10@gmail.com">haydenham10@gmail.com</a> with any questions or
           inquiries.
         </p>
-        <p className="founder-sig">— Hayden, founder</p>
+        <p className="founder-sig">Hayden, founder</p>
       </section>
 
       <footer className="landing-footer reveal">
@@ -250,7 +250,7 @@ export function Landing() {
           Rolefeed
         </div>
         <p className="footer-note">
-          Rolefeed surfaces and reasons — it never auto-applies. Every application stays yours.
+          Rolefeed surfaces and reasons. It never auto-applies, and every application stays yours.
         </p>
         <p className="footer-copy">
           © 2026 Rolefeed · <a href="/privacy">Privacy</a>

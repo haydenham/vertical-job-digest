@@ -160,7 +160,7 @@ describe("Dashboard", () => {
     mockPostings.mockResolvedValue(empty());
     renderDashboard();
     expect(
-      await screen.findByText(/no matches yet — full results after tonight’s run/i),
+      await screen.findByText(/no matches yet\. full results after tonight’s run/i),
     ).toBeInTheDocument();
   });
 

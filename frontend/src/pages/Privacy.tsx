@@ -10,6 +10,12 @@ const CONTACT_EMAIL = "haydenham10@gmail.com";
 export function Privacy() {
   return (
     <div className="legal-page">
+      {/* A plain anchor, not a Router <Link>, to keep this page Router-free like every other link
+          on it — it has to render for logged-out visitors too. `/` is the smart root, so it lands
+          each visitor in the right place rather than assuming a dashboard exists. */}
+      <a href="/" className="back-link">
+        ← Back
+      </a>
       <h1 className="legal-title">Privacy notice</h1>
       <p className="legal-updated">Last updated: July 22, 2026</p>
 
@@ -30,25 +36,25 @@ export function Privacy() {
           against it.
         </li>
         <li>
-          <strong>Your match results and digest history</strong> — the fits, gaps, verdicts, and
+          <strong>Your match results and digest history</strong>: the fits, gaps, verdicts, and
           emails Rolefeed generates for you.
         </li>
       </ul>
 
       <h2>How your résumé is used</h2>
       <p>
-        Your résumé text is sent to third-party AI model providers — currently{" "}
-        <strong>Anthropic</strong> and <strong>OpenAI</strong> — to produce your match write-ups
+        Your résumé text is sent to third-party AI model providers (currently{" "}
+        <strong>Anthropic</strong> and <strong>OpenAI</strong>) to produce your match write-ups
         (what fits, what doesn&rsquo;t, and a verdict). Job-posting text is processed by the same
         providers. Under both providers&rsquo; API terms, data sent through their APIs is not used
-        to train their models. Your résumé is used only to generate your matches — nothing else.
+        to train their models. Your résumé is used only to generate your matches, nothing else.
       </p>
 
       <h2>Email</h2>
       <p>
         Rolefeed sends your morning digest to your Google account email through Resend, an email
         delivery service. To stop receiving digests, use the unsubscribe link in any digest&rsquo;s
-        footer or the toggle on your <a href="/settings">Settings page</a> — matching and your
+        footer or the toggle on your <a href="/settings">Settings page</a>. Matching and your
         dashboard keep working. You can also email{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
@@ -62,13 +68,13 @@ export function Privacy() {
       <h2>What Rolefeed never does</h2>
       <ul>
         <li>It never sells or shares your data with anyone beyond the services named above.</li>
-        <li>It never submits job applications on your behalf — every application stays yours.</li>
+        <li>It never submits job applications on your behalf. Every application stays yours.</li>
       </ul>
 
       <h2>Deleting your data</h2>
       <p>
         To delete your account and everything attached to it (résumé, matches, digest history), use
-        the delete button on your <a href="/settings">Settings page</a> — it takes effect
+        the delete button on your <a href="/settings">Settings page</a>. It takes effect
         immediately. You can also email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and
         it will be removed for you.
       </p>

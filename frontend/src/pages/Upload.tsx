@@ -24,7 +24,7 @@ const ERROR_LEADS: Record<number, string> = {
   409: "You're already set up in another vertical.",
   413: "That file is too large.",
   422: "That résumé couldn't be read as text.",
-  429: "Today's matching budget is used up — try again tomorrow.",
+  429: "Today's matching budget is used up. Try again tomorrow.",
 };
 
 interface FormError {
@@ -129,8 +129,8 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         <h1 className="auth-title">{isOnboarding ? "Set up your feed" : "Update your résumé"}</h1>
         <p className="auth-blurb">
           {isOnboarding
-            ? "Pick your vertical and upload a résumé — we’ll match new roles to it nightly."
-            : "Upload a new résumé — recent roles re-match within minutes, and your full refreshed results land after tonight’s run."}
+            ? "Pick your vertical and upload a résumé, and we’ll match new roles to it nightly."
+            : "Upload a new résumé. Recent roles re-match within minutes, and your full refreshed results land after tonight’s run."}
         </p>
 
         {isOnboarding ? (
@@ -215,7 +215,7 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         {phase === "finalizing" && (
           <div className="notice busy" role="status">
             <span className="spinner" aria-hidden="true" />
-            Uploaded — loading your dashboard…
+            Uploaded. Loading your dashboard…
           </div>
         )}
         {phase === "stalled" && (

@@ -162,9 +162,9 @@ def test_many_closures_roll_up_by_company() -> None:
     assert rendered.subject == "Grid Power Software: 0 new, 12 closed"  # true count, not summarized
     for body in (rendered.text, rendered.html):
         assert "12 roles across 3 companies" in body
-        assert "Boeing — 6" in body
-        assert "Airbus — 4" in body
-        assert "Vistra — 2" in body
+        assert "Boeing: 6" in body
+        assert "Airbus: 4" in body
+        assert "Vistra: 2" in body
     # Crucially NOT enumerated per role — the per-role title never appears.
     assert "Software Engineer" not in rendered.text
     assert "Software Engineer" not in rendered.html
@@ -183,13 +183,13 @@ def test_closure_detail_boundary_at_limit() -> None:
     r10 = render_digest(_contents(closed=_closures({"Boeing": 10})))
     assert "Software Engineer" in r10.text and "roles across" not in r10.text
     r11 = render_digest(_contents(closed=_closures({"Boeing": 11})))
-    assert "11 roles across 1 company" in r11.text and "Boeing — 11" in r11.text
+    assert "11 roles across 1 company" in r11.text and "Boeing: 11" in r11.text
 
 
 def test_few_closures_stay_detailed() -> None:
     closed = [_posting("a", company="Camus"), _posting("b", company="Boeing")]
     rendered = render_digest(_contents(closed=closed))
-    assert "Camus — Software Engineer" in rendered.text
+    assert "Camus · Software Engineer" in rendered.text
     assert "roles across" not in rendered.text
 
 
@@ -215,3 +215,17 @@ def test_unsubscribe_url_renders_escaped_footer_in_both_bodies() -> None:
     assert 'href="https://role-feed.com/unsubscribe?token=t&amp;x=1"' in rendered.html
     assert rendered.html.index("Unsubscribe") < rendered.html.index("</body>")
     assert f"Unsubscribe (pauses this email; your dashboard keeps working): {url}" in rendered.text
+
+
+def test_digest_copy_carries_no_em_dashes() -> None:
+    """Regression pin: the digest is the primary user-facing surface (D-010), and em dashes were
+    removed from it deliberately. Covers both the rollup path and the per-role path, plus the
+    unsubscribe footer, since each built its own separator."""
+    few = render_digest(
+        _contents(closed=[_posting("a", company="Camus")]), unsubscribe_url="https://x/u"
+    )
+    many = render_digest(_contents(closed=_closures({"Boeing": 6, "Airbus": 4, "Vistra": 2})))
+    for rendered in (few, many):
+        assert "—" not in rendered.text
+        assert "—" not in rendered.html
+        assert "—" not in rendered.subject

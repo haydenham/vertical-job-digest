@@ -4,7 +4,7 @@ const WINDOWS: { value: Window; label: string; title: string }[] = [
   {
     value: "new_today",
     label: "New today",
-    title: "Roles first seen today — the same new roles eligible for today's digest.",
+    title: "Roles first seen today: the same new roles eligible for today's digest.",
   },
   { value: "week", label: "1 week", title: "Roles posted or updated within the last 7 days." },
   {

@@ -90,7 +90,7 @@ export function Dashboard({ vertical }: { vertical: string }) {
       {matching && (
         <div className="notice busy banner" role="status">
           <span className="spinner" aria-hidden="true" />
-          Matching in progress — results update live
+          Matching in progress. Results update live
         </div>
       )}
 
@@ -117,7 +117,7 @@ export function Dashboard({ vertical }: { vertical: string }) {
       ) : emptyMatched && matching ? (
         <div className="notice">Matches appear here as they’re computed.</div>
       ) : emptyMatched && profile?.backfill_status === "done" ? (
-        <div className="notice">No matches yet — full results after tonight’s run.</div>
+        <div className="notice">No matches yet. Full results after tonight’s run.</div>
       ) : (
         <div className="notice">No postings match these filters</div>
       )}

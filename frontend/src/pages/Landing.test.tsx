@@ -86,6 +86,14 @@ describe("Landing", () => {
     expect(container.querySelector(".landing-footer")).toHaveClass("reveal");
   });
 
+  // Regression pin for the em-dash pass. The landing is pure marketing prose with no data cells,
+  // so unlike the dashboard it has no legitimate `—` (the kept ones are empty-value glyphs in
+  // PostingsTable / PostingPanel / Verdict).
+  it("carries no em dashes in its copy", () => {
+    const { container } = render(<Landing />);
+    expect(container.textContent).not.toContain("—");
+  });
+
   it("staggers each grid within the cap, so the last card never arrives late", () => {
     const { container } = render(<Landing />);
     const indices = [...container.querySelectorAll<HTMLElement>(".reveal")].map((el) =>
