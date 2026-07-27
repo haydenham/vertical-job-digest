@@ -35,7 +35,7 @@
   --dur-fast: 150ms;
   --dur-mid: 300ms;
   --dur-slow: 700ms;
-  --reveal-distance: 18px;
+  --reveal-distance: 32px;
   --stagger: 70ms;
 
   color-scheme: dark;
@@ -1091,10 +1091,12 @@ summary:focus-visible {
     animation-timeline: view();
     /* Ends on `entry`, not `cover`: a block near the bottom of the page can never reach a cover
        percentage once the document stops scrolling, and would stay stuck half-faded. Finishing
-       when the element has fully entered the viewport is reachable everywhere, footer included.
-       The per-item start offset is what staggers a grid — animation-delay does nothing on a
-       scroll timeline. */
-    animation-range: entry calc(10% + var(--i) * 4%) entry 90%;
+       at full entry is reachable everywhere, footer included.
+       It ends at 100% rather than earlier because anything less completes while the block is
+       still down at the viewport edge — the motion runs, but out in peripheral vision, which
+       reads as nothing happening at all. The per-item start offset is what staggers a grid;
+       animation-delay does nothing on a scroll timeline. */
+    animation-range: entry calc(10% + var(--i) * 4%) entry 100%;
   }
 }
 
@@ -1367,6 +1369,12 @@ summary:focus-visible {
   padding: 40px 24px 64px;
   font-size: 15px;
   line-height: 1.65;
+}
+/* .legal-page is a block, not a grid, so the shared .back-link's `justify-self` does nothing
+   here — it needs its own box and its own gap under it. */
+.legal-page .back-link {
+  display: inline-block;
+  margin-bottom: 20px;
 }
 .legal-page h2 {
   margin: 28px 0 8px;

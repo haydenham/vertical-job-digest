@@ -41,11 +41,11 @@ def _humanize(vertical: str) -> str:
 
 
 def _label(posting: DigestPosting) -> str:
-    """`Company — Title (Location)`, gracefully degrading when fields are missing."""
+    """`Company · Title (Location)`, gracefully degrading when fields are missing."""
     parts = [posting.company]
     if posting.title:
         parts.append(posting.title)
-    head = " — ".join(parts)
+    head = " · ".join(parts)
     return f"{head} ({posting.location})" if posting.location else head
 
 
@@ -95,7 +95,7 @@ def _render_text(name: str, contents: DigestContents, *, unsubscribe_url: str | 
         for posting in contents.new:
             tag = _verdict_tag(posting)
             head = f"{_label(posting)} {tag}".rstrip()
-            link = f" — {posting.apply_url}" if posting.apply_url else ""
+            link = f" · {posting.apply_url}" if posting.apply_url else ""
             lines.append(f"  • {head}{link}")
             if posting.rationale:
                 lines.append(f"      {posting.rationale}")
@@ -113,7 +113,7 @@ def _render_text(name: str, contents: DigestContents, *, unsubscribe_url: str | 
         lines.append(
             f"  {len(contents.closed)} roles across {companies} {_plural(companies, 'company')}:"
         )
-        lines.extend(f"    • {company} — {n}" for company, n in top)
+        lines.extend(f"    • {company}: {n}" for company, n in top)
         if tail:
             tail_roles = sum(n for _, n in tail)
             lines.append(
@@ -139,7 +139,7 @@ def _render_html(name: str, contents: DigestContents, *, unsubscribe_url: str | 
         href = escape(unsubscribe_url, quote=True)
         blocks.append(
             '<hr><p style="color:#888;font-size:12px">You get this digest because you signed up '
-            f'for Rolefeed. <a href="{href}">Unsubscribe</a> — matching and your dashboard keep '
+            f'for Rolefeed. <a href="{href}">Unsubscribe</a>. Matching and your dashboard keep '
             "working.</p>"
         )
     body = "\n".join(blocks)
@@ -152,7 +152,7 @@ def _closed_html(closed: list[DigestPosting]) -> str:
         return _html_list(closed, linked=False)
     top, tail = _rollup_split(closed)
     companies = len(top) + len(tail)
-    items = [f"<li>{escape(company)} — {n}</li>" for company, n in top]
+    items = [f"<li>{escape(company)}: {n}</li>" for company, n in top]
     if tail:
         tail_roles = sum(n for _, n in tail)
         items.append(

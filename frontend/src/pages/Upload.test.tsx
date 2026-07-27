@@ -185,7 +185,7 @@ describe("Upload", () => {
     fireEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
 
     await act(() => vi.advanceTimersByTimeAsync(0)); // POST resolves → finalizing
-    expect(screen.getByText(/uploaded — loading your dashboard/i)).toBeInTheDocument();
+    expect(screen.getByText(/uploaded\. loading your dashboard/i)).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(6_000)); // exhaust the bounded retries
     expect(screen.getByText(/your résumé is uploaded/i)).toBeInTheDocument();

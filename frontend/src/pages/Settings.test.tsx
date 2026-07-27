@@ -188,4 +188,23 @@ describe("Settings", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't reach the server/i);
   });
+
+  // The back link targets `/`, not `/dashboard`: this page is login-gated only (D-094), so a
+  // signed-in user with no profile can be here, and only the smart root routes all three cases.
+  it("offers a back link to the smart root, not straight to the dashboard", async () => {
+    mockUseAuth.mockReturnValue(auth());
+    renderSettings();
+
+    const back = screen.getByRole("link", { name: /back/i });
+    expect(back).toHaveAttribute("href", "/");
+
+    await userEvent.click(back);
+    expect(await screen.findByText("root-page")).toBeInTheDocument();
+  });
+
+  it("keeps the back link available to a signed-in user with no profile yet", () => {
+    mockUseAuth.mockReturnValue(auth({ profile: null }));
+    renderSettings();
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/");
+  });
 });

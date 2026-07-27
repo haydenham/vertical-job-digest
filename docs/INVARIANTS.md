@@ -206,6 +206,17 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   built in a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**:
   `vja-api` (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042,
   D-058, D-059, D-060, D-064, D-065, D-083)
+- **No em dashes in anything a user reads** — rendered SPA copy and the digest email (`digest/render.py`,
+  which uses `·` between company and title and `Company: N` in closure rollups). Code comments and
+  docstrings are exempt. **Three deliberate exceptions**, all the "no value" glyph rather than prose:
+  `PostingsTable`/`PostingPanel` missing location and `Verdict`'s unscored posting. Pinned per page
+  (`Landing`, `Privacy`, and the digest assert their own rendered output), never globally, because the
+  dashboard components legitimately still carry one. (D-099)
+- **Every non-dashboard page has a back link, and the login-gated ones point at `/`, not `/dashboard`** —
+  `/settings` is reachable by a signed-in user with no profile, for whom `/dashboard` bounces to
+  `/onboarding`; the smart root routes all three cases. `/privacy` uses a plain `<a>` to stay Router-free
+  for logged-out visitors. `/upload`'s link keeps `/dashboard` (that route is already profile-gated).
+  (D-099, D-094, D-065)
 - **All UI motion comes from six tokens in `theme.css`'s `:root`** — `--ease-out-expo` (things that
   arrive) / `--ease-in-out` (states that flip back and forth), `--dur-fast` 150ms (hover/focus/press) /
   `--dur-mid` 300ms (a surface that moves and stops) / `--dur-slow` 700ms (reveals), plus

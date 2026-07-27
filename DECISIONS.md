@@ -2133,3 +2133,43 @@ timeline). Max index is 4, so the tail lands at 280ms, inside the ~400ms budget.
 content animates on load, never on scroll**, and reveals are applied to section blocks and card grids only.
 **No dependency was added** — the whole thing is CSS plus one 48-line hook. Frontend-only, no API contract
 moves, no migration. References D-080, D-081, D-042, D-021.
+
+**Amended 2026-07-27 (same decision, two values).** Reviewed live on the deployed landing and the reveals
+read as nothing happening. Cause was not amplitude but *when the motion finished*: `entry 90%` completes
+while the block is still at the viewport edge, so the whole animation played in peripheral vision. Range now
+ends at **`entry 100%`** and `--reveal-distance` goes **18px → 32px**. The mechanism, the two paths, and the
+`entry`-not-`cover` rule are unchanged. Also learned and worth writing down: the landing is unreachable while
+signed in (`App.tsx` `Root()` redirects an authed user to `/dashboard`), so **landing-only work must be
+reviewed logged-out or in a private window** — a signed-in reviewer sees literally none of it.
+
+### D-099 · Beta hardening · Product copy carries no em dashes; back buttons on the non-dashboard pages · accepted · 2026-07-27
+Two small usability items from the same session as D-098, both Hayden's calls by questionnaire.
+
+**Em dashes are removed from everything a user reads, and only that.** Scope is **rendered frontend copy
+(27 sites) plus the digest email (5 sites in `digest/render.py`)** — the digest is included deliberately
+because it is the *primary* surface (D-010), so excluding it would have left em dashes on the thing most
+users actually see. **Code comments and docstrings keep theirs** (~58 in the frontend, several hundred
+across `src/vja`): cleaning them would be a mechanical diff touching nearly every file in the repo for zero
+user-visible gain, and would have swamped review of the motion work it shipped beside.
+
+**Three em dashes are kept on purpose**, in `PostingsTable.tsx:47`, `PostingPanel.tsx:78`, and
+`Verdict.tsx:20`. These are not prose — they are the typographic "no value" glyph for a missing location or
+an unscored posting. Hayden chose to keep them over an en dash or spelled-out text: they read correctly at a
+glance and keep the dense table aligned. **This is why the regression pins are per-page rather than global** —
+`Landing` and `Privacy` assert their rendered text contains no `—`, and the digest asserts the same across
+its text, HTML, and subject, but the dashboard components legitimately still contain one.
+
+**Digest separators.** `Company — Title (Location)` becomes **`Company · Title (Location)`**, and the apply
+link's separator moves to `·` as well, reusing the middot the same file already uses for `[verdict · score]`
+rather than inventing a second idiom. Closure rollups go to `Company: N` in both the text and HTML bodies,
+where a colon reads more naturally before a count than a middot would. The email's structure, the D-056
+rollup thresholds, and the subject line are all untouched.
+
+**Back buttons on Settings and Privacy both point at `/`, not `/dashboard`.** This is the non-obvious part:
+`/settings` is **login-gated only** (D-094), so a signed-in user who has not onboarded can reach it, and for
+them `/dashboard` bounces onward to `/onboarding`. `/` is the smart root (D-065) and is the single target
+that routes a profiled user, an unprofiled user, and a logged-out visitor each to the right place. Privacy's
+uses a **plain `<a>`, not a Router `<Link>`**, preserving that page's existing Router-free property — it has
+to render for logged-out visitors, and its test renders it with no `MemoryRouter` at all. `/upload`'s
+existing back link still points at `/dashboard`, correctly: that route is already profile-gated, so the
+ambiguity does not arise there. References D-094, D-065, D-010, D-056, D-098, D-021.

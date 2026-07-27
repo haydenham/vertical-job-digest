@@ -44,4 +44,16 @@ describe("Privacy", () => {
       expect(link).toHaveAttribute("href", "mailto:haydenham10@gmail.com");
     }
   });
+
+  it("carries no em dashes in its copy", () => {
+    const { container } = render(<Privacy />);
+    expect(container.textContent).not.toContain("—");
+  });
+
+  // A plain anchor, not a Router <Link> — this page renders for logged-out visitors and stays
+  // Router-free, which is also why the test can render it without a MemoryRouter at all.
+  it("offers a back link to the smart root without pulling in the router", () => {
+    render(<Privacy />);
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/");
+  });
 });

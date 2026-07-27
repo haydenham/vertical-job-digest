@@ -14,7 +14,7 @@ const SLIDES = [
     title: "Matched for you",
     body:
       "This view shows roles recommended for your current résumé. Every verdict explains what " +
-      "fits, what is missing, and whether the role is worth your time — including an honest no.",
+      "fits, what is missing, and whether the role is worth your time, including an honest no.",
   },
   {
     title: "Explore every in-scope role",
@@ -26,7 +26,7 @@ const SLIDES = [
   {
     title: "Open details and keep your résumé current",
     body:
-      "Click any row — the ▸ on the right — to see its salary, rationale, fits, gaps, and apply " +
+      "Click any row (the ▸ on the right) to see its salary, rationale, fits, gaps, and apply " +
       "link. When your résumé changes, recent roles re-match within minutes and the full refresh " +
       "completes with the next nightly run.",
   },

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { ApiError, deleteAccount, setDigestPaused } from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -87,6 +87,12 @@ export function Settings() {
 
   return (
     <div className="settings-page">
+      {/* Points at the smart root, not /dashboard: this page is login-gated only, so a user who
+          has not onboarded yet can reach it, and `/` is the one route that sends a profiled user,
+          an unprofiled one, and a logged-out one each to the right place (D-065). */}
+      <Link to="/" className="back-link">
+        ← Back
+      </Link>
       <h1 className="settings-title">Settings</h1>
 
       <section className="panel settings-section">
@@ -104,7 +110,7 @@ export function Settings() {
         <p className="settings-hint">
           {receiving
             ? "New matches land in your inbox after each nightly run."
-            : "Digest emails are paused. Matching and your dashboard keep running — turn the toggle back on to resume, and you'll pick up where the digest left off."}
+            : "Digest emails are paused. Matching and your dashboard keep running. Turn the toggle back on to resume, and you'll pick up where the digest left off."}
         </p>
         {digestError && (
           <div className="notice error" role="alert">
@@ -142,7 +148,7 @@ export function Settings() {
             <h2 id="delete-confirm-title">Delete your account?</h2>
             <p>
               This permanently removes your account, résumé profile, matches, and digest history.
-              It can&rsquo;t be undone — to come back, you&rsquo;d sign up again from scratch.
+              It can&rsquo;t be undone. To come back, you&rsquo;d sign up again from scratch.
             </p>
             {deleteError && (
               <div className="notice error" role="alert">
