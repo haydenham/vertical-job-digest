@@ -41,6 +41,20 @@ hero glow/gradient. Radius 10px (chips/small 6px).
 - Layout dense; CSS grid + gap does the spacing.
 - Buttons: quiet by default (raised surface + border); primary = accent border/tint, still flat.
 
+## Motion (D-098)
+Calm and deliberate, never decorative. Six tokens in `theme.css` are the entire vocabulary; a one-off
+duration or curve anywhere in the file is a defect.
+- curves: `--ease-out-expo` for things that arrive (entrances, scroll reveals) · `--ease-in-out` for
+  states that flip back and forth (hover, focus, toggles)
+- durations: `--dur-fast` 150ms (hover/focus/press/colour) · `--dur-mid` 300ms (a surface that moves and
+  stops: panels, modals) · `--dur-slow` 700ms (reveals, hero entrance)
+- reveals: `--reveal-distance` 18px, `--stagger` 70ms, total stagger capped near 400ms
+Only animate colour, `transform`, `opacity`. Never `height`/`width`/`top`/`left`/`margin`/`padding` — they
+reflow every frame, which is what "clunky" actually is. Scroll reveals go on section blocks and card grids
+only, never every element and never above the fold (the hero animates on load instead). Every interactive
+element gets a `:focus-visible` ring. All of it collapses under `prefers-reduced-motion`, except the upload
+spinner, which slows rather than stops — a frozen spinner reports a hang that has not happened.
+
 ## Don'ts
 Terminal motifs ($ prompt, blinking ▮ cursor, `//comment` strings, `~/paths` as chrome);
 more than one accent hue; gradient/glow inside the app (landing hero excepted); decorative

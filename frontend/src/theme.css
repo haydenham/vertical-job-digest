@@ -52,6 +52,10 @@ body,
   height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -1055,6 +1059,60 @@ summary:focus-visible {
   white-space: nowrap;
 }
 
+/* ---- scroll reveals ----
+   One shared keyframe, two delivery paths, and the element is only ever hidden when one of them
+   is certain to bring it back.
+
+   Path 1 (preferred) is native CSS scroll-driven animation: no JS, no observer, no main-thread
+   work. Path 2 is the `useScrollReveal` IntersectionObserver hook, which arms itself by setting
+   `js-reveal` on <html> — so a browser with neither path, or with JS off, simply renders the
+   finished state instead of a blank page.
+
+   `--i` is the stagger index, set per item in the markup. Both paths cap out around 280ms at
+   --i: 4, well inside the "last item must not arrive late" budget. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-distance));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.reveal {
+  --i: 0;
+}
+
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal-in var(--dur-slow) var(--ease-out-expo) both;
+    animation-timeline: view();
+    /* Ends on `entry`, not `cover`: a block near the bottom of the page can never reach a cover
+       percentage once the document stops scrolling, and would stay stuck half-faded. Finishing
+       when the element has fully entered the viewport is reachable everywhere, footer included.
+       The per-item start offset is what staggers a grid — animation-delay does nothing on a
+       scroll timeline. */
+    animation-range: entry calc(10% + var(--i) * 4%) entry 90%;
+  }
+}
+
+@supports not (animation-timeline: view()) {
+  .js-reveal .reveal {
+    opacity: 0;
+    transform: translateY(var(--reveal-distance));
+    transition:
+      opacity var(--dur-slow) var(--ease-out-expo),
+      transform var(--dur-slow) var(--ease-out-expo);
+    transition-delay: calc(var(--i) * var(--stagger));
+  }
+  .js-reveal .reveal.is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---- landing (marketing page — UI rework PR 1, D-080) ----
    Marketing type scale + the one restrained hero glow DESIGN.md allows on the landing only.
    Everything below is scoped under .landing / .landing-footer; app rules stay untouched. */
@@ -1062,6 +1120,12 @@ summary:focus-visible {
   display: grid;
   gap: 96px;
   padding-top: 48px;
+}
+
+/* Jump-link landing spot. The header is a normal in-flow element, not sticky, so this is
+   breathing room rather than header compensation — nothing overlaps the target. */
+.landing section[id] {
+  scroll-margin-top: 32px;
 }
 
 .landing .section-title {
@@ -1097,8 +1161,14 @@ summary:focus-visible {
   background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(110, 121, 214, 0.14), transparent 70%);
   pointer-events: none;
 }
+/* Above-the-fold content animates on load, never on scroll — there is no scroll position at
+   which a hero "arrives". Same keyframe as the reveals, driven by delay instead of a timeline;
+   `both` holds the from-state so nothing flashes before the delay elapses. Last child lands at
+   210ms + 700ms. */
 .hero > * {
   position: relative;
+  animation: reveal-in var(--dur-slow) var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
 }
 .hero-title {
   margin: 0;
@@ -1511,5 +1581,14 @@ summary:focus-visible {
   .spinner {
     animation-duration: 1400ms !important;
     animation-iteration-count: infinite !important;
+  }
+  /* Scroll-driven animations are scrubbed by scroll position, so collapsing animation-duration
+     above does not touch them — they need the animation cancelled outright. The hero's load
+     stagger goes with it. */
+  .reveal,
+  .hero > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

@@ -206,6 +206,20 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   built in a `node` stage, package `uv sync --no-editable` into a `uv` runtime) with **two run targets**:
   `vja-api` (Cloud Run service) + `vja-nightly` (Cloud Run Job, entrypoint override) — no second build. (D-042,
   D-058, D-059, D-060, D-064, D-065, D-083)
+- **All UI motion comes from six tokens in `theme.css`'s `:root`** — `--ease-out-expo` (things that
+  arrive) / `--ease-in-out` (states that flip back and forth), `--dur-fast` 150ms (hover/focus/press) /
+  `--dur-mid` 300ms (a surface that moves and stops) / `--dur-slow` 700ms (reveals), plus
+  `--reveal-distance` and `--stagger`. **No one-off duration or curve belongs anywhere in the file.** Every
+  transitioned property must be a colour, `transform`, or `opacity` — never `height`/`width`/`top`/`left`/
+  `margin`/`padding`, which reflow each frame. **Scroll reveals are native-first** (`animation-timeline:
+  view()` inside `@supports`) with a single `IntersectionObserver` hook as fallback, and the hidden state is
+  **only ever armed once something is guaranteed to un-hide it** (the hook sets `js-reveal` on `<html>` after
+  confirming an observer exists) — no JS, no observer, or no support renders the finished page, never a blank
+  one. Reveal ranges end on `entry`, not `cover`, or bottom-of-document blocks strand half-faded. Reveals
+  apply to section blocks and card grids only; above-the-fold hero content animates **on load**, not on
+  scroll. Every interactive element has a `:focus-visible` ring, and everything above is disabled under
+  `prefers-reduced-motion` — with one deliberate exception, the upload spinner, which keeps turning (slower)
+  because freezing it would report a hang on a live request. (D-098, D-080, D-081)
 - **Résumé upload is the SPA's only write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
   `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
