@@ -2173,3 +2173,59 @@ uses a **plain `<a>`, not a Router `<Link>`**, preserving that page's existing R
 to render for logged-out visitors, and its test renders it with no `MemoryRouter` at all. `/upload`'s
 existing back link still points at `/dashboard`, correctly: that route is already profile-gated, so the
 ambiguity does not arise there. References D-094, D-065, D-010, D-056, D-098, D-021.
+
+### D-100 · Beta hardening · In-app feedback dialog, emailed to the operator and stored nowhere · accepted · 2026-07-27
+Real beta users are signed up, and D-085 named "incorporating beta-user feedback" as one of the three
+product loops after beta exit — but there was **no feedback channel at all**. A `grep -ri feedback` over the
+repo returned only planning prose. This closes that.
+
+**A themed in-app form, not a Google Form.** The Google Form was the cheap option and was genuinely
+considered: zero code, responses in a Sheet, shippable in an hour. Rejected on two grounds. It drops a beta
+user onto a white Google page in the middle of a dark product whose entire pitch is polish (D-080), and it
+cannot be embedded to avoid that — an iframe under the app's theme looks worse than the bounce. And it makes
+the user retype context the app already knows: who they are, which vertical they are in, what page they were
+on. The in-app form attaches all of that server-side.
+
+**Email-only. There is no `feedback` table, and that is the decision, not an omission.** A table looked
+nearly free until its second-order costs were counted: a schema change means a **manual pre-merge Alembic
+run against Neon** (D-083, migrations are deliberately not automated), and free text tied to a user email
+becomes PII that `DELETE /api/me`'s atomic deletion would have to cover (D-094) — a real change to the
+deletion transaction and its tests. With a handful of beta users, an inbox is a sufficient record. The
+upgrade path if that stops holding is exactly those two pieces of work, deferred rather than avoided.
+
+**Two facts made this a one-PR change with no infra work.** The Cloud Run **service already mounts
+`RESEND_API_KEY`, `VJA_DIGEST_FROM`, and `VJA_DIGEST_RECIPIENT`** (`ship.sh`), that last being the ops/alert
+recipient (D-037) — so no new secret and no `ship.sh` edit. And the module lives at
+**`src/vja/digest/feedback.py`, inside the `digest` package**, which is what lets it reuse
+`render.RenderedEmail` and `send.send_email` directly: import-linter's layers contract treats same-layer
+siblings as *independent*, so a top-level `vja/feedback.py` importing `vja.digest` would have been a
+contract violation. `api → digest` is already an established edge (`app.py` imports
+`digest.unsubscribe`). **No `pyproject.toml` layer edit, contract stays 1 kept / 0 broken.**
+
+**`POST /api/feedback` is the third write endpoint** on an API whose read-only-ness is a standing invariant
+(D-005), joining résumé upload (D-057) and the settings surface (D-094). INVARIANTS updated in the same
+session. Behind `require_user`. The client sends only `category`, `message`, and `page`; **identity,
+vertical, and user agent are resolved server-side**, so extra body fields cannot let a caller report as
+somebody else (pinned by a test). Guards: 422 on an empty or over-cap message, 502 on a provider failure,
+503 when mail is unconfigured (local dev) — the last two both retryable, with the typed text preserved in
+the dialog so Send is a real retry. **PII discipline: the message body is never logged**, matching the
+résumé path.
+
+**Abuse guard is the length cap alone (5,000 chars), by choice.** `require_user` already restricts this to
+signed-in Google accounts in an invite-only beta, so the realistic failure is one person double-clicking,
+not attack traffic. A durable per-user throttle would need a `users` column and therefore the same manual
+Neon migration the table would have — not worth it for the threat.
+
+**Placement: a nav button opening a modal, not a route and not a dashboard tab.** The original suggestion was
+a dashboard tab; the dashboard's only tab-shaped controls are Matched/All in-scope and the recency windows,
+which are *data views* over one table, so a feedback tab there would have been a category error. A modal
+also means reporting a bug never costs the user their place in the table. The button sits **outside** the
+`profile &&` branch in the nav: a user stuck in onboarding is exactly who needs to report that it is stuck.
+The dialog deliberately has **no entrance animation**, matching its two sibling dialogs — D-098 already
+flagged modal entrance/exit symmetry as its own piece of work, and animating only this one would deepen the
+inconsistency.
+
+**The privacy notice gained one sentence**, because without it an existing promise became untrue: feedback
+lands in a personal inbox and is *not* removed by account deletion, while the Deleting-your-data section
+promises removal of "everything attached to" the account. References D-094, D-085, D-083, D-057, D-037,
+D-005, D-080, D-098, D-021.

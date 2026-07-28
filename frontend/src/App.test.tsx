@@ -211,6 +211,42 @@ describe("App routing + guards", () => {
     expect(screen.getByText("settings-page")).toBeInTheDocument();
   });
 
+  // --- in-app feedback (D-100) ---
+
+  it("opens the feedback dialog from the nav, on top of the page you were on", async () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
+    window.localStorage.setItem("rolefeed.tour.seen", "1"); // keep the tour out of the way
+    renderAt("/dashboard");
+
+    await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+
+    expect(screen.getByRole("dialog", { name: /send feedback/i })).toBeInTheDocument();
+    // The dashboard is still mounted behind it: reporting a bug costs you nothing.
+    expect(screen.getByText("dashboard-page")).toBeInTheDocument();
+  });
+
+  it("offers feedback to a signed-in user who has not onboarded yet", () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
+    renderAt("/onboarding");
+    expect(screen.getByRole("button", { name: "Feedback" })).toBeInTheDocument();
+  });
+
+  it("hides feedback when logged out", () => {
+    mockUseAuth.mockReturnValue(auth({ user: null }));
+    renderAt("/");
+    expect(screen.queryByRole("button", { name: "Feedback" })).not.toBeInTheDocument();
+  });
+
+  it("closes the feedback dialog again", async () => {
+    mockUseAuth.mockReturnValue(auth({ user: alice, profile: null }));
+    renderAt("/onboarding");
+
+    await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   // --- privacy notice (compliance PR 1, D-094) ---
 
   it("/privacy is reachable logged-out, with the shell footer's privacy link", () => {

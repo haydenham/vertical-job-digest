@@ -209,6 +209,34 @@ export async function deleteAccount(): Promise<void> {
   }
 }
 
+// ---- in-app feedback (D-100) ----
+
+// One-to-one with `FeedbackCategory` in `src/vja/digest/feedback.py`; keep them in sync.
+export type FeedbackCategory = "bug" | "idea" | "confusing" | "other";
+
+// Max message length, mirroring `FEEDBACK_MAX_CHARS` server-side. The client enforces it so the
+// user sees a counter instead of a 422; the server enforces it because clients lie.
+export const FEEDBACK_MAX_CHARS = 5000;
+
+// Send one report. Nothing is stored: the server emails it to the operator with the user's
+// identity, vertical, and user agent attached server-side, so this body stays minimal. 202 on
+// success; 502 (provider down) and 503 (mail unconfigured) are both retryable.
+export async function sendFeedback(
+  category: FeedbackCategory,
+  message: string,
+  page: string,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/api/feedback`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, message, page }),
+  });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, await errorDetail(resp));
+  }
+}
+
 // ---- résumé upload (the first write path, D-057) ----
 
 // A hung upload must not leave the form on "Uploading…" forever — abort and let the user retry

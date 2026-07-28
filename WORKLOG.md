@@ -5,6 +5,78 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-27 — D-100: in-app feedback dialog, emailed to the operator, stored nowhere
+
+**Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs this branch" is **done** — the
+motion tuning + D-099 merged as **#108** (`5166f8e`) and `main` is clean. **Still open, all ops steps rather
+than code, and carried forward again:** the trading seed import into Neon (`/api/verticals` has offered
+**Trading & Markets** since #105 while Neon holds zero trading employers — export the Neon
+`VJA_DATABASE_URL` and run `vja-import-employers data/seed/employers_seed.csv`), the three Rippling
+activations (`vja-review set-ats` → `approve` on `#103`/`#139`/`#141`), and D-095 PR 1's comp fill-rate
+re-run against Neon.
+
+**Task:** a feedback form for beta users. Open question in the brief was Google Form versus a themed
+in-app survey, plus where it lives.
+
+**The build-vs-outsource call turned on two exploration findings, not on taste.** (1) The Cloud Run
+**service already mounts `RESEND_API_KEY`, `VJA_DIGEST_FROM`, and `VJA_DIGEST_RECIPIENT`**
+(`ship.sh:59`) — that last one is the ops/alert recipient (D-037), so an in-app form can email Hayden with
+**no new secret and no `ship.sh` edit**. (2) The expensive variant was never the form, it was the *table*:
+a schema change means a manual pre-merge Neon migration (D-083) and puts user-authored free text inside
+`DELETE /api/me`'s atomic deletion (D-094). Email-only sidesteps both. Net: one PR, no migration, no
+dependency, no infra change. Recorded as **D-100**.
+
+**Scope decisions (Hayden, this session).** In-app themed form that emails the results · **nav button
+opening a modal**, not a route and not a dashboard tab — the dashboard's only tab-shaped controls are
+Matched/All in-scope and the recency windows, which are data views over one table, so a feedback tab there
+would be a category error, and a modal costs the user nothing in place · **length cap only** as the abuse
+guard, no `users` column and therefore no migration.
+
+**One layering detail that decided the file's location.** The module is
+**`src/vja/digest/feedback.py`, inside the `digest` package**. A top-level `vja/feedback.py` importing
+`vja.digest.render`/`send` would have **broken the import-linter contract** — same-layer siblings are
+*independent* under a layers contract, not free to import each other. Inside the package the reuse is
+intra-layer and legal, and `api → digest` is already an established edge (`app.py` imports
+`digest.unsubscribe`). Contract stayed **1 kept / 0 broken with no `pyproject.toml` edit**.
+
+**Built on `feat/in-app-feedback` (uncommitted; Hayden owns commit/PR).** Backend: the render/send module
+(HTML-escapes every user-supplied value — the report is untrusted text landing in a mail client) plus
+`POST /api/feedback`, the **third write endpoint** on a read-only API (D-005), joining résumé upload and
+the settings surface. The client sends only `category`/`message`/`page`; **identity, vertical, and user
+agent are resolved server-side**, so extra body fields cannot forge a reporter. 422 empty/over-cap · 502
+provider failure · 503 unconfigured mail (local dev) · message body never logged. Frontend: `FeedbackDialog`
+reusing the tour/delete-confirm scaffold and the `.segmented` control, with the file's first `<textarea>`
+styling; the nav button sits **outside** the `profile &&` branch, because a user stuck in onboarding is
+exactly who needs to report that it is stuck.
+
+**Two judgment calls worth recording.** The dialog has **no entrance animation** on purpose: neither sibling
+dialog has one, and D-098 already flagged modal entrance/exit symmetry as its own piece of work, so
+animating this one alone would deepen the inconsistency rather than fix it. And the over-cap character
+counter uses the accent-tint error colour `.notice.error` already uses, **not** the deletion red, which
+`theme.css` reserves for the danger zone ("the palette's one red family; used nowhere else").
+
+**The privacy notice gained a sentence, and it was not optional.** Feedback lands in a personal inbox and is
+**not** removed by account deletion, while the Deleting-your-data section promises removal of "everything
+attached to" the account. Without the disclosure, shipping this would have quietly made an existing promise
+untrue.
+
+**Verification.** Python: **774 passed, 35 deselected** (was 750; +24 — a render unit suite incl. an
+HTML-escaping regression, and an integration suite covering 401 / the happy path / no-profile / identity
+forgery / all four categories / empty + at-cap + over-cap / unknown category / 502 / 503 / the
+never-logged-body rule). ruff format + check, mypy (144 files), import-linter 1 kept / 0 broken,
+`uv lock --check`. Frontend: eslint + `tsc -b --noEmit` + vitest **167/167** (was 151; +11 dialog, +4 App
+nav, +1 privacy disclosure) + production build. *One test-only gotcha rediscovered:* Alembic's test-only
+`fileConfig` disables loggers imported before it runs, so the never-logged assertion has to re-enable
+`vja.api.app` first — the same dance `tests/unit/test_llm.py` already does.
+
+**Next:** Hayden reviews/commits/PRs. **No migration and no deploy config change**, so shipping is just the
+merge (D-068 auto-deploy). **First live check:** submit one real feedback from prod as yourself — that
+single send confirms the service's Resend env, the `Reply-To` header behaviour (Resend's canonical field is
+a top-level `reply_to`, so the header is best-effort; the address is in the body regardless), and the inbox
+formatting at once.
+
+---
+
 ## 2026-07-26 — D-098: UI motion — token set + app-wide transitions (#106) + landing scroll reveals
 
 **Housekeeping on the previous entry:** D-097's "Next: Hayden reviews/commits/PRs" is **done** — trading

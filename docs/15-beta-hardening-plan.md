@@ -214,6 +214,12 @@ discovery runs type these providers deterministically instead of burning resolve
 - **DoD:** fetcher + tests (fixtures, not live) green; employers onboarded config-only; coverage count updated
   in the docs/07 ledger + CLAUDE.md Phase 8 line; fixed-`ats_type` proposals promoted via `vja-review`.
 
+**The feedback loop now has a channel (D-100, 2026-07-27).** "Incorporating beta-user feedback" was named as a
+main product loop with no way for a user to actually send any. An in-app dialog (nav button → `POST
+/api/feedback`) emails each report to the ops recipient with the user's identity, vertical, and page attached
+server-side. Email-only by design: no table, no migration, and reports sit outside the D-094 deletion promise,
+which the privacy notice discloses.
+
 **D-085 focus after onboarding:** continued UI/UX iteration, building the employer/company databases, and
 incorporating beta-user feedback are the main product loops. Execute already-validated no-code activations;
 then add fetchers by the `docs/07` demand ledger when coverage demand justifies them. An endless fetcher queue
