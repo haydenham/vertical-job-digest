@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from vja.digest.assembly import DigestContents, DigestPosting
-from vja.digest.render import contents_to_dict, render_digest
+from vja.digest.render import contents_to_dict, dashboard_url, render_digest
 
 _NOW = datetime(2026, 6, 17, tzinfo=UTC)
 
@@ -217,12 +217,48 @@ def test_unsubscribe_url_renders_escaped_footer_in_both_bodies() -> None:
     assert f"Unsubscribe (pauses this email; your dashboard keeps working): {url}" in rendered.text
 
 
+def test_dashboard_url_builds_the_route_and_tolerates_a_trailing_slash() -> None:
+    # D-102: `/dashboard`, not `/` — a returning reader should land on their roles, not Landing.
+    assert dashboard_url("https://role-feed.com") == "https://role-feed.com/dashboard"
+    assert dashboard_url("https://role-feed.com/") == "https://role-feed.com/dashboard"
+
+
+def test_no_dashboard_url_leaves_bodies_link_free() -> None:
+    # D-102: a dev run has no public base URL; an email must never carry a localhost link.
+    rendered = render_digest(_contents(new=[_matched("a")]))
+    assert "dashboard" not in rendered.html.lower()
+    assert "dashboard" not in rendered.text.lower()
+
+
+def test_dashboard_link_renders_above_the_new_roles_heading_in_both_bodies() -> None:
+    # Placement is the point (D-102): a long closure rollup must not be able to bury it.
+    url = "https://role-feed.com/dashboard?from=digest&x=1"
+    rendered = render_digest(_contents(new=[_matched("a")]), dashboard_url=url)
+    assert 'href="https://role-feed.com/dashboard?from=digest&amp;x=1"' in rendered.html
+    assert rendered.html.index("Open your Rolefeed dashboard") < rendered.html.index("New roles")
+    assert f"Open your Rolefeed dashboard: {url}" in rendered.text
+    assert rendered.text.index("Open your Rolefeed dashboard") < rendered.text.index("New roles")
+
+
+def test_dashboard_link_and_unsubscribe_footer_coexist() -> None:
+    rendered = render_digest(
+        _contents(new=[_matched("a")]),
+        unsubscribe_url="https://role-feed.com/unsubscribe?token=t",
+        dashboard_url="https://role-feed.com/dashboard",
+    )
+    for body in (rendered.html, rendered.text):
+        assert "https://role-feed.com/dashboard" in body
+        assert "https://role-feed.com/unsubscribe?token=t" in body
+
+
 def test_digest_copy_carries_no_em_dashes() -> None:
     """Regression pin: the digest is the primary user-facing surface (D-010), and em dashes were
     removed from it deliberately. Covers both the rollup path and the per-role path, plus the
-    unsubscribe footer, since each built its own separator."""
+    unsubscribe footer and the dashboard link, since each built its own separator."""
     few = render_digest(
-        _contents(closed=[_posting("a", company="Camus")]), unsubscribe_url="https://x/u"
+        _contents(closed=[_posting("a", company="Camus")]),
+        unsubscribe_url="https://x/u",
+        dashboard_url="https://x/dashboard",
     )
     many = render_digest(_contents(closed=_closures({"Boeing": 6, "Airbus": 4, "Vistra": 2})))
     for rendered in (few, many):
