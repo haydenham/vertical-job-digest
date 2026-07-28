@@ -5,6 +5,95 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-28 — D-101: launch hardening — the signup ceiling, the backfill, and the first alerts
+
+**Housekeeping on the previous entry: most of its carried-forward list was already done, and the entry was
+stale.** Verified against Neon rather than believed: the **trading seed import happened** (44 active
+employers, 2,863 open postings, 131 in-scope, and a real trading user onboarded 07-27), and **all three
+Rippling rows are `active`** (`#103` Raptor Maps, `#139` Gridsight, `#141` Portside). The D-100 feedback
+work **merged as #109** — my local clone had not fetched, so I reported it unmerged and Hayden corrected
+me. **Genuinely still open:** D-095 PR 1's comp fill-rate re-run against Neon. Prod is otherwise healthy:
+nightly green every day, 155 employers fetched on 07-27, 2 known failures (Airbus/Thales, the accepted
+D-092 ambiguous-cap boards), 10 digests sent, 11 users.
+
+**Task: "what else is needed before tomorrow's launch?" — which turned out to be a production sweep, not a
+doc review.** Reading `docs/15` would have said "you are done except one alert pair." Reading *production*
+found two guards that are correct at 11 users and fail at public-launch volume. Both were found by querying
+Neon and Cloud Run directly; neither appears in any plan doc.
+
+**Finding 1 — the daily LLM ceiling was about to 429 new signups.** `check_backfill_budget` counted **every**
+match since UTC midnight, nightly included, against the $5 code default that prod never overrode. On
+2026-07-25 the nightly alone wrote **397 matches = $3.97 of $5 with zero signups involved**. The ceiling's
+only caller is `POST /api/profiles` and the nightly is uncapped by design, so the guard was spending its
+budget on the one thing it cannot prevent — and the refusal lands on a brand-new user at onboarding, *after*
+Google sign-in and a résumé upload. Fixed in both directions Hayden chose: `estimate_daily_spend` →
+**`estimate_daily_backfill_spend`** (the old name had become false) counting `trigger=backfill` through a new
+optional filter on `count_matches_since`, plus **$25 in `ship.sh`**. The code default stays $5 — it is sized
+for a dev machine, and prod's value belongs where the other prod knobs are greppable.
+
+**Finding 2 — backfills were fragile and the dashboard lied about them.** Measured durations in Neon: 6, 7,
+8, 15 and **25** minutes (one sequential LLM call per posting, up to 100). `BACKFILL_STALE_AFTER` was **10
+minutes**, so every healthy run past ten minutes was declared `done` while still working. That is worse than
+a cosmetic lie, because `run_backfill` is a `BackgroundTask` running after the 202 — outside any request — on
+a service with **CPU throttling at its default**, so it only got CPU when a request happened to land on that
+instance, and the ~10s dashboard poll was usually the only such traffic. Declaring it done stopped the poll
+that was keeping it alive. **Profile 14, a real user on 07-24, has `backfill_started_at` set and
+`backfill_completed_at` NULL** — one that never finished. Fixed with `--no-cpu-throttling` on the service
+(reasserted every deploy, like the D-086 task timeout) and `BACKFILL_STALE_AFTER` **10 → 30 min**. No
+frontend change: the poll is bounded by the server's status, not a client timer (D-082). **Residual risk
+recorded, not hidden:** this removes throttling, not instance death; the durable fix is a queue or Job
+execution, offered and deliberately deferred past launch.
+
+**Finding 3 — zero alert policies, zero notification channels.** D-094's one kept beta-exit minimum, still
+undone. `deploy/gcp/alerts.sh` now creates an email channel + two policies idempotently over the Monitoring
+REST API (not `gcloud alpha monitoring` — the alpha component is not installed, and an ops script should not
+require one). **Ran it; both policies are live and the re-run was a clean no-op.**
+
+**The interesting part of the alerts was that the obvious implementation is impossible.** "Did not run"
+looks like a textbook `conditionAbsent`, and the API rejected it: ***"Durations longer than 23h30m are not
+supported."*** Successive nightly runs are ~24h apart, so **every legal absence window is shorter than the
+normal gap between runs** and the policy would fire every single day. Drift makes it worse — the metric is
+written at task *completion* and duration varies, so completions spread over a ~1.5h band (11:07 … 12:30
+UTC) even though the Scheduler fires at 11:00 exactly. Policy B is a **PromQL** condition,
+`absent_over_time(...[26h])`, validated against live data before shipping (real job → empty; bogus job → 1).
+A flapping alert is worse than no alert, so this was worth the extra half hour rather than installing
+something that cries wolf.
+
+**Two smaller things worth remembering.** The first version of `alerts.sh` built its JSON with python
+inside nested `$( )` and the shell word-split the code — rewritten so every JSON body comes from a
+heredoc reading its inputs from the **environment**, since the policy documentation contains backticks,
+quotes and newlines. And `tests/unit/test_deploy_config.py` caught the `ship.sh` change immediately (the
+service now extends `LAYER2_ENV` as `SERVICE_ENV`); the assertion was updated and **a new one added** so
+both launch guards are pinned against a future redeploy dropping them.
+
+**Verification.** ruff format + check, mypy (146 files), import-linter 1 kept / 0 broken, `uv lock --check`,
+pytest **778 passed, 35 deselected** (was 774; +4). **Regression-first (D-021):** the nightly-ceiling test
+was confirmed to *fail* with the fix reverted before being kept. No frontend change, so no frontend gate.
+**No migration** — nothing here touches the schema.
+
+**Next:** Hayden reviews/commits/PRs this branch; CD auto-deploys on merge. **Post-deploy, confirm on the
+service that `run.googleapis.com/cpu-throttling: false` and `VJA_DAILY_LLM_BUDGET_USD=25` are both
+present.** **Two Hayden-owned launch checks no code can cover:** (1) **click the verification link** Google
+emailed to `haydenham10@gmail.com`, or the new alert channel delivers nothing; (2) publish the Google OAuth
+app (below). Resend's free tier binds at 100 emails/day.
+
+**One correction I owe the record.** I called the OAuth publishing status a *hard* launch blocker, on the
+reasoning that a Testing-status app rejects any account not on the test-user list. **Hayden pushed back with
+the fact that beats it: the app is still in Testing and 11 users across several domains have signed up
+without ever being added to a list.** I stated an inference as a certainty. Publishing is still worth doing
+before a public launch, but for the weaker reason: Testing carries a **~100-user ceiling** that would fail
+silently at the worst possible moment. Scopes are `openid email profile` (non-sensitive), so it needs **no
+Google verification review** — a console setting, not a submission, and reversible.
+
+**Also flagged, unresolved from this machine:** `https://role-feed.com/` began resetting connections from
+the sandbox late in the session (three attempts, all `curl (35) Recv failure`) while
+`https://rolefeed-igeswbvpxa-uc.a.run.app/privacy` served 200 and the same apex domain answered fine two
+hours earlier. DNS resolves to Google's `216.239.3x.21`. Most likely this host being blocked at the edge
+after many requests, but **it was not confirmed from a browser** — worth one look on launch day rather than
+an assumption.
+
+---
+
 ## 2026-07-27 — D-100: in-app feedback dialog, emailed to the operator, stored nowhere
 
 **Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs this branch" is **done** — the

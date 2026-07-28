@@ -60,8 +60,13 @@ def _match_effort() -> str:
 # Cost/abuse guards (D-057) — the signup backfill is the first user action that spends LLM tokens.
 # Both are env-tunable (read at call time so tests can set them) with conservative defaults.
 _DEFAULT_BACKFILL_MAX_POSTINGS = 100  # hard cap on candidates matched per signup
-_DEFAULT_DAILY_LLM_BUDGET_USD = 5.0  # global daily spend ceiling before a backfill may start
-_NOMINAL_MATCH_USD = 0.01  # spend proxy per match (no per-match ledger; see count_matches_since)
+# Daily *backfill* spend ceiling (D-101 narrowed it from all-triggers). The default stays low for a
+# dev machine; prod sets VJA_DAILY_LLM_BUDGET_USD explicitly in deploy/gcp/ship.sh, where the value
+# is greppable next to the other prod knobs.
+_DEFAULT_DAILY_LLM_BUDGET_USD = 5.0
+# Spend proxy per match (no per-match ledger; see count_matches_since). Deliberately ~5x the
+# measured per-match cost — a guard should overestimate.
+_NOMINAL_MATCH_USD = 0.01
 
 
 def _match_model() -> str:
@@ -150,20 +155,28 @@ def _daily_budget_usd() -> float:
     return float(raw) if raw else _DEFAULT_DAILY_LLM_BUDGET_USD
 
 
-def estimate_daily_spend(engine: Engine, now: datetime) -> float:
-    """Estimated LLM spend so far today (UTC) = matches created since midnight × nominal per-match
-    cost. A proxy, not an invoice — enough to backstop the total bill without a per-match ledger."""
+def estimate_daily_backfill_spend(engine: Engine, now: datetime) -> float:
+    """Estimated *signup-backfill* LLM spend so far today (UTC) = backfill-trigger matches created
+    since midnight × nominal per-match cost. A proxy, not an invoice — enough to backstop signup
+    spend without a per-match ledger.
+
+    Nightly matches are deliberately excluded (D-101). The ceiling only ever gated the signup path
+    (its one caller is `POST /api/profiles`), while the nightly is uncapped by design (D-039), so
+    counting the nightly meant a large run could refuse new users for spend the guard could not
+    prevent: on 2026-07-25 the nightly alone reached $4.55 of the then-$5 ceiling."""
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return count_matches_since(engine, midnight) * _NOMINAL_MATCH_USD
+    count = count_matches_since(engine, midnight, trigger=MatchTrigger.BACKFILL)
+    return count * _NOMINAL_MATCH_USD
 
 
 def check_backfill_budget(engine: Engine, now: datetime | None = None) -> None:
-    """Raise `BackfillBudgetExceeded` if today's estimated spend is already over the ceiling.
+    """Raise `BackfillBudgetExceeded` if today's estimated backfill spend is already over the
+    ceiling.
 
     Called *before* a signup backfill is scheduled, so the work never starts once the day's budget
-    is spent — the global cost guard on top of the per-backfill cap (D-057)."""
+    is spent — the global cost guard on top of the per-backfill cap (D-057, D-101)."""
     stamp = now or datetime.now(UTC)
-    spend = estimate_daily_spend(engine, stamp)
+    spend = estimate_daily_backfill_spend(engine, stamp)
     budget = _daily_budget_usd()
     if spend >= budget:
         raise BackfillBudgetExceeded(

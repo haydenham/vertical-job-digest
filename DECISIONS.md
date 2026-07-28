@@ -2229,3 +2229,72 @@ inconsistency.
 lands in a personal inbox and is *not* removed by account deletion, while the Deleting-your-data section
 promises removal of "everything attached to" the account. References D-094, D-085, D-083, D-057, D-037,
 D-005, D-080, D-098, D-021.
+
+### D-101 · Launch hardening · Signup ceiling counts backfill only; backfill survives and reports honestly; the nightly is alerted · accepted · 2026-07-28
+Scoped the morning of the **public launch** by sweeping production read-only (Neon + Cloud Run + Monitoring)
+rather than re-reading the plan docs. The beta-exit line was closed except one kept minimum, so the question
+was what actually breaks when signups stop being hand-picked. Three things, none of them written down
+anywhere, all of which behave correctly at 11 users.
+
+**1. The daily LLM ceiling would have 429'd new signups on launch day.** `check_backfill_budget` counted
+**every** match written since UTC midnight — nightly included — at the $0.01 proxy, against the $5 code
+default that production never overrode. Production evidence: 2026-07-25 wrote **397 nightly matches = $3.97
+of $5 with zero signups involved**; 07-16 wrote 511. The ceiling's only caller is `POST /api/profiles`, and
+the nightly is uncapped by design (D-039) — so the guard was spending its budget on the one thing it cannot
+prevent, and the refusal landed on a **brand-new user at onboarding, after Google sign-in and a résumé
+upload**, as *"Today's matching budget is used up."* `estimate_daily_spend` → **`estimate_daily_backfill_spend`**
+(the old name had become a lie), counting `trigger=backfill` via a new optional filter on
+`count_matches_since`, whose unfiltered default is unchanged. Prod ceiling set to **$25** in `ship.sh`
+(~25 signup backfills/day; ~$5-6 real, since the proxy runs ~5x conservative) — deliberately still a real
+stop, because a public signup flow that spends money per signup needs one. The code default stays $5: it is
+sized for a dev machine, and prod's value belongs where the other prod knobs are greppable.
+
+**2. Signup backfills were fragile, and the dashboard lied about them.** A backfill matches up to
+`VJA_BACKFILL_MAX_POSTINGS` postings **one sequential LLM call at a time**; measured production durations
+were 6, 7, 8, 15 and **25** minutes. `BACKFILL_STALE_AFTER` was **10 minutes**, so every healthy run past
+ten minutes was declared `done` while still working: the user was told matching had finished, shown a
+partial list, and the ~10s dashboard poll stopped. That poll mattered more than it looks, because
+`run_backfill` is a FastAPI `BackgroundTask` running **after** the 202, i.e. outside any request, on a
+service with **CPU throttling at its default** — so the background work only got CPU when a request
+happened to land on that instance, and the poll was usually the only such traffic. Profile 14, a real user
+on 07-24, has `backfill_started_at` set and `backfill_completed_at` **NULL**: one that never finished.
+Fix: **`--no-cpu-throttling`** on the service (reasserted every deploy, like the D-086 task timeout) and
+**`BACKFILL_STALE_AFTER` 10 → 30 minutes**, so the crash guard outlasts a real backfill instead of firing
+on one. No frontend change: the poll is bounded by the server's status, not a client timer (D-082).
+**Residual risk, accepted not hidden:** this removes throttling, not instance death — Cloud Run cannot see
+background work when it scales down. The durable fix is moving the backfill off the request path onto a
+queue or a Job execution; it was offered and deliberately deferred past launch as new infra plus auth plus
+idempotency work.
+
+**3. The project had zero alert policies and zero notification channels** — D-094's one kept beta-exit
+minimum, genuinely undone. If the nightly stopped, nobody would find out; the in-process failure email
+(D-037) needs the process to be running to send anything. `deploy/gcp/alerts.sh` now creates an email
+channel plus two policies, idempotently, over the Monitoring REST API (not `gcloud alpha monitoring`, which
+would make an ops script depend on a component install).
+
+**Policy B could not be a `conditionAbsent`, which is worth recording because it is counter-intuitive.** The
+API caps absence duration at **23h30m** (observed, not guessed: *"Durations longer than 23h30m are not
+supported"*), while successive nightly runs are ~24h apart — so **every legal absence window is shorter than
+the normal gap between runs**, and the policy would fire every single day. Drift makes it worse: the metric
+is written at task *completion* and run duration varies, so completions spread across a ~1.5h band
+(11:07 … 12:30 UTC) even though the Scheduler fires at 11:00 exactly. Policy B is therefore a **PromQL**
+condition, `absent_over_time(...[26h])`, which states the requirement directly and has no such cap
+(validated against live data before shipping: the real job returns empty, a bogus job returns 1). A flapping
+alert is worse than no alert.
+
+**Not done, on purpose:** `min-instances=1` (roughly $45-50/month for cold-start polish, judged not worth it
+when launch traffic keeps instances warm), a smaller backfill cap, per-IP rate limiting, and Terms of
+Service. **Hayden-owned launch checks** that no code can cover: Resend's free tier binds at 100 emails/day,
+and the Google OAuth app should be moved to **In production** (see below).
+
+**Correction on the OAuth publishing status, recorded because the wrong version was briefly acted on.** This
+session first asserted that a Testing-status app rejects every sign-in from an account not on the test-user
+list, making publication a hard launch blocker. **That is contradicted by production:** the app is still in
+Testing and users have been signing up — 11 of them, on several different domains — without being added to
+any list. The empirical behavior wins; the assertion was stated with more confidence than it had earned.
+Publishing is still the right move, for a different and weaker reason: Testing status carries a **~100-user
+ceiling** that would bite silently at exactly the wrong moment, and Testing-mode grants are short-lived
+(harmless here, since login is Authlib OIDC → our own signed-cookie session and no Google refresh token is
+used after login). The scopes are `openid email profile` — non-sensitive — so **publishing needs no Google
+verification review**; it is a console setting, not a submission, and it is reversible. References D-057,
+D-082, D-086, D-094, D-039, D-055, D-005, D-037, D-021.

@@ -153,6 +153,17 @@ def test_derive_backfill_status_stale_running_reads_done() -> None:
     assert derive_backfill_status(_T0, None, now=now) == "done"
 
 
+def test_derive_backfill_status_long_running_backfill_still_reads_running() -> None:
+    """The D-101 regression: the crash guard must outlast a *healthy* backfill.
+
+    A signup matches up to VJA_BACKFILL_MAX_POSTINGS postings one sequential LLM call at a time;
+    production runs took 6-25 minutes. At the old 10-minute window every run past 10 minutes was
+    declared done while it was still working, so the dashboard told the user matching had finished,
+    showed them a partial list, and stopped the poll that was the running instance's only traffic.
+    """
+    assert derive_backfill_status(_T0, None, now=_T0 + timedelta(minutes=25)) == "running"
+
+
 def test_derive_backfill_status_completed_only_is_done() -> None:
     """A completed stamp with no started (CLI backfill on a pre-stamp row) still reads done."""
     assert derive_backfill_status(None, _T0, now=_T0 + timedelta(minutes=1)) == "done"

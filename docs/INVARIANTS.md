@@ -52,6 +52,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   cloud cutover swaps it. (D-031)
 - **Every pipeline run writes a `pipeline_runs` summary; per-fetcher failures isolate** and
   alert loudly rather than aborting the run. A digest that fails to send is itself an alert.
+- **The nightly Job has two Cloud Monitoring alert policies, wired to the `rolefeed-ops` email channel:**
+  *execution failed* (threshold on failed task attempts) and *did not run*
+  (`absent_over_time(...[26h])`). `deploy/gcp/alerts.sh` is the reproducible source and is idempotent.
+  **The did-not-run policy must be PromQL, never `conditionAbsent`:** the API caps absence duration at
+  23h30m while runs are ~24h apart, so every legal absence window is shorter than the normal gap and
+  would fire daily. The in-process failure email (D-037) is not a substitute — it cannot alert if the
+  process never starts. (D-101, D-094, D-037)
+- **The API service runs with CPU always allocated (`--no-cpu-throttling`), reasserted by `ship.sh`.**
+  The signup flow returns 202 and finishes `run_backfill` in a background task *outside* any request;
+  under default throttling that work only gets CPU when another request happens to hit the same
+  instance. This bounds the throttling failure, not instance death — Cloud Run cannot see background
+  work when scaling down, so moving the backfill onto a queue remains the durable fix. (D-101, D-057)
 - **An employer snapshot is validated before its DB transaction.** Every paginated fetcher must
   satisfy its pinned provider completeness contract and the final mapped row count must equal the
   authoritative target exactly; every snapshot must also resolve to unique ATS `external_id` values.
@@ -254,7 +266,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   post-202 probe is race-free); `run_backfill` stamps `backfill_completed_at` on exit (even when every candidate
   failed). `/api/me` exposes the derived `backfill_status` (`running`/`done`/`null` for never-stamped rows):
   done means `completed >= started` (the reupload-ordering rule — a reactivated row carries the *previous* run's
-  completion), and a `running` older than `BACKFILL_STALE_AFTER` (10 min) reads done (the crash guard). The
+  completion), and a `running` older than `BACKFILL_STALE_AFTER` (**30 min**) reads done (the crash guard).
+  **The guard must outlast a healthy backfill, not average it** (D-101): matching is one sequential LLM call
+  per posting up to the cap, and production runs took 6-25 minutes, so the original 10 minutes fired on
+  *working* backfills — telling the user matching had finished, showing a partial list, and stopping the very
+  poll that was keeping the instance busy. The
   dashboard polls (~10s, silent `/api/me` re-probe + postings refetch) while `running`, shows the
   "Matching in progress" banner (over existing rows too — the reupload case), and stops when the server flips
   the status; the poll is bounded by the server's staleness guard, not a client timer. (D-082, D-057, D-005)
@@ -361,13 +377,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   matching remain synchronous while the D-088 snapshot-integrity fix is observed and steady-state
   spend is re-measured; batching is reconsidered only if extraction remains material. (D-069,
   D-085, D-088)
-- **Signup backfill is guarded by a per-backfill cap + a global daily ceiling.** The cap
+- **Signup backfill is guarded by a per-backfill cap + a daily *backfill* ceiling.** The cap
   (`VJA_BACKFILL_MAX_POSTINGS`, default 100) bounds one signup's candidate set inside `run_backfill`
-  (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, default $5) refuses a backfill
-  (429) once today's *estimated* spend (`count_matches_since(midnight) × ~$0.01`, a proxy — there's
-  no per-match ledger) is reached. Identical-content uploads bypass this ceiling because they schedule
-  no work; work-producing first/changed uploads still pass it before commit. The separate per-user changed-
-  résumé rolling guard is described above. (D-057, D-085)
+  (nightly is uncapped); the ceiling (`VJA_DAILY_LLM_BUDGET_USD`, **$25 in prod** via `ship.sh`, code
+  default $5 for dev) refuses a backfill (429) once today's estimated **signup** spend
+  (`estimate_daily_backfill_spend` = `count_matches_since(midnight, trigger=BACKFILL) × ~$0.01`, a
+  proxy — there's no per-match ledger) is reached. **Nightly matches are excluded** (D-101): the
+  ceiling's only caller is `POST /api/profiles`, so counting the uncapped nightly meant a big run
+  refused new users for spend the guard cannot prevent — on 2026-07-25 the nightly alone reached
+  $3.97 of the then-$5 ceiling with no signups involved. `count_matches_since` still counts every
+  trigger when unfiltered. Identical-content uploads bypass this ceiling because they schedule no work;
+  work-producing first/changed uploads still pass it before commit. The separate per-user changed-
+  résumé rolling guard is described above. (D-057, D-085, D-101)
 - **No auto-apply.** The tool surfaces and reasons; it never submits applications. (core)
 - **Politeness is policy:** rate limits, sane user agent, respect robots.txt on the long
   tail. Getting IP-banned is a self-inflicted coverage hole. (core)

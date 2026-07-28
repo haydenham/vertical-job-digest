@@ -236,9 +236,13 @@ does not block broader beta by itself.
   (PR 3 — **built**: `/settings` page with the pause/resume toggle over `PATCH /api/me` + hard
   deletion via `DELETE /api/me` — user/profiles/matches/digest rows in one transaction,
   postings/employers untouched; no migration).
-- **Kept minimums (D-094):** one GCP alert-policy pair on the nightly Job (failed / did-not-run);
-  one-time Google OAuth publishing-status check (the 100-user "Testing" cap); the July-23 read-only
-  first-Luna-night audit; the already-validated no-code employer activations (Hayden-run, not a gate).
+- **Kept minimums (D-094):** the GCP alert-policy pair on the nightly Job (failed / did-not-run)
+  **✅ built and live 2026-07-28** — `deploy/gcp/alerts.sh`, D-101; the email channel needs its
+  one-time verification click. Still open: publishing the Google OAuth app — **not** the hard blocker
+  D-101 first called it (users demonstrably sign up while it sits in Testing), but Testing carries a
+  ~100-user ceiling and publishing needs no verification review for these non-sensitive scopes; the
+  July-23 read-only first-Luna-night audit; the already-validated no-code employer activations
+  (Hayden-run, not a gate).
 - **Dropped (D-094):** the five-pillar written scaling assessment, D-086's durable digest delivery
   idempotency (the 6h/zero-retry guard covers the observed path), and monitoring beyond the single
   alert pair.

@@ -26,10 +26,26 @@ def test_luna_matching_route_and_secret_survive_every_deploy() -> None:
     assert ': "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"' in script
     assert ': "${MATCH_REASONING_EFFORT:=low}"' in script
     assert script.count("OPENAI_API_KEY=OPENAI_API_KEY:latest") == 2
-    # Service keeps LAYER2_ENV verbatim; the Job's env extends it (JOB_ENV) — both carry the route.
-    assert '--update-env-vars "$LAYER2_ENV"' in script
+    # Both targets extend LAYER2_ENV rather than replacing it (SERVICE_ENV / JOB_ENV), so the route
+    # rides along whatever else each target needs.
+    assert '--update-env-vars "$SERVICE_ENV"' in script
     assert '--update-env-vars "$JOB_ENV"' in script
+    assert 'SERVICE_ENV="${LAYER2_ENV},' in script
     assert 'JOB_ENV="${LAYER2_ENV},' in script
+
+
+def test_backfill_cost_and_cpu_guards_survive_every_deploy() -> None:
+    """D-101: both launch guards are deploy config, so a redeploy must not quietly drop them.
+
+    The ceiling refuses signup backfills once the day's estimated spend is gone — at the code
+    default ($5) that is ~5 signups/day, which a public launch clears before lunch. And
+    --no-cpu-throttling is what lets the post-202 background backfill get CPU at all.
+    """
+    script = _SHIP.read_text(encoding="utf-8")
+
+    assert ': "${DAILY_LLM_BUDGET_USD:=25}"' in script
+    assert "VJA_DAILY_LLM_BUDGET_USD=${DAILY_LLM_BUDGET_USD}" in script
+    assert "--no-cpu-throttling" in script
 
 
 def test_unsubscribe_token_config_survives_every_deploy() -> None:

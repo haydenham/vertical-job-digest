@@ -19,6 +19,7 @@ from sqlalchemy.engine import Connection
 from vja.db.engine import begin
 from vja.db.postings import activity_window_clause
 from vja.db.schema import employers, matches, postings
+from vja.models import MatchTrigger
 
 
 @dataclass(frozen=True)
@@ -105,14 +106,20 @@ def postings_needing_match(
     ]
 
 
-def count_matches_since(engine: Engine, since: datetime) -> int:
+def count_matches_since(
+    engine: Engine, since: datetime, *, trigger: MatchTrigger | None = None
+) -> int:
     """Number of `matches` rows created at/after `since` — the spend proxy for the daily ceiling.
 
     No per-match cost is stored (only `pipeline_runs.llm_cost_usd`, which the backfill doesn't
-    write), so the cost guard (D-057) estimates the day's LLM spend from the match count × a nominal
-    per-match cost. Counts every trigger (nightly + backfill) — the ceiling protects the daily bill.
+    write), so the cost guard (D-057) estimates spend from the match count × a nominal per-match
+    cost. `trigger` narrows the count to one origin; the ceiling passes `BACKFILL` because it
+    governs *signup* spend, and the nightly it would otherwise count is uncapped by design and was
+    never gated by it (D-101). Unfiltered (the default) counts every trigger.
     """
     stmt = select(func.count()).select_from(matches).where(matches.c.created_at >= since)
+    if trigger is not None:
+        stmt = stmt.where(matches.c.trigger == trigger.value)
     with engine.connect() as conn:
         return int(conn.execute(stmt).scalar_one())
 
