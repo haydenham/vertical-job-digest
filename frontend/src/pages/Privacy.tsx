@@ -58,6 +58,11 @@ export function Privacy() {
         dashboard keep working. You can also email{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
+      <p>
+        Feedback you send from the Feedback button is emailed to the person who builds Rolefeed,
+        along with your email address, your vertical, and the page you were on. It is not stored in
+        the Rolefeed database, so deleting your account does not remove it from that inbox.
+      </p>
 
       <h2>Cookies</h2>
       <p>

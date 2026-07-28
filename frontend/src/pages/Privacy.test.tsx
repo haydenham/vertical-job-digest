@@ -36,6 +36,12 @@ describe("Privacy", () => {
     }
   });
 
+  it("discloses that feedback lands in an inbox that account deletion does not reach (D-100)", () => {
+    render(<Privacy />);
+    expect(screen.getByText(/feedback you send/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not remove it from that inbox/i)).toBeInTheDocument();
+  });
+
   it("links the contact email for unsubscribe and deletion requests", () => {
     render(<Privacy />);
     const links = screen.getAllByRole("link", { name: "haydenham10@gmail.com" });

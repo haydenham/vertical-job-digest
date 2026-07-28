@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { useAuth } from "./auth/useAuth";
+import { FeedbackDialog } from "./components/FeedbackDialog";
 import { TOUR_SEEN_KEY, WelcomeTour } from "./components/WelcomeTour";
 import { Dashboard } from "./pages/Dashboard";
 import { Landing } from "./pages/Landing";
@@ -100,6 +101,7 @@ export default function App() {
   const { user, profile, loading, authError, logout } = useAuth();
   const location = useLocation();
   const [tourOpen, setTourOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // D-085 first-run tutorial: browser-local is sufficient for beta. Auto-open only when an
   // onboarded user reaches the dashboard; the nav button can reopen it from any profiled route.
@@ -140,6 +142,15 @@ export default function App() {
                   </Link>
                 </>
               )}
+              {/* Outside the `profile &&` branch above: a user still stuck in onboarding is
+                  exactly who needs to report that it is stuck (D-100). */}
+              <button
+                type="button"
+                className="nav-link as-button"
+                onClick={() => setFeedbackOpen(true)}
+              >
+                Feedback
+              </button>
               <Link to="/settings" className="nav-link">
                 Settings
               </Link>
@@ -176,6 +187,9 @@ export default function App() {
         </footer>
       )}
       {tourOpen && profile && <WelcomeTour onDismiss={dismissTour} />}
+      {feedbackOpen && user && (
+        <FeedbackDialog page={location.pathname} onClose={() => setFeedbackOpen(false)} />
+      )}
     </div>
   );
 }

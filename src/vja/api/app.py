@@ -41,7 +41,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
 from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -77,10 +77,20 @@ from vja.db.users import (
     set_digest_paused,
     upsert_user_by_google,
 )
+from vja.digest.feedback import (
+    FEEDBACK_MAX_CHARS,
+    FeedbackCategory,
+    FeedbackReport,
+    send_feedback,
+)
+from vja.digest.send import ConfigError as SendConfigError
+from vja.digest.send import SendError, load_config
 from vja.digest.unsubscribe import parse_unsubscribe_token
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
 from vja.verticals import ConfigError, available_verticals, load_vertical_config
+
+logger = logging.getLogger(__name__)
 
 
 def frontend_dist_dir() -> Path:
@@ -194,6 +204,28 @@ class MeSettings(BaseModel):
     """`PATCH /api/me` response: the applied settings state."""
 
     digest_paused: bool
+
+
+class FeedbackIn(BaseModel):
+    """`POST /api/feedback` body (D-100). Only these three fields come from the client — identity,
+    vertical, and user agent are resolved server-side, so nobody can report as someone else.
+
+    The length cap is the abuse guard: `require_user` already limits this to signed-in beta
+    accounts, so a per-user throttle (a `users` column, hence a migration) buys nothing yet."""
+
+    category: FeedbackCategory
+    message: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=FEEDBACK_MAX_CHARS),
+    ]
+    # The SPA route the dialog was opened from, for reproducing the report.
+    page: Annotated[str, StringConstraints(max_length=200)] | None = None
+
+
+class FeedbackAccepted(BaseModel):
+    """`POST /api/feedback` response: the report reached the mail provider."""
+
+    status: str
 
 
 class MeProfile(BaseModel):
@@ -605,6 +637,46 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return ProfileCreated(
             profile_id=profile.id, vertical=vertical, resume_version=profile.resume_version
         )
+
+    @app.post("/api/feedback", status_code=202)
+    def submit_feedback(
+        request: Request,
+        engine: Annotated[Engine, Depends(_get_engine)],
+        user: Annotated[User, Depends(require_user)],
+        body: FeedbackIn,
+    ) -> FeedbackAccepted:
+        """In-app feedback → one email to the ops recipient (D-100). The third write surface.
+
+        **Nothing is persisted** — no table, no migration, and the report therefore sits outside
+        the D-094 deletion promise (the privacy notice says so). Behind `require_user`, so an
+        invite-only beta needs no throttle beyond the model's length cap. The vertical and user
+        agent are read server-side rather than trusted from the client.
+
+        Guards: unconfigured mail (dev without `RESEND_API_KEY`) is a 503, a provider failure a
+        502 — both retryable, and the SPA keeps the typed text either way. PII discipline: the
+        message body is never logged.
+        """
+        profile = active_profile_for_user(engine, user.email)
+        report = FeedbackReport(
+            category=body.category,
+            message=body.message,
+            user_email=user.email,
+            user_name=user.name,
+            vertical=profile.vertical if profile is not None else None,
+            page=body.page,
+            user_agent=request.headers.get("user-agent"),
+            submitted_at=datetime.now(UTC),
+        )
+        try:
+            send_feedback(load_config(), report)
+        except SendConfigError as exc:
+            logger.error("feedback send is not configured: %s", exc)
+            raise HTTPException(503, "Feedback is not configured on this server.") from exc
+        except SendError as exc:
+            logger.error("feedback send failed for user %s: %s", user.id, exc)
+            raise HTTPException(502, "Couldn't send your feedback. Please try again.") from exc
+        logger.info("feedback sent: category=%s user=%s", body.category.value, user.id)
+        return FeedbackAccepted(status="sent")
 
     # No-login digest unsubscribe (D-094). GET = confirm page only (mail scanners prefetch GETs;
     # a prefetch must never change state); POST = the actual pause. The same POST serves the

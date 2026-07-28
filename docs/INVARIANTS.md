@@ -231,7 +231,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   scroll. Every interactive element has a `:focus-visible` ring, and everything above is disabled under
   `prefers-reduced-motion` — with one deliberate exception, the upload spinner, which keeps turning (slower)
   because freezing it would report a hang on a live request. (D-098, D-080, D-081)
-- **Résumé upload is the SPA's only write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
+- **The SPA has three write surfaces: résumé upload, settings, and feedback.** Feedback (D-100) is a
+  **nav-button dialog, not a route** — rendered from the app shell over whatever page is open, offered to every
+  signed-in user *including one with no profile yet* (onboarding is what they most need to report on). It
+  `POST`s `{category, message, page}` to `/api/feedback`; identity, vertical, and user agent are attached
+  server-side, so extra body fields cannot forge a reporter. The category picker reuses the `.segmented`
+  control and the dialog reuses the tour/delete-confirm scaffold, deliberately **without an entrance
+  animation** (neither sibling dialog has one). A failed send keeps the typed text so Send is a real retry.
+- **Résumé upload is the SPA's largest write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
   `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
   the SPA's `/api/me` re-probe is silent (no global loading flip) with bounded retries, then navigates to
@@ -316,8 +323,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `require_user` (401 without a session). It runs the D-033 adapter (`vja.resume`, text/markdown +
   text PDF; scanned/empty/non-text → 422; PII text never logged) → `upsert_profile` (which now stamps
   `user_id` at creation, the D-055 link at upload not just login) → a **background** `run_backfill`,
-  returning 202. The read API stays read-only (D-005); the write exceptions are this path plus the
-  D-094 settings surface (`PATCH`/`DELETE /api/me`). (D-057, D-094)
+  returning 202. The read API stays read-only (D-005); the write exceptions are **three** — this path, the
+  D-094 settings surface (`PATCH`/`DELETE /api/me`), and **`POST /api/feedback`** (D-100). (D-057, D-094, D-100)
+- **`POST /api/feedback` stores nothing; it emails the ops recipient and returns 202** (D-100). Behind
+  `require_user`; the body is `{category, message, page}` only, capped at **5,000 chars** — that cap plus the
+  login gate is the entire abuse guard, because a durable per-user throttle would cost a `users` column and
+  therefore a manual Neon migration. `vja.digest.feedback` renders it (HTML-escaping every user-supplied
+  value) and reuses `digest.send.send_email`, so the ops address is `send_email`'s own default
+  (`VJA_DIGEST_RECIPIENT`, D-037) with `Reply-To` set to the reporter. Living inside the `digest` package is
+  load-bearing: same-layer siblings are independent under import-linter, so a top-level `vja/feedback.py`
+  could not import it. **No table and no migration**, which is why a report is *outside* the D-094 deletion
+  promise and the privacy notice says so. Unconfigured mail is 503, a provider failure 502, both retryable;
+  the message body is never logged. (D-100, D-094, D-037, D-005)
 - **Hard account deletion is `DELETE /api/me` (behind `require_user`) → 204, one atomic transaction**
   removing matches (by the user's profile ids) → profiles (`user_id` **or** `user_email`, so a
   never-linked pre-login seed row goes too) → digests (by `recipient` email — no user FK exists) →

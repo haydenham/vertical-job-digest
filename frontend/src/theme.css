@@ -1567,6 +1567,107 @@ summary:focus-visible {
   gap: 10px;
 }
 
+/* ---- in-app feedback dialog (D-100) ----
+   Same backdrop/dialog scaffold as the tour and the delete confirm, widened for a textarea.
+   Deliberately no entrance animation: neither sibling dialog has one, and the asymmetric
+   entrance-without-exit problem is already flagged as its own piece of work (D-098). */
+.feedback-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 8, 0.78);
+  backdrop-filter: blur(4px);
+}
+.feedback-dialog {
+  width: min(520px, 100%);
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.feedback-dialog:focus {
+  outline: none;
+}
+.feedback-dialog h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.feedback-hint {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.feedback-field {
+  display: grid;
+  gap: 8px;
+}
+.feedback-dialog .segmented button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* The file's first textarea. Matches the dropzone/input surface treatment. */
+.feedback-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: -0.1px;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  resize: vertical;
+  transition:
+    border-color var(--dur-fast) var(--ease-in-out),
+    background-color var(--dur-fast) var(--ease-in-out);
+}
+.feedback-textarea::placeholder {
+  color: var(--text-dim);
+}
+.feedback-textarea:hover:not(:disabled) {
+  border-color: var(--border-hover);
+}
+.feedback-textarea:disabled {
+  color: var(--text-muted);
+}
+.feedback-meta {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.feedback-count {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+/* Over the cap. Uses the accent-tint error colour `.notice.error` already uses rather than the
+   deletion red, which the palette reserves for the danger zone. Send is disabled here anyway. */
+.feedback-count.over {
+  color: var(--accent-tint-text);
+}
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.feedback-dialog .notice.error {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 13px;
+}
+
 /* ---- reduced motion ----
    Replaces the old block that covered one property on one element. Everything above is a
    colour, transform, or opacity change, so collapsing durations to a hair loses no meaning:
