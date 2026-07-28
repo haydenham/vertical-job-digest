@@ -297,6 +297,9 @@ def test_send_carries_unsubscribe_footer_and_rfc8058_headers(
     assert sent["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
     assert "https://role-feed.com/unsubscribe?token=" in sent["html"]
     assert "https://role-feed.com/unsubscribe?token=" in sent["text"]
+    # Both product links ship together on the normal path (D-102).
+    assert 'href="https://role-feed.com/dashboard"' in sent["html"]
+    assert "https://role-feed.com/dashboard" in sent["text"]
     # The footer token authorizes exactly this user.
     token = unquote(unsub[1:-1].split("token=", 1)[1])
     claim = parse_unsubscribe_token(token)
@@ -304,8 +307,12 @@ def test_send_carries_unsubscribe_footer_and_rfc8058_headers(
 
 
 @respx.mock
-def test_send_without_users_row_omits_footer_and_headers(migrated_engine: Engine) -> None:
+def test_send_without_users_row_omits_footer_but_keeps_the_dashboard_link(
+    migrated_engine: Engine,
+) -> None:
     # A pre-login seed profile has no users row → nothing to key a token on; send plain (D-094).
+    # The dashboard link is not token-keyed, so it still ships (D-102) — that asymmetry is the
+    # reason the two links are gated separately in `send_digest`.
     route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
     emp = _employer(migrated_engine)
     prof = _profile(migrated_engine)
@@ -327,10 +334,13 @@ def test_send_without_users_row_omits_footer_and_headers(migrated_engine: Engine
     sent = json.loads(route.calls.last.request.content)
     assert "headers" not in sent
     assert "unsubscribe" not in sent["html"].lower()
+    assert 'href="https://role-feed.com/dashboard"' in sent["html"]
 
 
 @respx.mock
-def test_send_without_public_base_url_omits_footer_and_headers(migrated_engine: Engine) -> None:
+def test_send_without_public_base_url_omits_footer_headers_and_dashboard_link(
+    migrated_engine: Engine,
+) -> None:
     # Dev (no VJA_PUBLIC_BASE_URL): never render a relative/localhost link into a real email.
     route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "abc"}))
     emp = _employer(migrated_engine)
@@ -348,3 +358,5 @@ def test_send_without_public_base_url_omits_footer_and_headers(migrated_engine: 
     sent = json.loads(route.calls.last.request.content)
     assert "headers" not in sent
     assert "unsubscribe" not in sent["html"].lower()
+    assert "dashboard" not in sent["html"].lower()
+    assert "dashboard" not in sent["text"].lower()

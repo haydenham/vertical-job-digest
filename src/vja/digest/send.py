@@ -13,7 +13,8 @@ Config comes from the environment (a local `.env` is loaded for the cron runtime
   P5.4 the *digest* recipient is the matched profile's `user_email`, not this env var (D-027/D-037):
   a digest is per (vertical, profile), addressed to whoever owns that resume.
 - `VJA_PUBLIC_BASE_URL` — the public origin for the no-login unsubscribe link + RFC-8058 one-click
-  headers (D-094). Unset (dev) ⇒ the email ships without footer/headers — never a localhost link.
+  headers (D-094) and the dashboard link (D-102). Unset (dev) ⇒ the email ships without any of
+  them — never a localhost link.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from vja.db.engine import begin, get_engine
 from vja.db.profiles import Profile, active_profiles
 from vja.db.users import get_user_by_email
 from vja.digest.assembly import build_digest
-from vja.digest.render import RenderedEmail, contents_to_dict, render_digest
+from vja.digest.render import RenderedEmail, contents_to_dict, dashboard_url, render_digest
 from vja.digest.unsubscribe import make_unsubscribe_token, unsubscribe_url
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
@@ -200,7 +201,10 @@ def send_digest(
             "List-Unsubscribe": f"<{unsub_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         }
-    rendered = render_digest(contents, unsubscribe_url=unsub_url)
+    # The dashboard link (D-102) needs only the public origin — no token, so no `users` row: a
+    # pre-login seed profile gets the link without the unsubscribe footer.
+    dash_url = dashboard_url(cfg.public_base_url) if cfg.public_base_url else None
+    rendered = render_digest(contents, unsubscribe_url=unsub_url, dashboard_url=dash_url)
 
     with begin(engine) as conn:
         digest_id = digests_repo.create_pending(

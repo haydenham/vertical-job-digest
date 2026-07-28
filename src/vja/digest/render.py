@@ -6,7 +6,8 @@ Each new role now carries its match rationale: a
 `[verdict · score]` tag and the one-line `rationale` (P5.4 / D-037). The fuller `fits`/`gaps`
 lists are kept out of the body (scannability) but recorded in the audit `contents`. Quarantined
 postings (links that failed the D-008 gate) are likewise kept out of the body but recorded so an
-all-quarantine night is still traceable.
+all-quarantine night is still traceable. Above all of it sits the one link back into the product
+(D-102) — the apply links leave for the employer's ATS, so without it the email is a dead end.
 
 Nothing here is vertical-specific (CLAUDE rule): the vertical slug is humanized generically for the
 subject line, so adding a vertical needs no code change.
@@ -26,6 +27,9 @@ from vja.digest.assembly import DigestContents, DigestPosting
 _CLOSED_DETAIL_LIMIT = 10
 # How many companies to name in the rollup before collapsing the rest into an "…and more" line.
 _ROLLUP_TOP_COMPANIES = 10
+# The one way back into the product from the email (D-102). Copy is shared by both bodies so
+# the HTML anchor text and the plaintext label can't drift apart.
+_DASHBOARD_LABEL = "Open your Rolefeed dashboard"
 
 
 @dataclass(frozen=True)
@@ -72,24 +76,54 @@ def _rollup_split(
     return ranked[:_ROLLUP_TOP_COMPANIES], ranked[_ROLLUP_TOP_COMPANIES:]
 
 
-def render_digest(contents: DigestContents, *, unsubscribe_url: str | None = None) -> RenderedEmail:
+def dashboard_url(base_url: str) -> str:
+    """The absolute dashboard link: `{base}/dashboard` (D-102).
+
+    `/dashboard` rather than `/`: a logged-out click bounces through `/login` and lands back on
+    the dashboard, whereas `/` would show a returning reader the marketing landing page.
+    """
+    return f"{base_url.rstrip('/')}/dashboard"
+
+
+def render_digest(
+    contents: DigestContents,
+    *,
+    unsubscribe_url: str | None = None,
+    dashboard_url: str | None = None,
+) -> RenderedEmail:
     """Build subject + HTML + plaintext from a digest's contents.
 
     `unsubscribe_url` (D-094) adds the no-login unsubscribe footer; None (dev without a public
     base URL, or a pre-login seed profile with no `users` row) leaves the output unchanged.
+    `dashboard_url` (D-102) adds the link back into the product, directly under the heading;
+    None (dev without a public base URL) likewise leaves the output unchanged — never a
+    localhost link in an email.
     """
     name = _humanize(contents.vertical)
     n_new, n_closed = len(contents.new), len(contents.closed)
     subject = f"{name}: {n_new} new, {n_closed} closed"
     return RenderedEmail(
         subject=subject,
-        html=_render_html(name, contents, unsubscribe_url=unsubscribe_url),
-        text=_render_text(name, contents, unsubscribe_url=unsubscribe_url),
+        html=_render_html(
+            name, contents, unsubscribe_url=unsubscribe_url, dashboard_url=dashboard_url
+        ),
+        text=_render_text(
+            name, contents, unsubscribe_url=unsubscribe_url, dashboard_url=dashboard_url
+        ),
     )
 
 
-def _render_text(name: str, contents: DigestContents, *, unsubscribe_url: str | None) -> str:
+def _render_text(
+    name: str,
+    contents: DigestContents,
+    *,
+    unsubscribe_url: str | None,
+    dashboard_url: str | None,
+) -> str:
     lines = [name, "=" * len(name), ""]
+    if dashboard_url:
+        lines.append(f"{_DASHBOARD_LABEL}: {dashboard_url}")
+        lines.append("")
     lines.append(f"New roles ({len(contents.new)})")
     if contents.new:
         for posting in contents.new:
@@ -129,8 +163,17 @@ def _render_text(name: str, contents: DigestContents, *, unsubscribe_url: str | 
     return "\n".join(lines)
 
 
-def _render_html(name: str, contents: DigestContents, *, unsubscribe_url: str | None) -> str:
+def _render_html(
+    name: str,
+    contents: DigestContents,
+    *,
+    unsubscribe_url: str | None,
+    dashboard_url: str | None,
+) -> str:
     blocks = [f"<h1>{escape(name)}</h1>"]
+    if dashboard_url:
+        href = escape(dashboard_url, quote=True)
+        blocks.append(f'<p><a href="{href}">{_DASHBOARD_LABEL}</a></p>')
     blocks.append(f"<h2>New roles ({len(contents.new)})</h2>")
     blocks.append(_html_list(contents.new, linked=True))
     blocks.append(f"<h2>Closed roles ({len(contents.closed)})</h2>")

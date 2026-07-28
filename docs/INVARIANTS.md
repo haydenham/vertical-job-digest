@@ -165,6 +165,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   lives on `users` (not versioned `profiles`) so a résumé reupload can't reset it. Self-serve it
   flips via **`PATCH /api/me {digest_paused}`** (behind `require_user`; the `/settings` toggle),
   reusing the same `set_digest_paused`; `GET /api/me` exposes the current value. (D-094)
+- **Every digest email carries one link back into the product: `{VJA_PUBLIC_BASE_URL}/dashboard`,
+  directly under the heading in both bodies.** It is the email's only Rolefeed-origin link besides
+  unsubscribe (apply links leave for the employer's ATS), and it sits above the roles so a big closure
+  rollup (D-056) can't bury it. `/dashboard` not `/`: a logged-out click routes through `/login` back to
+  the dashboard, while `/` would show a returning reader the landing page. **Gated on the public origin
+  alone** — unlike the unsubscribe footer it needs no `users` row (no token to key), so a pre-login seed
+  profile gets the link without the footer; no origin (dev) ⇒ no link, never a localhost URL. Per-role
+  deep links are **not** built: the SPA has no deep-link route. (D-102, D-094, D-056, D-065)
 - **Every digest email carries a tokenized no-login unsubscribe link + the RFC-8058 one-click
   headers** (`List-Unsubscribe` / `List-Unsubscribe-Post`), when a public base URL and a `users` row
   exist (a dev run or pre-login seed profile ships without them). The state change is **POST-only**

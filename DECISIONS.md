@@ -2298,3 +2298,35 @@ ceiling** that would bite silently at exactly the wrong moment, and Testing-mode
 used after login). The scopes are `openid email profile` — non-sensitive — so **publishing needs no Google
 verification review**; it is a console setting, not a submission, and it is reversible. References D-057,
 D-082, D-086, D-094, D-039, D-055, D-005, D-037, D-021.
+
+### D-102 · Product · The digest links back to the dashboard (one link, above the roles) · accepted · 2026-07-28
+The digest is the primary surface (D-010) and, the day after public launch, it was a **dead end back into
+the product**. Every link in it pointed *away*: the per-role apply links leave for the employer's ATS
+(D-008), and the only Rolefeed-origin link was the D-094 unsubscribe footer — so the one email that reaches
+every user daily offered no route to the pull surface except unsubscribing. Meanwhile the dashboard had
+accumulated real reasons to visit (recency windows, the Cleaned view, salary and description in the detail
+panel, D-095) that only a reader who remembered the URL would ever see.
+
+**One link, not per-role deep links.** The per-role variant was considered and rejected *for now*: the SPA
+has no deep-link route — nothing reads a posting id or query param (`App.tsx`, and `useSearchParams` appears
+nowhere in `frontend/src`) — so it would need a new route, panel auto-open, and a decision about what to do
+when the target posting falls outside the reader's current view/window. That is a frontend block, not a line
+of copy, and it is not what makes the email non-terminal.
+
+**Placement is top, under the heading**, in both bodies. The alternative (a footer line beside unsubscribe)
+loses to the fact that a backlog night rolls up dozens of closures (D-056): the link would sit below all of
+it. A digest reader who is going to click does it at the top.
+
+**Target is `/dashboard`, not `/`.** A logged-out click on `/dashboard` bounces to `/login` and the
+post-auth routing lands back on the dashboard (`DashboardRoute` → `LoginRoute`, D-065); `/` would show a
+returning reader the marketing landing page instead.
+
+**Gated on `VJA_PUBLIC_BASE_URL` alone** — deliberately *not* the same gate as the footer. The unsubscribe
+link additionally requires a `users` row, because its token is keyed on one; the dashboard link carries no
+token, so a pre-login seed profile gets the link without the footer. Both still vanish entirely without a
+public origin: a dev run must never render a localhost link into an email (D-094). No new env var, no
+`ship.sh` change — the nightly Job has mounted `VJA_PUBLIC_BASE_URL` since D-094.
+
+Copy carries no em dashes (D-099) and is a single shared constant, so the HTML anchor text and the
+plaintext label cannot drift. Backend only: no frontend change, no schema change, no migration.
+References D-010, D-094, D-095, D-099, D-056, D-065, D-008, D-021.

@@ -5,6 +5,53 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-28 — D-102: the digest links back to the dashboard
+
+**Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs this branch" is **done** —
+launch hardening merged as **#110** (`1c3b19f`) and `main` is clean, so D-101 is deployed. **Still open from
+it, all Hayden-owned ops:** confirm on the service that `run.googleapis.com/cpu-throttling: false` and
+`VJA_DAILY_LLM_BUDGET_USD=25` are both present post-deploy; click Google's verification link for the new
+alert channel (until then the policies notify nobody); publish the OAuth app off Testing (the ~100-user
+ceiling, not the hard blocker I first claimed). Also still open: D-095 PR 1's comp fill-rate re-run against
+Neon, and the unconfirmed `role-feed.com` connection resets seen from this sandbox.
+
+**Task: "link on the digest."** The finding that framed it: the digest is the primary surface (D-010) and
+**every link in it pointed away from the product** — per-role apply links leave for the employer's ATS
+(D-008), and the only Rolefeed-origin link was the D-094 unsubscribe footer. The one email that reaches
+every user daily offered no route to the dashboard except opting out, while the dashboard had quietly
+accumulated reasons to visit (recency windows, Cleaned view, salary + description in the panel, D-095) that
+only someone who remembered the URL would ever see.
+
+**Two scope calls, both Hayden's, both by questionnaire.** (1) **One dashboard link, not per-role deep
+links** — exploration found the SPA has no deep-link route at all (nothing reads a posting id; `useSearchParams`
+appears nowhere in `frontend/src`), so per-role links would mean a new route, panel auto-open, and a rule for
+targets outside the reader's current view. That is a frontend block, and it is not what makes the email
+non-terminal. (2) **Top placement, under the heading** — a footer line would sit below a backlog night's
+closure rollup (D-056), which is exactly when it would be least visible.
+
+**Two details worth recording.** The link targets **`/dashboard`, not `/`**: a logged-out click bounces
+through `/login` and the post-auth routing lands back on the dashboard, whereas `/` shows a returning reader
+the marketing landing page. And it is **gated on `VJA_PUBLIC_BASE_URL` alone**, deliberately a *different*
+gate from the footer beside it — the unsubscribe link also needs a `users` row because its token is keyed on
+one, while this link carries no token. A pre-login seed profile therefore gets the link and no footer; the
+integration test now pins that asymmetry by name rather than leaving it to be rediscovered.
+
+**Built on `feat/digest-dashboard-link` (uncommitted; Hayden owns commit/PR).** Backend only:
+`render.py` gains `dashboard_url()` plus a `dashboard_url=` keyword mirroring the existing `unsubscribe_url=`
+param, and `send.py` builds it next to the footer block. Copy is one shared constant so the HTML anchor text
+and the plaintext label cannot drift, and it carries no em dashes (D-099). No frontend change, no schema
+change, **no migration**, no `ship.sh` change — the nightly Job has mounted `VJA_PUBLIC_BASE_URL` since D-094.
+
+**Verification.** ruff format + check, mypy (146 files), import-linter 1 kept / 0 broken, `uv lock --check`,
+pytest **782 passed, 35 deselected** (was 778; +4). Rendered a sample digest locally and read both bodies
+rather than trusting the assertions. The D-099 em-dash pin now covers the new copy.
+
+**Next:** Hayden reviews/commits/PRs; CD auto-deploys on merge (D-068). **The real proof is tomorrow's
+nightly send** — open the digest and click through to `/dashboard`. A `vja-digest` run against prod is *not*
+a verification step: it would send real email to real users.
+
+---
+
 ## 2026-07-28 — D-101: launch hardening — the signup ceiling, the backfill, and the first alerts
 
 **Housekeeping on the previous entry: most of its carried-forward list was already done, and the entry was
