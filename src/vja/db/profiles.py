@@ -21,8 +21,13 @@ from vja.db.engine import begin
 from vja.db.schema import profiles, users
 
 # A "running" stamp older than this reads as done — the crash guard (D-082): a killed container
-# must not strand the dashboard's "matching in progress" banner forever.
-BACKFILL_STALE_AFTER = timedelta(minutes=10)
+# must not strand the dashboard's "matching in progress" banner forever. Widened 10 → 30 minutes
+# (D-101): a backfill matches up to VJA_BACKFILL_MAX_POSTINGS postings one sequential LLM call at
+# a time, and production runs took 6-25 minutes, so at 10 the guard was firing on *healthy*
+# backfills — telling the user matching had finished while it was still running, and stopping the
+# dashboard poll that was the running instance's only traffic. The bound must exceed a real
+# backfill, not average it.
+BACKFILL_STALE_AFTER = timedelta(minutes=30)
 
 # D-085: first upload is free of this clock; each accepted changed-résumé upload consumes one
 # rolling window. Kept as a timedelta so the comparison and Retry-After derive from one value.

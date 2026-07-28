@@ -235,7 +235,7 @@ export function Landing() {
           My name is Hayden, and I am a senior at the University of Wisconsin–Madison. I study
           computer science and economics, and the thought of entering the job market looms over my
           classmates and me. As an avid builder, I wanted to make a positive impact on the job
-          search for myself and my peers, which inspired me to build Rolefeed. The three domains I
+          search for myself and my peers, which inspired me to build Rolefeed. The four domains I
           chose reflect the general interests of my close peers and me, and they are often
           underserved on traditional job boards. Feel free to reach me at{" "}
           <a href="mailto:haydenham10@gmail.com">haydenham10@gmail.com</a> with any questions or

@@ -47,6 +47,15 @@ set -euo pipefail
 : "${MATCH_REASONING_EFFORT:=low}"
 LAYER2_ENV="VJA_MATCH_MODEL=${MATCH_MODEL_ROUTE},VJA_MATCH_EFFORT=${MATCH_REASONING_EFFORT}"
 
+# D-101: the signup-backfill spend ceiling, set explicitly for the public launch. The code default
+# (5.0) is sized for a dev machine; at ~$0.01/match proxy × the 100-posting backfill cap it is ~5
+# signups/day, which a launch day clears before lunch — and the refusal lands on a new user at
+# onboarding as a 429. $25 ≈ 25 signup backfills/day (~$5-6 real spend, the proxy runs ~5x
+# conservative) and is the abuse guard on a public signup flow. Service only: the ceiling is read at
+# POST /api/profiles, never by the nightly (which D-101 also removed from the count).
+: "${DAILY_LLM_BUDGET_USD:=25}"
+SERVICE_ENV="${LAYER2_ENV},VJA_DAILY_LLM_BUDGET_USD=${DAILY_LLM_BUDGET_USD}"
+
 # Unattended CD (9.6/D-068) sets this to 1: on a failed smoke, auto-roll traffic back to the prior
 # revision before exiting non-zero (gcloud run deploy sends 100% traffic to the new revision on deploy,
 # so a bad revision is already serving). Default 0 = the manual behavior — print rollback + exit, human
@@ -105,12 +114,20 @@ echo "==> [3/5] prior serving revision: ${PREV:-<none>}"
 
 # --- 4. Deploy the service (re-asserts the full CUTOVER §5 config; NO --set-env-vars → guards kept)
 echo "==> [4/5] deploy service $SERVICE"
+# --no-cpu-throttling (D-101) is load-bearing, not a performance tweak: the signup flow returns 202
+# and finishes `run_backfill` in a FastAPI BackgroundTask, i.e. OUTSIDE a request. Under Cloud Run's
+# default throttling that work only gets CPU when another request happens to land on the same
+# instance, so a backfill's progress depended on the dashboard's own 10s poll — and a real user's
+# 2026-07-24 backfill stamped `backfill_started_at` and never completed. Reasserted on every deploy,
+# like --task-timeout on the Job. (This removes throttling, not instance death: Cloud Run cannot see
+# background work when scaling down. The durable fix is moving the backfill off the request path.)
 gcloud run deploy "$SERVICE" \
   --image "$IMAGE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --service-account "$RUNTIME_SA" \
-  --update-env-vars "$LAYER2_ENV" \
+  --no-cpu-throttling \
+  --update-env-vars "$SERVICE_ENV" \
   --set-secrets "$SERVICE_SECRETS"
 
 # --- 5. Update the nightly Job to the same image (D-031 trigger-swap: one image, two run targets) -

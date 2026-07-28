@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
-from vja.db.matches import postings_needing_match
+from vja.db.matches import count_matches_since, postings_needing_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import employers, matches, postings
 from vja.llm import StructuredLLM, StructuredResult
@@ -21,10 +21,10 @@ from vja.match import (
     BackfillBudgetExceeded,
     MatchResult,
     check_backfill_budget,
-    estimate_daily_spend,
+    estimate_daily_backfill_spend,
     run_backfill,
 )
-from vja.models import TokenUsage, Verdict
+from vja.models import MatchTrigger, TokenUsage, Verdict
 from vja.scope import ScopeConfig
 from vja.verticals import VerticalConfig
 
@@ -53,12 +53,12 @@ class _FakeClient:
         )
 
 
-def _employer(engine: Engine) -> int:
+def _employer(engine: Engine, name: str = "GridCo") -> int:
     with begin(engine) as conn:
         result = conn.execute(
             employers.insert().values(
                 vertical=_VERTICAL,
-                name="GridCo",
+                name=name,
                 ats_type="greenhouse",
                 ats_slug="gridco",
                 source="manual",
@@ -139,6 +139,54 @@ def _match_count(engine: Engine) -> int:
         return int(conn.execute(select(func.count()).select_from(matches)).scalar_one())
 
 
+def _write_matches(engine: Engine, profile: Profile, *, count: int, trigger: MatchTrigger) -> None:
+    """Insert `count` already-decided matches for `profile` under `trigger`, skipping the model.
+
+    The spend guard only ever counts rows, so the cheapest honest way to stage "a day with N
+    matches on it" is to write them. Each needs its own posting, per
+    `uq_matches_posting_profile_version`.
+    """
+    prefix = trigger.value
+    employer_id = _employer(engine, name=f"GridCo-{prefix}")  # UNIQUE(vertical, name)
+    with begin(engine) as conn:
+        posting_ids: list[int] = []
+        for i in range(count):
+            result = conn.execute(
+                postings.insert().values(
+                    employer_id=employer_id,
+                    external_id=f"{prefix}-{i}",
+                    content_hash=f"h-{prefix}-{i}",
+                    raw_payload={},
+                    title="Software Engineer",
+                    level="new_grad",
+                    location="Houston, TX",
+                    status="open",
+                    first_seen_at=_NOW,
+                    last_seen_at=_NOW,
+                    extracted_at=_NOW,
+                )
+            )
+            pk = result.inserted_primary_key
+            assert pk is not None
+            posting_ids.append(int(pk[0]))
+        conn.execute(
+            matches.insert(),
+            [
+                {
+                    "posting_id": posting_id,
+                    "profile_id": profile.id,
+                    "resume_version": profile.resume_version,
+                    "score": 70,
+                    "verdict": Verdict.YES.value,
+                    "model_version": "test",
+                    "trigger": trigger.value,
+                    "created_at": _NOW,
+                }
+                for posting_id in posting_ids
+            ],
+        )
+
+
 def _run(engine: Engine, profile: Profile):  # type: ignore[no-untyped-def]
     return run_backfill(
         engine,
@@ -209,12 +257,12 @@ def test_backfill_caps_candidates_at_max_postings(
     assert _match_count(migrated_engine) == 2
 
 
-def test_estimate_daily_spend_counts_todays_matches(migrated_engine: Engine) -> None:
+def test_estimate_daily_backfill_spend_counts_todays_matches(migrated_engine: Engine) -> None:
     profile = _seed(migrated_engine)
-    assert estimate_daily_spend(migrated_engine, _NOW) == 0.0
-    _run(migrated_engine, profile)  # writes 2 matches dated _NOW
+    assert estimate_daily_backfill_spend(migrated_engine, _NOW) == 0.0
+    _run(migrated_engine, profile)  # writes 2 backfill matches dated _NOW
     # 2 matches × the nominal $0.01/match proxy.
-    assert estimate_daily_spend(migrated_engine, _NOW) == pytest.approx(0.02)
+    assert estimate_daily_backfill_spend(migrated_engine, _NOW) == pytest.approx(0.02)
 
 
 def test_check_backfill_budget_raises_when_over_ceiling(
@@ -232,6 +280,48 @@ def test_check_backfill_budget_passes_under_ceiling(
     profile = _seed(migrated_engine)
     _run(migrated_engine, profile)  # ~$0.02 estimated, well under $5
     check_backfill_budget(migrated_engine, _NOW)  # does not raise
+
+
+def test_nightly_matches_do_not_consume_the_signup_ceiling(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The D-101 regression: a big nightly must not lock new users out of signup.
+
+    Before the fix the ceiling counted *every* trigger, so a large nightly could exhaust the day's
+    budget on spend the guard cannot prevent (the nightly is uncapped by design) and the refusal
+    landed on a brand-new user at onboarding as a 429. On 2026-07-25 production wrote 397 nightly
+    matches = $3.97 of a $5 ceiling with zero signups involved.
+    """
+    profile = _seed(migrated_engine)
+    _write_matches(migrated_engine, profile, count=150, trigger=MatchTrigger.NIGHTLY)
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "1")
+
+    assert estimate_daily_backfill_spend(migrated_engine, _NOW) == 0.0
+    check_backfill_budget(migrated_engine, _NOW)  # 150 nightly matches: still does not raise
+
+    # The same volume on the backfill trigger is exactly what the ceiling is for.
+    _write_matches(migrated_engine, profile, count=150, trigger=MatchTrigger.BACKFILL)
+    assert estimate_daily_backfill_spend(migrated_engine, _NOW) == pytest.approx(1.5)
+    with pytest.raises(BackfillBudgetExceeded):
+        check_backfill_budget(migrated_engine, _NOW)
+
+
+def test_count_matches_since_filters_by_trigger(migrated_engine: Engine) -> None:
+    """The repo-level knob under the ceiling: filtered counts one trigger, unfiltered counts all.
+
+    The default must keep counting everything — the spend guard is one caller, not the contract.
+    """
+    profile = _seed(migrated_engine)
+    _write_matches(migrated_engine, profile, count=3, trigger=MatchTrigger.NIGHTLY)
+    _write_matches(migrated_engine, profile, count=2, trigger=MatchTrigger.BACKFILL)
+    midnight = _NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    assert count_matches_since(migrated_engine, midnight) == 5
+    assert count_matches_since(migrated_engine, midnight, trigger=MatchTrigger.NIGHTLY) == 3
+    assert count_matches_since(migrated_engine, midnight, trigger=MatchTrigger.BACKFILL) == 2
+    # The window still applies on top of the trigger filter.
+    tomorrow = _NOW + timedelta(days=1)
+    assert count_matches_since(migrated_engine, tomorrow, trigger=MatchTrigger.BACKFILL) == 0
 
 
 def test_postings_needing_match_since_filters_to_window(migrated_engine: Engine) -> None:

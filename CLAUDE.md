@@ -234,9 +234,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   mounts `VJA_SESSION_SECRET` + `VJA_PUBLIC_BASE_URL`) → settings + account deletion (**PR 3 built**:
   login-gated `/settings` with the pause/resume toggle over `PATCH /api/me` + hard deletion via
   `DELETE /api/me` — matches→profiles→digests→user in one transaction, postings/employers untouched,
-  session popped; no migration) — plus one GCP
-  alert-policy pair on the nightly Job, a
-  one-time Google OAuth publishing-status check, and the Hayden-run no-code activations. The five-pillar
+  session popped; no migration) — plus the GCP
+  alert-policy pair on the nightly Job (**✅ D-101, live 2026-07-28**: `deploy/gcp/alerts.sh` — failed +
+  did-not-run, the latter PromQL because absence conditions cap below the 24h run gap), a
+  one-time Google OAuth publishing-status check, and the Hayden-run no-code activations. **Launch
+  hardening ✅ (D-101, public-launch day):** the signup ceiling counts *backfill* matches only (a big
+  nightly was about to 429 new signups) at $25 in prod, and `--no-cpu-throttling` +
+  `BACKFILL_STALE_AFTER` 10→30 min so a real 6-25 minute backfill survives and reports honestly. The five-pillar
   scaling doc, D-086 digest idempotency, and broader monitoring are dropped. Robotics config (#93) and the
   Luna matching cutover (#97, D-093) closed their exit items. After exit, the main loops are UI/UX, company
   databases, and beta-user feedback; scheduled discovery and the endless fetcher tail are not exit gates
