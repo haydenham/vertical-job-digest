@@ -49,11 +49,27 @@ def test_pipeline_job_never_ships_without_the_no_digest_flag() -> None:
     script = _SHIP.read_text(encoding="utf-8")
 
     assert ': "${JOB_ARGS:=--no-digest}"' in script
-    assert '--args "$JOB_ARGS"' in script
     # The digest Job must NOT carry it — that one exists to send.
     pipeline_block = script.split("update pipeline job")[1].split("update digest job")[0]
-    assert '--args "$JOB_ARGS"' in pipeline_block
+    assert '--args="$JOB_ARGS"' in pipeline_block
     assert "--args" not in script.split("update digest job")[1]
+
+
+def test_args_flag_uses_the_equals_form_gcloud_actually_accepts() -> None:
+    """Regression (2026-07-29): `--args "--no-digest"` fails, and it fails in CD, not locally.
+
+    gcloud's own argument parser rejects it — "argument --args: expected one argument" — because
+    the value starts with a dash and argparse consumes it as the next flag. Only `--args=VALUE`
+    works. The original version of the test above asserted the *broken* spelling, so it passed
+    while the deploy was unrunnable: it pinned that a flag was present, never that gcloud would
+    take it. Both files that spell the flag out are checked here.
+    """
+    for path in (_SHIP, _CUTOVER):
+        text = path.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("--args") and not stripped.startswith("--args="):
+                raise AssertionError(f"{path.name}: `--args` needs the equals form — {stripped!r}")
 
 
 def test_pipeline_runaway_match_cap_survives_every_deploy() -> None:

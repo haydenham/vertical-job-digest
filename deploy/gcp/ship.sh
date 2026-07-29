@@ -152,12 +152,16 @@ gcloud run deploy "$SERVICE" \
 # --- 5. Update both Jobs to the same image (D-031 trigger-swap: one image, three run targets) ----
 # `--args` is asserted explicitly on each: it is what separates the two halves of the D-103 split,
 # and dropping it on the pipeline Job would silently start sending digests six times a day.
+#
+# ⚠ `--args=` MUST use the equals form. `--args "--no-digest"` fails in gcloud's own argument parser
+# ("argument --args: expected one argument") because the value starts with a dash and argparse reads
+# it as the next flag. This broke a CD run on 2026-07-29; it is not cosmetic style.
 echo "==> [5/6] update pipeline job $JOB (every 4h, --no-digest)"
 gcloud run jobs update "$JOB" \
   --image "$IMAGE" \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
-  --args "$JOB_ARGS" \
+  --args="$JOB_ARGS" \
   --task-timeout "$JOB_TASK_TIMEOUT_SECONDS" \
   --max-retries "$JOB_MAX_RETRIES" \
   --update-env-vars "$PIPELINE_JOB_ENV" \

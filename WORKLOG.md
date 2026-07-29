@@ -68,6 +68,23 @@ was confirmed failing with the fix reverted before being kept.
 future migration broke two unrelated tests (it broke them here). It now reads the head from
 `ScriptDirectory` — what those tests assert is the guard's behavior, not the head's literal value.
 
+**The first CD run failed, and the test I wrote to prevent exactly that had asserted the broken spelling.**
+`--args "--no-digest"` is rejected by *gcloud's own argument parser* — "argument --args: expected one
+argument" — because the value starts with a dash and argparse consumes it as the next flag. Only
+`--args=VALUE` works. My `test_pipeline_job_never_ships_without_the_no_digest_flag` pinned that the flag was
+*present*, never that gcloud would *accept* it, so it passed against an unrunnable deploy. Verified the fix
+against a nonexistent job before shipping it (a client-side parse error and a server-side "could not be
+found" distinguish the two cleanly, with no side effects). The replacement test scans both files for any
+`--args` not in equals form — and immediately found a **pre-existing** instance in the §8b discovery-agent
+runbook, which has never been run and would have failed the same way whenever it was.
+
+**Prod state during the failure was safe and worth recording.** CD died at step 5/6, so the service had
+already rolled to the new image (`ffd6bdf`, healthy — which also proves the Neon migration landed, since the
+D-083 guard would otherwise have refused startup) while **both Jobs stayed on the old image with the old
+`0 6` trigger**. Production behavior was therefore identical to the previous day throughout; nothing
+user-facing was in a half-migrated state. The split only becomes live when the Jobs take the new image *and*
+the Scheduler is retargeted.
+
 **Verification.** ruff format + check, mypy (58 files), import-linter 1 kept / 0 broken, `uv lock --check`,
 pytest **794 passed, 35 deselected** (was 782; +12). Both deploy scripts `bash -n` clean, and the new
 `alerts.sh` JOB_SPECS loop was parse-tested standalone. No frontend change, so no frontend gate.

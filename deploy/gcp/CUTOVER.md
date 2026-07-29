@@ -161,7 +161,7 @@ gcloud run jobs create vja-nightly \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
   --command /app/.venv/bin/vja-nightly \
-  --args "--no-digest" \
+  --args="--no-digest" \
   --task-timeout 10800 \
   --max-retries 0 \
   --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low,VJA_PUBLIC_BASE_URL=https://role-feed.com,VJA_PIPELINE_MAX_MATCHES=400" \
@@ -234,7 +234,7 @@ gcloud run jobs create vja-discover \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
   --command /app/.venv/bin/vja-discover \
-  --args "--vertical,grid_power_software" \
+  --args="--vertical,grid_power_software" \
   --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest"
 
 # Weekly Cloud Scheduler → Jobs Admin :run API (mirrors the launchd Mon-07:00 template)
