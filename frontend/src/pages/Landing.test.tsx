@@ -55,10 +55,10 @@ describe("Landing", () => {
     render(<Landing />);
     expect(screen.getByRole("heading", { name: /why i built this/i })).toBeInTheDocument();
     expect(screen.getByText(/university of wisconsin.madison/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "haydenham10@gmail.com" })).toHaveAttribute(
-      "href",
-      "mailto:haydenham10@gmail.com",
-    );
+    // Obfuscated on purpose: a plain mailto on a public page is scraped. Pinned as text with no
+    // link, so restoring the `mailto:` (or leaking a bare address) fails here.
+    expect(screen.getByText(/haydenham10 \[at\] gmail \[dot\] com/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /gmail/i })).not.toBeInTheDocument();
     expect(screen.getByText(/never auto-applies/i)).toBeInTheDocument();
   });
 

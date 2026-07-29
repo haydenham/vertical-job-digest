@@ -304,6 +304,10 @@ pipeline_runs = Table(
     Column("employers_fetched", Integer),
     Column("fetch_failures", Integer),
     Column("postings_new", Integer),
+    # Persisted as of D-103: `reopen_posting` overwrites `first_seen_at` and nulls `closed_at`, so
+    # a reopen leaves no trace on the posting row itself. Without this column the only durable
+    # record of close/reopen churn was Cloud Logging, which ages out.
+    Column("postings_reopened", Integer),
     Column("postings_closed", Integer),
     Column("extraction_calls", Integer),
     Column("match_calls", Integer),

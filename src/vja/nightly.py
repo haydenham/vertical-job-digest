@@ -1,11 +1,16 @@
-"""The unattended nightly run: fetch → diff → extract → match → send, one process (P3B3/P5.4).
+"""The unattended run: fetch → diff → extract → match → send, one process (P3B3/P5.4).
 
 `vja-nightly` is the single command a scheduler invokes (launchd locally — `deploy/launchd/`;
-a cloud cron later, D-025). It composes the existing pieces — `run_pipeline` (Phase 2), then the
-Layer-2 LLM passes per vertical (`run_extraction` + `run_matching`, P5.2/P5.3), then `send_digest`
-per (vertical, profile) (P3B2 + D-027) — adds an aggregate status, records the run's LLM totals,
-and on a **hard failure** emails an alert, because the builder isn't watching the run ("a failed
-run is itself an alert").
+Cloud Scheduler in prod, D-025). It composes the existing pieces — `run_pipeline` (Phase 2), then
+the Layer-2 LLM passes per vertical (`run_extraction` + `run_matching`, P5.2/P5.3), then
+`send_digest` per (vertical, profile) (P3B2 + D-027) — adds an aggregate status, records the run's
+LLM totals, and on a **hard failure** emails an alert, because the builder isn't watching the run
+("a failed run is itself an alert").
+
+**Two modes since D-103.** With `--no-digest` this is the *intraday* pass, scheduled every 4 hours:
+everything except the email. The digest keeps its own daily Job (`vja-digest`, `digest/send.py`).
+The name "nightly" is now historical — it is kept because renaming a live Cloud Run Job, its
+Scheduler trigger, and the alert policies buys nothing.
 
 Portability: all logic lives here, not in the scheduler; config is env/`.env`; logs go to
 stdout/stderr (the trigger decides where they land). Moving to cloud swaps the trigger, not this.
@@ -19,22 +24,20 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from html import escape
 
 from sqlalchemy import Engine
 
 from vja.db.engine import begin, get_engine
 from vja.db.pipeline_runs import update_llm_metrics
 from vja.db.profiles import active_profiles
-from vja.digest.render import RenderedEmail
 from vja.digest.send import (
     ConfigError,
     DigestConfig,
     DigestSendResult,
-    SendError,
+    digest_result_lines,
     load_config,
     send_digest,
-    send_email,
+    send_failure_alert,
 )
 from vja.extract import run_extraction
 from vja.fetchers.base import Fetcher
@@ -90,7 +93,7 @@ def _default_layer2(
 
 @dataclass(frozen=True)
 class NightlyResult:
-    status: str  # "ok" | "failed"
+    status: str  # "ok" | "failed" | "skipped"
     run: RunSummary
     digests: list[DigestSendResult]
     alerted: bool
@@ -120,12 +123,26 @@ def run_nightly(
     verify: Callable[[str], bool] | None = None,
     client: StructuredLLM | None = None,
     run_layer2: Layer2Runner = _default_layer2,
+    send_digests: bool = True,
 ) -> NightlyResult:
-    """Run the nightly loop once: pipeline → (extract → match → send per profile) per vertical."""
+    """Run the nightly loop once: pipeline → (extract → match → send per profile) per vertical.
+
+    `send_digests=False` is the D-103 intraday half (`vja-nightly --no-digest`): fetch → diff →
+    extract → match every 4 hours, with the email left to the separate daily `vja-digest` Job.
+    Nothing about the digest itself has to change for that split — `build_digest` resolves its
+    window to `last_sent_at` for the recipient, not to a fixed 24 hours, so a daily send on top of
+    6 runs a day still reports exactly what changed since the reader last heard from us.
+    """
     stamp = now or datetime.now(UTC)
     cfg = config or load_config()
 
     run = run_pipeline(engine, vertical=None, now=stamp, resolve_fetcher=resolve_fetcher)
+    if run.status == "skipped":
+        # The overlap guard fired (D-103). Stop here rather than continuing to Layer 2: the run
+        # that is still in flight is doing its own extraction and matching, and racing it would
+        # mean paying twice for the same postings. Not a failure — the next trigger is 4h away.
+        logger.warning("nightly skipped: another pipeline run is still in flight")
+        return NightlyResult(status="skipped", run=run, digests=[], alerted=False)
     logger.info(
         "pipeline run %s: status=%s employers=%d fetch_failures=%d new=%d reopened=%d closed=%d",
         run.run_id,
@@ -173,6 +190,8 @@ def run_nightly(
             estimated_cost,
         )
 
+        if not send_digests:
+            continue
         for profile in active_profiles(engine, vertical):
             result = send_digest(engine, vertical, profile, now=stamp, config=cfg, verify=verify)
             digests.append(result)
@@ -218,12 +237,7 @@ def _failure_summary(run: RunSummary, digests: list[DigestSendResult]) -> str:
         f"reopened={run.postings_reopened} closed={run.postings_closed}"
     ]
     lines += [f"  fetch error — {e.get('name')}: {e.get('error')}" for e in run.errors]
-    for d in digests:
-        line = (
-            f"digest [{d.vertical}→{d.recipient}]: {d.status} "
-            f"new={d.new} closed={d.closed} quar={d.quarantined}"
-        )
-        lines.append(line + (f" — {d.error}" if d.error else ""))
+    lines += digest_result_lines(digests)
     return "\n".join(lines)
 
 
@@ -232,29 +246,28 @@ def _send_failure_alert(
 ) -> bool:
     """Email a failure alert. Returns True iff the alert sent (no-op if Resend itself is down)."""
     failed_sends = sum(1 for d in digests if d.status == "failed")
-    summary = _failure_summary(run, digests)
     subject = (
         f"vja nightly FAILED — {run.fetch_failures} fetch failures, {failed_sends} send failures"
     )
-    text = f"The nightly run hit a hard failure.\n\n{summary}\n"
-    rendered = RenderedEmail(
+    return send_failure_alert(
+        config,
         subject=subject,
-        html=f"<h1>vja nightly FAILED</h1>\n<pre>{escape(text)}</pre>",
-        text=text,
+        summary=f"The nightly run hit a hard failure.\n\n{_failure_summary(run, digests)}",
     )
-    try:
-        send_email(config, rendered)
-        return True
-    except SendError as exc:
-        logger.error("failure-alert email could not be sent: %s", exc)
-        return False
 
 
 def nightly_main(argv: list[str] | None = None) -> int:
-    """CLI: `vja-nightly` — run the full nightly loop once (what the scheduler invokes)."""
-    argparse.ArgumentParser(
+    """CLI: `vja-nightly [--no-digest]` — run the loop once (what the scheduler invokes)."""
+    parser = argparse.ArgumentParser(
         prog="vja-nightly", description="Run the unattended nightly fetch→diff→persist→send loop."
-    ).parse_args(argv)
+    )
+    parser.add_argument(
+        "--no-digest",
+        action="store_true",
+        help="run fetch→diff→extract→match but send no email (D-103: the 4-hourly intraday "
+        "pass; the daily digest is the separate `vja-digest` job)",
+    )
+    args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -267,8 +280,10 @@ def nightly_main(argv: list[str] | None = None) -> int:
         logger.error("config error: %s", exc)
         return 1
 
-    result = run_nightly(get_engine(), config=config)
-    digests = "/".join(f"{d.vertical}→{d.recipient}:{d.status}" for d in result.digests) or "none"
+    result = run_nightly(get_engine(), config=config, send_digests=not args.no_digest)
+    digests = "/".join(f"{d.vertical}→{d.recipient}:{d.status}" for d in result.digests) or (
+        "skipped (--no-digest)" if args.no_digest else "none"
+    )
     estimated_cost = (
         f"${result.llm_cost_usd:.4f}" if result.llm_cost_usd is not None else "unavailable"
     )

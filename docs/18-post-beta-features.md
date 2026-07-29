@@ -28,19 +28,164 @@ The original slate: two adaptations (**F1 freshness**, **F2 salary**) + two nove
 we already pay to collect (**F3 recurring-gaps report**, **F4 lifespan intel**). D-093 later parks **F5
 city/region preferences** as an unsequenced follow-on; it does not expand the active build slate.
 
-## Blocking prerequisite — the D-085 churn diagnosis
+## ✅ ANSWERED (2026-07-28) — the D-085 churn diagnosis
+
+**Run before F1a, exactly as this section required. Answer: artifacts, heavily concentrated in
+Workday — and P4.3 is the wrong fix, so it is NOT the prerequisite this memo assumed.** Full
+reasoning in **D-103**; the numbers, from 14 days of Cloud Logging `employer sync` lines (521
+parsed, 94 fetch-failure lines):
+
+| cut | result |
+|---|---|
+| Top 2 employers | Boeing 35% + GE Vernova 16% = **51% of all reopens** |
+| Employers reopening at all | 31 of 135 |
+| By ATS | **Workday 78-80%** (1.01% of rows fetched) vs greenhouse 0.02%, ashby 0.08%, lever 0.21%; **zero** for every single-response fetcher (rippling/workable/smartrecruiters/paylocity/bamboohr) |
+
+Two mechanisms, neither the one guessed below:
+
+1. **Outage catch-up — the spikes, already fixed.** Boeing failed **five consecutive nights**
+   (07-17…07-21, `workday total changed during fetch: 1048 → 0`), mutating nothing each night. D-092's
+   fix merged as **#94 on 07-21**, and the first success on 07-22 processed five days of drift at once:
+   217 new / 370 closed / **86 reopened** — a quarter of the 14-day total in a single day. S&P Global
+   shows the identical five-fail-then-catch-up shape.
+2. **Residual Workday page-membership drift — the steady state.** Post-#94 (07-23…07-28): ~57
+   reopens/night, 80% Workday, Boeing 36% of those. Totals agree; membership drifts across pages.
+
+**Radancy/NextEra is exonerated.** Minus the known 07-17 DB catch-up it falls from 129 reopens to 8
+(0.32% rate), so D-078's suspicion of Radancy was wrong.
+
+**Why P4.3 is not the answer.** A pipeline-level mass-closure threshold would have *blocked* Boeing's
+legitimate 07-22 catch-up — leaving the DB five days stale, then blocking again — and it is blind to
+the steady state (1-5 reopens on employers fetching 200-2,200 rows trips no threshold). The residual
+belongs to the **Workday page-membership contract**, now tracked separately (below).
+
+**Why F1a was cleared instead.** The digest stays daily and its `new` set keys on
+`first_seen_at > last_sent_at`, so a role reopened at 02:00 *and* 14:00 yields **one** line tomorrow:
+frequency cannot increase repeat lines per role, only the count of distinct reopened roles. And more
+frequency actively kills mechanism 1 — a failing Workday board gets five more attempts the same day
+instead of going dark until tomorrow.
+
+**Follow-on, built with F1a:** `pipeline_runs.postings_reopened` is now persisted, so this question is
+answerable from the DB next time instead of from logs before they expire.
+
+### New tracked item (not an F-number) — Workday page-membership drift
+
+80% of steady-state reopens. Distinct from the D-092 total-mode contract, which this does not violate:
+the totals agree, the *set* returned across paginated pages does not. Also still open and unrelated to
+cadence: **GE Vernova, S&P Global, Airbus and Thales fail intermittently or permanently**
+(`missing 'title'` / `missing 'externalPath'`, plus the accepted D-092 ambiguous-cap boards) — GE
+Vernova failed again on 07-28.
+
+## Original framing — the D-085 churn diagnosis (superseded by the answer above)
 
 Production logs (July 8–10) showed **343–654 "new" and 384–592 closed postings per night from a
 static 44 fetched employers** — posting identity is likely churning (close/reopen cycles). This
-was already queued in D-085 ("correctness before discount", ahead of Batch API work). It is now
-**load-bearing for this roadmap**:
+was already queued in D-085 ("correctness before discount", ahead of Batch API work). It is
+**load-bearing for this roadmap**, and it has not improved: run 36 on **2026-07-28** logged
+**357 new / 481 closed / 87 reopened** across 155 employers.
 
-- **F1** would amplify churn into alert spam + repeated LLM spend every poll instead of nightly.
-- **F4**'s lifespan medians are computed from `first_seen_at`/`closed_at`; churn corrupts them.
+### How a reopen actually blocks (corrected 2026-07-28 — read this before sizing F1)
 
-No F1 or F4 build starts until the churn diagnosis lands and steady-state numbers are re-measured.
+An earlier version of this memo said F1 would amplify churn into "repeated LLM spend every poll."
+**That is wrong, and the correction matters because it moves the whole risk from cost to trust.**
+A reopen costs **zero** LLM:
 
-## F1 — Intraday freshness + instant alerts (flagship adaptation)
+- **Matching** — `postings_needing_match` filters on `~exists(already_matched)` keyed on
+  `(posting_id, profile_id, resume_version)` (`src/vja/db/matches.py:85`). `reopen_posting`
+  updates the row **in place** (D-053), so the match row survives and the posting is never a
+  candidate again.
+- **Extraction** — `reopen_posting` clears `extracted_at` **only when `content_changed`**
+  (`src/vja/db/postings.py:121`). An unchanged flap keeps the cached extraction (D-035).
+
+What a reopen does instead is **reset `first_seen_at` to now** (`src/vja/db/postings.py:117-119`),
+deliberately: *"so the role re-enters the digest's `new` set (which keys on
+`first_seen_at > last_sent_at`) and the dashboard's 'new today'."* That one reset propagates to
+exactly three places, and they are the product:
+
+1. **The digest's `new` set** — a role the user already saw is presented as new again.
+2. **The dashboard's *new today*** window, same reset.
+3. **F4's lifespan medians**, computed from `first_seen_at`/`closed_at` — a reset destroys the
+   true age.
+
+So 87 reopens a night is 87 roles at risk of being re-presented as new. The cost is credibility,
+not spend, in a product whose entire claim is *the diff is the product*.
+
+**Higher polling frequency sharpens this in two ways.** (a) A close/reopen cycle that completes
+between two daily fetches is invisible; polling 6x more often catches 6x more of them, and every
+catch resets the clock again. (b) The sharper one: **frequency can manufacture reopens.** A fetch
+that under-returns marks the missing rows closed, and the next fetch "finds" them and reopens
+them. The fetcher-level false-closure guard exists (paginate-or-fail, per fetcher), but the
+**pipeline-level threshold guard is P4.3 and remains unbuilt** — `DECISIONS.md` scopes it out of
+the fetcher half explicitly, and `CLAUDE.md`'s Phase 4 line still carries 4.3 with no ✅. Six
+times the fetches is six times the chances for any board with soft completeness to produce a
+false close→reopen pair.
+
+**The diagnosis question is therefore narrow:** are the reopens *real* (an employer genuinely
+pulled and reposted a req — in which case resetting `first_seen_at` is correct and F1a is safe to
+build) or *artifacts* (a board that intermittently under-returns)? Spread across the universe
+says real; concentrated on a few employers or one `ats_type` says artifact, and then **P4.3 is
+the actual prerequisite**, not a vague "churn fix."
+
+### Where the diagnosis data lives (and the schema gap)
+
+**Reopens are not recoverable from the DB after the fact.** `reopen_posting` overwrites
+`first_seen_at` and nulls `closed_at`, so the row's history is destroyed, and `pipeline_runs` has
+`postings_new`/`postings_closed` columns but **no `postings_reopened`**. The only durable record
+is **Cloud Logging**, where `vja.pipeline` already emits exactly the right line per changed
+employer:
+
+```
+employer sync [grid_power_software/Constellation Energy/icims]: fetched=208 new=9 reopened=3 updated=1 closed=9 unchanged=195
+employer sync [aviation_software/Amadeus/workday]:             fetched=112 new=4 reopened=4 updated=1 closed=2 unchanged=103
+```
+
+Vertical, employer, **`ats_type`**, and per-employer reopen counts — the grouping the question
+needs. Cloud Run's log retention bounds the history, so pull it before it ages out.
+
+**Diagnosis runbook (read-only; no build):**
+
+1. **Per-employer reopen concentration, N days** — the primary cut. Pull the `employer sync`
+   lines and aggregate `reopened` by employer and by `ats_type`:
+   ```
+   gcloud logging read 'resource.type="cloud_run_job" AND textPayload:"employer sync"' \
+     --freshness=14d --format="value(textPayload)" --limit 5000
+   ```
+   Parse `[vertical/employer/ats]` and the `reopened=` field; rank employers by total reopens and
+   by reopens ÷ `fetched`. A flat spread is real churn; a head of 3-5 employers is an artifact.
+2. **Does the head correlate with `ats_type`?** Group the same rows by the third bracket field.
+   A Workday/Radancy/Paylocity concentration points straight at pagination completeness and
+   therefore P4.3 (and at the D-092 ambiguous-cap boards already failing closed).
+3. **Short-lifespan clusters (DB, corroborating)** — reopens erase their own history, but
+   *closures* don't. Against Neon:
+   ```sql
+   SELECT e.name, e.ats_type, count(*) AS closures,
+          percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (p.closed_at - p.first_seen_at))/86400) AS median_days
+   FROM postings p JOIN employers e ON e.id = p.employer_id
+   WHERE p.status = 'closed' AND p.closed_at IS NOT NULL
+   GROUP BY e.name, e.ats_type HAVING count(*) > 20
+   ORDER BY median_days ASC LIMIT 25;
+   ```
+   A median lifespan under ~1 day is not a hiring signal; it is a board that flaps.
+4. **ATS-date contradiction (DB, corroborating)** — an open posting whose `source_updated_at` is
+   far older than its `first_seen_at` was almost certainly reopened rather than newly posted:
+   ```sql
+   SELECT e.name, e.ats_type, count(*) FROM postings p JOIN employers e ON e.id = p.employer_id
+   WHERE p.status = 'open' AND p.source_updated_at IS NOT NULL
+     AND p.first_seen_at - p.source_updated_at > interval '30 days'
+   GROUP BY e.name, e.ats_type ORDER BY count(*) DESC LIMIT 25;
+   ```
+   (Noisy for recently-onboarded employers — exclude anything imported inside the window.)
+
+**Likely follow-on either way:** persist `postings_reopened` on `pipeline_runs` so this question
+is answerable from the DB next time instead of from logs before they expire. One additive column,
+one manual Neon migration (D-083).
+
+~~No **F1a**, **F1b**, or **F4** build starts until step 1 is done and the answer is written down
+here.~~ **Done 2026-07-28 — see the answer at the top of this section.** F1a shipped; **F4 still
+wants post-fix data** (its medians are computed from `first_seen_at`, which a reopen resets), so the
+Workday membership item remains F4's prerequisite even though it was not F1a's.
+
+## F1 — Intraday freshness (flagship adaptation)
 
 **Thesis.** Being early is the single highest-feeling moment in a job search. Our bounded
 universe (~66 fetchable employers) makes intraday polling *cheap and polite* where horizontal
@@ -48,26 +193,95 @@ boards find it expensive — and postings appear on the employer's own ATS befor
 to LinkedIn/aggregators, so "matched to you before it hits the boards" is an honest,
 in-vertical-unbeatable claim.
 
-**Design sketch.**
+**Split into two builds (2026-07-28).** The freshness win and the alerting win are separable, and
+only the second one needs alert idempotency. **F1a is the decided next build; F1b stays parked.**
 
-- **Scheduler:** Cloud Scheduler → a new intraday Cloud Run Job every ~1–2h, running
-  fetch → diff → extract → match with **no digest stage**. The nightly `vja-nightly` keeps the
-  digest (roll-up of the day, including already-alerted roles).
-- **Alerts:** new relevant-verdict matches (`models.RELEVANT_VERDICTS`; exact threshold — e.g.
-  strong_yes-only — decided at build) trigger an immediate per-user email via Resend:
-  "*{title} at {company} — posted N minutes ago*" + rationale. An **alerted-at idempotency
-  marker** on the match guarantees at-most-once alerting across polls and retries (same family
-  as the D-086 delivery-idempotency follow-up — build them together).
-- **Dashboard:** relative freshness ("2h ago") on rows; the *new today* window already exists.
-- **Economics:** fetch+diff is deterministic HTTP, zero LLM. Extraction/matching already runs
-  only on diff items, so total LLM spend ≈ unchanged — the same new postings, matched hours
-  earlier. Politeness: ~66 employers × 12–24 polls/day is trivially within the politeness
-  policy; per-fetcher rate limits unchanged.
-- **Invariant impact:** supersedes D-005's "each ATS endpoint is hit once per day total" line
-  **at build time** via its own ADR + INVARIANTS edit. Until then D-005 stands.
+### F1a — decouple the pipeline from the digest, run it every 4 hours
 
-**Prereqs:** churn fix (above); alert idempotency design.
-**Status:** planned, not started.
+**Scope (Hayden, 2026-07-28):** fetch → diff → extract → match on a **4-hour** cadence; the email
+digest stays **once every morning**. No instant alerts, so no alert-idempotency prereq.
+
+**What is already free** (verified in code 2026-07-28, not assumed):
+
+- **The digest window needs no change at all.** `build_digest` resolves `since` to
+  `last_sent_at` for that recipient (`src/vja/digest/assembly.py:162`), **not** "the last 24
+  hours." A daily digest on top of 4-hourly pipeline runs already covers everything since
+  yesterday's send.
+- **`vja-digest` already exists** as a standalone CLI entry point (`digest/send.py:send_main`).
+- **Total LLM spend is ≈ flat** — extraction is `content_hash`-cached and matching excludes
+  already-matched postings, so the same postings cost the same, just discovered sooner.
+- **The container already has two run targets** (`vja-api`, `vja-nightly`); a third is an
+  entrypoint override, no second build (D-060).
+
+**Cadence evidence** — 20 nightly executions to 2026-07-28: median **~30 min**, most runs 13-40.
+Every tail is a *catch-up*, not steady state: 172 min (07-14) and 118 (07-16) sit on the
+SPAN/Brattle and robotics config adds; 90 min (07-27) and 69 (07-28) are the trading vertical's
+first pass and its extraction tail. Last night split as **~12 min fetch+diff over 155 employers**
+(finishing 11:13 from an 11:00 start) and ~56 min of Layer 2 + digests. At a 4-hour cadence each
+run carries a sixth of the accumulated diff, so Layer 2 shrinks proportionally while the ~12-min
+fetch floor stays fixed: **realistic steady-state run ≈ 15-20 min in a 240-min window.**
+
+**Build list:**
+
+1. `--no-digest` flag on `vja-nightly` (its argparse currently takes no arguments) — or a
+   dedicated `vja-intraday` entry point. Trivial either way.
+2. Promote `vja-digest` to a first-class scheduled job: it has **no failure alerting** today —
+   that lives in `nightly.py:_send_failure_alert` and would be left behind by the split.
+3. **Skip-if-running guard** (not a queue). Cheap insurance rather than load-bearing at 4h: the
+   only thing that can still exceed 240 min is the first run after a **config-only** vertical or
+   employer add, which needs no deploy and can land any time.
+4. Deploy: two Cloud Run Jobs + two Cloud Scheduler entries in `ship.sh`; retune
+   `--task-timeout` **below the interval** (D-086's 6h is sized for a daily job and would let a
+   hung run overlap the next three).
+5. Retune both D-101 alert policies — `absent_over_time(...[26h])` is wrong for both halves, and
+   each job wants its own *failed* + *did-not-run* pair.
+6. **A spend ceiling on the pipeline path.** D-101 deliberately narrowed the daily ceiling to
+   *backfill* matches, so the nightly is uncapped — fine at one run/day, much less fine at six.
+7. Its own ADR superseding D-005's "once per day per employer row" invariant + the INVARIANTS
+   edit.
+
+**Free side effect worth naming:** the pipeline job becomes **retry-safe** once it sends no
+email, which is the exact constraint D-086 cited for `--max-retries 0`. Retries can come back on
+the pipeline half while the digest half keeps zero.
+
+**Sizing:** roughly two PRs plus the ADR. Nothing needs rewriting; the architecture anticipated
+this split.
+
+**Prereq:** the churn diagnosis above — **done 2026-07-28, and it cleared this build.**
+
+**Status: ✅ BUILT 2026-07-28 (D-103).** All seven build items landed. What differed from the plan
+above, and why:
+
+- **Item 1** became `vja-nightly --no-digest` (not a new entry point) — the flag *is* the split, so
+  `ship.sh` and `test_deploy_config.py` both assert it can never be dropped.
+- **Item 2**: the alert helper moved from `nightly.py` into `digest/send.py`, not a new
+  `digest/alert.py` — that module would have imported `send.py` for `send_email` while `send_main`
+  imported it back, a real cycle. `send.py` already owns `send_email`/`DigestConfig`.
+- **Item 3** shipped with a `RUN_STALE_AFTER` bound and stops *before* Layer 2 on a skip.
+- **Item 4**: two Jobs (`vja-nightly` keeps its name), timeouts 3h/1h, retries stay 0 on both.
+- **Item 5**: `alerts.sh` now loops over a `JOB_SPECS` list with per-job absence windows (5h/26h).
+- **Item 6** became `VJA_PIPELINE_MAX_MATCHES` — a per-run *count* bound that defers overflow, not a
+  daily ceiling that refuses work (D-101 decoupled the signup ceiling from the pipeline on purpose).
+- **Item 7**: D-103, plus the INVARIANTS replacements.
+- **Two unplanned finds, both kept:** `pipeline_runs.postings_reopened` is now persisted, and
+  `postings_needing_match` had **no `ORDER BY`**, so every count-capped caller (including the
+  pre-existing D-057 backfill) was truncating an undefined set. Now freshest-first, regression-pinned.
+
+**Not done, deliberately:** automatic retries on the pipeline Job. D-086's duplicate-delivery reason
+dissolves once that half sends no email, but pairing retries with a brand-new skip-if-running guard
+can wedge a run. Worth revisiting once the guard has a few weeks of production behind it.
+
+### F1b — instant alerts (parked)
+
+New relevant-verdict matches (`models.RELEVANT_VERDICTS`; exact threshold — e.g. strong_yes-only
+— decided at build) trigger an immediate per-user email via Resend: "*{title} at {company},
+posted N minutes ago*" + rationale. Requires an **alerted-at idempotency marker** on the match
+for at-most-once delivery across polls and retries (same family as the D-086 delivery-idempotency
+follow-on — build them together). Also wants relative freshness ("2h ago") on dashboard rows.
+
+**Prereqs:** F1a shipped; alert idempotency design; churn diagnosis (a flapping role would alert
+twice, which is far more intrusive by email than a repeated digest line).
+**Status:** parked, deliberately behind F1a.
 
 ## F2 — Salary display (adaptation)
 
@@ -164,12 +378,18 @@ wiring wait for a dedicated post-beta decision rather than riding the Luna cutov
 
 ## Sequencing (post-beta-exit)
 
-1. **Churn diagnosis** (D-085 queue — now blocking F1 + F4)
+1. ~~**Churn diagnosis**~~ ✅ done 2026-07-28 (D-103) — artifacts, Workday-concentrated; **P4.3 was
+   the wrong tool and is not queued**. Spawned the *Workday page-membership drift* item instead.
 2. ~~**F2 Phase A** — salary surfacing~~ ✅ built 2026-07-24 (D-095), with description display
    added to the same block
-3. **F4** — lifespan intel (read-only, zero LLM; needs post-churn-fix data)
-4. **F1** — intraday freshness + instant alerts (flagship; own ADR superseding D-005)
-5. **F3** — recurring-gaps report
+3. ~~**F1a** — 4-hourly pipeline, daily digest~~ ✅ built 2026-07-28 (D-103, superseding D-005's
+   once-daily fetch rule)
+4. **Workday page-membership drift** (new, from the diagnosis) — 80% of steady-state reopens, and
+   **F4's real prerequisite**. Read-only investigation first.
+5. **F4** — lifespan intel (read-only, zero LLM; needs post-fix data — a reopen resets
+   `first_seen_at`, which the medians are computed from)
+6. **F3** — recurring-gaps report (no churn dependency; could jump the queue)
+7. **F1b** — instant alerts (needs F1a ✅ + alert idempotency)
 - **F2 Phase B** (H1B enrichment) — parallel track, data-only, no ordering dependency.
 
 ## Explicitly rejected / parked (the anti-clutter record)

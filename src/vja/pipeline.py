@@ -18,7 +18,7 @@ import logging
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Engine
@@ -156,12 +156,22 @@ def sync_employer(
     )
 
 
+# D-103: how old an unfinished `running` row must be before the next run treats it as a crash
+# tombstone rather than a live run. Sized above the pipeline Job's 3h task timeout, so a real run
+# can never be overtaken by the next 4-hourly trigger, while a killed process cannot wedge the
+# pipeline forever. (Same shape as D-082's `BACKFILL_STALE_AFTER`, and for the same reason.)
+RUN_STALE_AFTER = timedelta(hours=4)
+
+
 @dataclass(frozen=True)
 class RunSummary:
-    """Outcome of a whole pipeline run (mirrors the persisted `pipeline_runs` row)."""
+    """Outcome of a whole pipeline run (mirrors the persisted `pipeline_runs` row).
+
+    `run_id` is -1 and `status` is "skipped" for the D-103 overlap skip, which writes no row.
+    """
 
     run_id: int
-    status: str  # "ok" | "partial" | "failed"
+    status: str  # "ok" | "partial" | "failed" | "skipped"
     employers_fetched: int
     fetch_failures: int
     postings_new: int
@@ -179,6 +189,41 @@ def _run_status(*, total: int, failures: int) -> PipelineRunStatus:
     return PipelineRunStatus.PARTIAL
 
 
+def _recent_run_in_flight(engine: Engine, now: datetime) -> bool:
+    """True if a `running` row exists and is younger than `RUN_STALE_AFTER` (D-103).
+
+    Cheap insurance, not a lock: it is a read followed by a write, so two processes starting at the
+    same instant can both pass it.
+
+    Worth being precise about what it actually catches, since the Job's 3h task timeout is below the
+    4h trigger interval — the scheduler alone cannot produce an overlap. What can: a **manual**
+    `gcloud run jobs execute` landing on top of a scheduled run (exactly what post-deploy
+    verification does), a local `vja-nightly` against the same database, and any future cadence or
+    timeout change that narrows the gap. The staleness bound is what keeps it from becoming a trap:
+    only `finish_run` clears `running`, so a killed process leaves a row behind forever.
+    """
+    with begin(engine) as conn:
+        started_at = pipeline_runs_repo.latest_running_started_at(conn)
+    if started_at is None:
+        return False
+    age = now - started_at
+    if age >= RUN_STALE_AFTER:
+        # A crashed run's tombstone. Say so loudly — it means a previous run died without
+        # finishing, which nothing else in this process would report.
+        logger.warning(
+            "ignoring stale `running` pipeline row started %s (%s ago, over the %s threshold) — "
+            "a previous run almost certainly died mid-flight",
+            started_at,
+            age,
+            RUN_STALE_AFTER,
+        )
+        return False
+    logger.warning(
+        "skipping run: a pipeline run started %s (%s ago) is still in flight", started_at, age
+    )
+    return True
+
+
 def run_pipeline(
     engine: Engine,
     vertical: str | None = None,
@@ -191,8 +236,24 @@ def run_pipeline(
     `resolve_fetcher` is injected (defaults to the real registry) so tests can supply fakes.
     Each employer is isolated: an unexpected exception is recorded and the loop continues, so
     one bad employer can never abort the whole run.
+
+    Returns a `skipped` summary without touching anything if a recent run is still in flight
+    (D-103) — see `_recent_run_in_flight`.
     """
     stamp = now or datetime.now(UTC)
+
+    if _recent_run_in_flight(engine, stamp):
+        return RunSummary(
+            run_id=-1,
+            status="skipped",
+            employers_fetched=0,
+            fetch_failures=0,
+            postings_new=0,
+            postings_reopened=0,
+            postings_closed=0,
+            results=[],
+            errors=[],
+        )
 
     # Commit the `running` row before the loop so a mid-run crash leaves a visible tombstone.
     with begin(engine) as conn:
@@ -261,6 +322,7 @@ def run_pipeline(
             employers_fetched=len(results),
             fetch_failures=failures,
             postings_new=postings_new,
+            postings_reopened=postings_reopened,
             postings_closed=postings_closed,
             errors=errors,
             now=finished,
@@ -288,6 +350,9 @@ def run_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     summary = run_pipeline(get_engine(), args.vertical)
+    if summary.status == "skipped":
+        print("run skipped: another pipeline run is still in flight")
+        return 0
     print(
         f"run {summary.run_id}: status={summary.status} "
         f"employers={summary.employers_fetched} failures={summary.fetch_failures} "

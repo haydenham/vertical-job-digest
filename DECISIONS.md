@@ -2330,3 +2330,75 @@ public origin: a dev run must never render a localhost link into an email (D-094
 Copy carries no em dashes (D-099) and is a single shared constant, so the HTML anchor text and the
 plaintext label cannot drift. Backend only: no frontend change, no schema change, no migration.
 References D-010, D-094, D-095, D-099, D-056, D-065, D-008, D-021.
+
+### D-103 · Freshness · The pipeline runs every 4 hours; the digest stays daily · accepted · 2026-07-28
+Being early is the highest-feeling moment in a job search (`docs/18` F1). Fetch → diff → extract → match ran
+**once a day**, so a role posted at 08:00 stayed invisible for 22 hours. Our bounded ~155-employer universe
+makes intraday polling cheap and polite where a horizontal board could not afford it, and postings hit the
+employer's own ATS before they propagate to aggregators. **Decision: the pipeline runs every 4 hours with
+`--no-digest`; the email stays once a morning.** This supersedes D-005's "each ATS endpoint is hit once per
+day per employer row" — the user-count-independence half of D-005 is untouched.
+
+**The split cost almost nothing, and the reason is worth recording.** `build_digest` resolves `since` to
+`last_sent_at` **for that recipient** (`digest/assembly.py:162`), not to a fixed 24 hours, so a daily digest
+sitting on top of six runs a day already reports exactly what changed since that reader last heard from us.
+The digest needed **no change at all**. `vja-digest` already existed as a CLI, and the container already
+shipped two run targets from one image (D-060), so the third is an entrypoint override.
+
+**The D-085 churn diagnosis, which `docs/18` made a hard prerequisite, was run first and answered it.**
+14 days of Cloud Logging `employer sync` lines (521 parsed, 94 fetch-failure lines): reopens are
+**artifacts, heavily concentrated** — Boeing 35% + GE Vernova 16% = 51%; only 31 of 135 employers reopen at
+all; by ATS **Workday is 78-80%** at a 1.01% reopen/fetch rate against greenhouse 0.02% / ashby 0.08% /
+lever 0.21%, and **exactly zero** for every single-response fetcher (rippling, workable, smartrecruiters,
+paylocity, bamboohr). Pagination is the discriminator. The *spikes* were an outage catch-up that is already
+fixed: Boeing failed five consecutive nights (07-17…07-21, `total changed during fetch: 1048 → 0`) with zero
+mutations each night, D-092's fix merged as #94 on 07-21, and the first success on 07-22 processed five days
+of drift at once — 217 new / 370 closed / 86 reopened, a quarter of the 14-day total in one day. S&P Global
+shows the identical shape. **NextEra/Radancy is exonerated:** minus the known 07-17 catch-up it falls from
+129 reopens to 8 (0.32%), so D-078's suspicion of Radancy was wrong.
+
+**P4.3 is therefore NOT the prerequisite, contrary to what `docs/18` pre-committed to.** A pipeline-level
+mass-closure threshold would have *blocked* Boeing's legitimate 07-22 catch-up, leaving the DB five days
+stale and then blocking again, and it is blind to the steady state (1-5 reopens on employers fetching
+200-2,200 rows trips no threshold). The residual belongs to the Workday page-membership contract, which is
+now its own tracked item rather than a gate.
+
+**And the risk F1a carries is structurally capped.** The digest stays daily and its `new` set keys on
+`first_seen_at > last_sent_at`, so a role reopened at 02:00 *and* 14:00 still yields **one** line tomorrow —
+frequency cannot increase repeat lines per role, only the count of distinct reopened roles. More frequency
+also actively kills the outage mechanism: a failing Workday board now gets five more attempts the same day
+instead of going dark until tomorrow.
+
+**Cadence (Hayden):** pipeline at `0 1,5,9,13,17,21` America/Chicago, digest at `0 6` — one hour after a
+completed pass, so the email lands at the hour users already receive it, only earlier and more consistently
+than the old walk-the-verticals send. Measured steady state is ~15-20 min in a 240-min window.
+
+**Four supporting decisions.** (1) **Timeouts differ by cadence:** the pipeline gets 3h, which must stay
+below the 4h interval — D-086's 6h was sized for a once-daily Job and would let one hung run overlap the
+next three; the digest gets 1h. (2) **Zero automatic retries stay on both Jobs.** D-086's duplicate-delivery
+reason genuinely dissolves on the pipeline half once it sends no email, and turning retries back on there is
+a real future win — but pairing them with a brand-new skip-if-running guard can wedge a run, so it is a
+deliberate follow-on, not this build. (3) **A skip-if-running guard**, sized by a `RUN_STALE_AFTER` bound
+above the task timeout: only `finish_run` moves a row off `running`, so without the bound one crashed run
+would skip every subsequent run forever. It is honestly a check, not a lock — a read then a write, so two
+simultaneous starts can both pass it; with one Scheduler trigger per Job that race does not arise, and the
+case worth defending is a genuinely slow run (a config-only vertical or employer add lands with no deploy).
+On a skip the nightly stops *before* Layer 2, since racing the in-flight run would pay the strong model
+twice. (4) **A per-run match cap** (`VJA_PIPELINE_MAX_MATCHES`, 400 in prod, unset in code) — deliberately
+not the D-057 daily ceiling, which refuses work outright and is keyed to signups (D-101 decoupled those on
+purpose). Overflow is *deferred*, not dropped: leftovers stay in `postings_needing_match` for the next run,
+which is self-healing at a 4h cadence.
+
+**Two things found while building, both kept.** `postings_reopened` is now **persisted on `pipeline_runs`**
+(one additive nullable column, one manual Neon migration): `reopen_posting` overwrites `first_seen_at` and
+nulls `closed_at`, so a reopen erases its own evidence and the only durable record was a log line that ages
+out — a worse trade at six runs a day. And `postings_needing_match` had **no `ORDER BY`**, so every capped
+caller — the new one *and* the D-057 backfill — was slicing a set the database could return in any order,
+making it undefined which postings got matched and which were silently skipped. Now ordered freshest-first,
+which is also the product-correct priority (D-039); pinned by a regression test confirmed failing without it.
+
+**`vja-nightly` keeps its name** despite running six times a day: renaming a live Cloud Run Job means
+recreating it, repointing its Scheduler trigger, and rewriting its alert policies, for no functional gain.
+The alert policies are now a **per-job pair** with per-job absence windows (pipeline 5h, digest 26h);
+D-101's PromQL-not-`conditionAbsent` finding is unchanged and still load-bearing for the daily half.
+References D-005, D-085, D-087, D-092, D-086, D-101, D-057, D-039, D-060, D-031, D-021, D-083.

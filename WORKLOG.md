@@ -5,6 +5,89 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-28 — D-103: the pipeline goes 4-hourly, the digest stays daily
+
+**Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs" is **done** — the digest
+dashboard link merged as **#111**, and the session's own F1a scoping is committed on
+`docs/intraday-freshness-plan` (`408d8da`, WORKLOG + docs/18 + the small Landing tweak), not yet PR'd. This
+branch (`feat/intraday-pipeline-split`) sits on top of it. **Still open, unchanged and Hayden-owned:** click
+Google's verification link for the `rolefeed-ops` alert channel (until then the policies notify nobody),
+publish the OAuth app off Testing (~100-user ceiling), D-095 PR 1's comp fill-rate re-run against Neon, and
+the unconfirmed `role-feed.com` connection resets from this sandbox.
+
+**Task: run the pipeline every 4 hours, keep the digest daily** — F1a, scoped last session. `docs/18` made it
+**hard-blocked on the D-085 churn diagnosis**, so that ran first, read-only, before any code.
+
+**The diagnosis answered the question and then overturned the plan built on top of it.** 14 days of Cloud
+Logging `employer sync` lines (521 parsed, 94 fetch-failure lines). Reopens are **artifacts, heavily
+concentrated**: Boeing 35% + GE Vernova 16% = 51%; only 31 of 135 employers reopen at all; by ATS **Workday
+78-80%** at a 1.01% reopen/fetch rate against greenhouse 0.02%, ashby 0.08%, lever 0.21%, and **exactly zero**
+for every single-response fetcher. Pagination is the discriminator, cleanly.
+
+**The spikes turned out to be a bug that is already fixed.** Boeing failed **five consecutive nights**
+(07-17…07-21, `workday total changed during fetch: 1048 → 0`), mutating nothing each night — the guard
+working. D-092's fix merged as **#94 on 07-21**, and the first success on 07-22 processed five days of drift
+in one go: 217 new / 370 closed / **86 reopened**, a quarter of the fortnight's total in a single day. S&P
+Global shows the identical shape. **Radancy/NextEra is exonerated** — minus the known 07-17 catch-up it drops
+from 129 reopens to 8, so D-078's suspicion of it was simply wrong.
+
+**So `docs/18`'s own "if artifacts, then P4.3" clause is wrong, and I said so rather than following it.** A
+mass-closure threshold would have *blocked* Boeing's legitimate 07-22 catch-up — five days stale, then
+blocked again — and it is blind to the steady state (1-5 reopens on employers fetching 200-2,200 rows trips
+no threshold). Hayden took the recommendation to build F1a and track Workday page-membership drift separately.
+
+**The argument that actually cleared F1a is structural, not statistical.** The digest stays daily and its
+`new` set keys on `first_seen_at > last_sent_at`, so a role reopened at 02:00 *and* 14:00 still produces
+**one** line tomorrow. Frequency cannot increase repeat lines per role. And it *reduces* the outage
+mechanism: a failing Workday board now gets five more attempts the same day instead of going dark till
+tomorrow.
+
+**Built on `feat/intraday-pipeline-split`** (branch only; Hayden commits/PRs). All seven `docs/18` build items
+landed. Three deviations from the approved plan, each for a concrete reason:
+
+- **The planned `digest/alert.py` was deleted before it shipped.** It imported `send.py` for `send_email`
+  while `send_main` imported it back — a real cycle, which I had papered over with a function-local import.
+  The helpers went into `send.py`, which already owns `send_email`/`DigestConfig`/`DigestSendResult`.
+- **The "spend ceiling on the pipeline" became `VJA_PIPELINE_MAX_MATCHES`**, a per-run count bound that
+  *defers* overflow to the next run — not a daily ceiling that refuses work. Reusing D-057's would have let a
+  big pipeline run 429 a new user at onboarding, exactly the coupling D-101 removed on purpose.
+- **Retries stay off on both Jobs.** D-086's duplicate-delivery reason genuinely dissolves once the pipeline
+  half sends no email, and `docs/18` called this a free win — but pairing it with a brand-new
+  skip-if-running guard can wedge a run. Deliberate follow-on, recorded in the ADR.
+
+**Two things the work turned up that nobody was looking for.** (1) `pipeline_runs` never persisted
+`postings_reopened` — it was computed every run and thrown away, so churn was only answerable from logs that
+age out, which gets worse at six runs a day. Now an additive nullable column (existing rows stay NULL: a
+pre-column run's reopen count is unknown, not zero). (2) **`postings_needing_match` had no `ORDER BY`**, so
+*every* count-capped caller — the new one and the **pre-existing D-057 backfill** — was slicing a set the
+database could return in any order. Which postings got matched, and which were silently skipped, was
+undefined. Now `first_seen_at DESC, id DESC`, which is also the product-correct priority; the regression test
+was confirmed failing with the fix reverted before being kept.
+
+**One more brittleness fixed in passing:** `test_schema_guard.py` hardcoded the migration head, so every
+future migration broke two unrelated tests (it broke them here). It now reads the head from
+`ScriptDirectory` — what those tests assert is the guard's behavior, not the head's literal value.
+
+**Verification.** ruff format + check, mypy (58 files), import-linter 1 kept / 0 broken, `uv lock --check`,
+pytest **794 passed, 35 deselected** (was 782; +12). Both deploy scripts `bash -n` clean, and the new
+`alerts.sh` JOB_SPECS loop was parse-tested standalone. No frontend change, so no frontend gate.
+
+**Not yet done — this branch is not deployable on its own:**
+- **The migration is manual and must run before merge** (D-083): export Neon's `VJA_DATABASE_URL`, then
+  `alembic current` → `alembic upgrade head` → `alembic current`. Head is `79c5ef618c90`.
+- **The Cloud Scheduler cadence change is manual** — `ship.sh` updates the Jobs but never the triggers.
+  Retarget `vja-nightly-trigger` to `0 1,5,9,13,17,21` and create `vja-digest-trigger` at `0 6` (both
+  commands are in `CUTOVER.md` §8). **The `vja-digest` Job must be created before the first trigger fires.**
+- **Re-run `deploy/gcp/alerts.sh`** for the `vja-digest` policy pair; the existing two are a clean no-op.
+
+**Next:** Hayden reviews/commits/PRs; CD auto-deploys on merge (D-068). Then, post-deploy: execute
+`vja-nightly` manually and confirm it sends **nothing** (check the `digests` count either side). **Do not
+manually execute `vja-digest` — it sends real email to real users;** its proof is the next 06:00 send. On day
+two, read `postings_reopened` across the six runs: the first DB-native churn measurement, and the check that
+4-hourly polling did not multiply it.
+
+---
+
 ## 2026-07-28 — D-102: the digest links back to the dashboard
 
 **Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs this branch" is **done** —
@@ -46,9 +129,55 @@ change, **no migration**, no `ship.sh` change — the nightly Job has mounted `V
 pytest **782 passed, 35 deselected** (was 778; +4). Rendered a sample digest locally and read both bodies
 rather than trusting the assertions. The D-099 em-dash pin now covers the new copy.
 
-**Next:** Hayden reviews/commits/PRs; CD auto-deploys on merge (D-068). **The real proof is tomorrow's
-nightly send** — open the digest and click through to `/dashboard`. A `vja-digest` run against prod is *not*
-a verification step: it would send real email to real users.
+**Second half of the session: scoping a 4-hourly pipeline with a daily digest (F1a in `docs/18`).**
+Hayden asked how extensive it would be to run fetch → extract → match hourly while keeping the digest to
+every morning. Answered from production and code rather than the roadmap, which changed the answer twice.
+
+**Closed two carried-forward ops items by checking prod instead of asking.** Revision `rolefeed-00063-b4f`
+carries `run.googleapis.com/cpu-throttling: false` **and** `VJA_DAILY_LLM_BUDGET_USD=25` — both D-101 launch
+guards are live. (`BACKFILL_STALE_AFTER` is a code constant at `db/profiles.py:30`, so its absence from the
+service env is correct, not a miss.)
+
+**The enabling fact nobody had written down: the digest window needs no change.** `build_digest` resolves
+`since` to `last_sent_at` for that recipient (`assembly.py:162`), not "the last 24 hours" — so a daily digest
+sitting on top of 4-hourly runs already covers everything since yesterday's send. `vja-digest` also already
+exists as a standalone entry point. The split is mostly wiring.
+
+**Duration data killed the first version of my estimate, then Hayden killed the second.** Twenty executions:
+median ~30 min, but tails of 172, 118, 90 and 69 minutes. I initially read those as "hourly will overlap, you
+need a real concurrency guard." Hayden pointed out the 90-minute run was the trading vertical being added —
+and every other tail lines up with a config-only employer/vertical add too. At a 4-hour cadence each run
+carries a sixth of the diff, so steady state is ~15-20 min in a 240-min window and the guard drops from
+load-bearing to cheap insurance (still worth having: a config-only add needs no deploy and can land any time).
+
+**A correction I owe the record, because I stated it twice before checking.** I said intraday polling would
+give churn "24 chances a day to re-extract and re-match the same roles." **A reopen costs zero LLM.**
+`postings_needing_match` filters on `~exists(already_matched)` (`db/matches.py:85`) and `reopen_posting`
+updates in place, so the match row survives; extraction is only invalidated when `content_changed`
+(`db/postings.py:121`). What a reopen actually does is **reset `first_seen_at` to now** — which puts the role
+back in the digest's `new` set and the dashboard's *new today*. So churn's cost is **credibility, not spend**:
+last night's 87 reopens are 87 roles at risk of being shown to a user as new a second time. For a product
+whose pitch is "the diff is the product," that is the worse failure.
+
+**Two findings that reshaped the prerequisite.** (1) **Frequency can manufacture reopens** — an under-returning
+fetch closes rows and the next fetch reopens them; the fetcher-level false-closure guard exists per fetcher,
+but the **pipeline-level threshold guard is P4.3 and still unbuilt**. So if the reopens turn out to be
+artifacts, P4.3 *is* the churn fix, not a vague "diagnosis." (2) **Reopens are not recoverable from the DB** —
+`reopen_posting` overwrites `first_seen_at` and nulls `closed_at`, and `pipeline_runs` has no
+`postings_reopened` column. The only durable record is Cloud Logging, where `vja.pipeline` already emits
+per-employer `fetched/new/reopened/updated/closed/unchanged` **including `ats_type`** — exactly the grouping
+the question needs, and it ages out with log retention.
+
+**Written to `docs/18`, not built:** the corrected reopen mechanism, the diagnosis runbook (log aggregation +
+two corroborating Neon queries), F1 split into **F1a** (4-hourly pipeline + daily digest, decided scope, seven
+build items, ~2 PRs + ADR) and **F1b** (instant alerts, parked), and a resequenced list with the churn
+diagnosis next and F1a promoted ahead of F4.
+
+**Next:** Hayden reviews/commits/PRs; CD auto-deploys on merge (D-068). **The real proof of the digest link is
+tomorrow's nightly send** — open the digest and click through to `/dashboard`. A `vja-digest` run against prod
+is *not* a verification step: it would send real email to real users. **Then:** the churn diagnosis (read-only,
+runbook in `docs/18`), which decides whether F1a is safe to build or P4.3 comes first. A small landing-page
+change is queued for the next PR (not yet specified).
 
 ---
 

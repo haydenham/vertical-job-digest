@@ -9,7 +9,7 @@ import json
 import httpx
 import respx
 
-from vja.digest.send import DigestConfig, DigestSendResult
+from vja.digest.send import DigestConfig, DigestSendResult, alert_failed_digests
 from vja.nightly import _failure_summary, _send_failure_alert
 from vja.pipeline import RunSummary
 
@@ -59,3 +59,53 @@ def test_send_failure_alert_swallows_send_error() -> None:
     # If Resend itself is down, the alert can't send — but must not raise.
     respx.post(_RESEND).mock(return_value=httpx.Response(500, text="down"))
     assert _send_failure_alert(_CONFIG, _run(), []) is False
+
+
+def test_digest_job_alerts_on_a_failed_send() -> None:
+    """The standalone digest Job raises its own alarm (D-103).
+
+    Before the split, a failed send was reported by the nightly composer that wrapped it. Once the
+    digest is its own Cloud Run Job, nothing else in that process would say anything — `send_main`
+    returned exit 1 and emailed nobody.
+    """
+    with respx.mock:
+        route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "a"}))
+        alerted = alert_failed_digests(
+            _CONFIG,
+            [
+                DigestSendResult("grid_power_software", "a@example.com", "sent", 1, 2, 0, 0),
+                DigestSendResult(
+                    "aviation_software", "b@example.com", "failed", None, 3, 1, 0, "Resend 422"
+                ),
+            ],
+        )
+
+    assert alerted is True
+    assert route.call_count == 1
+    body = json.loads(route.calls.last.request.content)
+    assert body["to"] == [_CONFIG.recipient]  # the ops address, not the reader's (D-037)
+    assert "1 of 2 digest sends failed" in body["text"]
+    assert "b@example.com" in body["text"] and "Resend 422" in body["text"]
+
+
+def test_digest_job_stays_silent_when_every_send_succeeded() -> None:
+    with respx.mock:
+        route = respx.post(_RESEND).mock(return_value=httpx.Response(200, json={"id": "a"}))
+        alerted = alert_failed_digests(
+            _CONFIG, [DigestSendResult("grid_power_software", "a@example.com", "sent", 1, 2, 0, 0)]
+        )
+
+    assert alerted is False
+    assert route.call_count == 0
+
+
+def test_digest_alert_never_raises_when_resend_is_the_thing_that_is_down() -> None:
+    """Best-effort by nature — this is exactly why D-101 added Cloud Monitoring on top."""
+    with respx.mock:
+        respx.post(_RESEND).mock(return_value=httpx.Response(500, text="down"))
+        alerted = alert_failed_digests(
+            _CONFIG,
+            [DigestSendResult("grid_power_software", "a@example.com", "failed", None, 0, 0, 0)],
+        )
+
+    assert alerted is False
