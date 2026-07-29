@@ -74,7 +74,27 @@ answerable from the DB next time instead of from logs before they expire.
 the totals agree, the *set* returned across paginated pages does not. Also still open and unrelated to
 cadence: **GE Vernova, S&P Global, Airbus and Thales fail intermittently or permanently**
 (`missing 'title'` / `missing 'externalPath'`, plus the accepted D-092 ambiguous-cap boards) — GE
-Vernova failed again on 07-28.
+Vernova failed again on 07-28, and all four again on 07-29.
+
+**Reopens are still trending up, and the 4-hourly split is not the cause** (pre-launch sweep,
+2026-07-29). Reopens on the *daily* pass: 27 (07-27) → 87 (07-28) → **136 (07-29)**; closed over the
+same three days 277 → 481 → **522**. The three intraday `--no-digest` runs that afternoon reopened
+0 / 10 / 5, i.e. the small diffs the cadence predicts, so the trend belongs to the pre-existing
+Workday page-membership drift above and not to F1a. What it does reach is the reader: grid's digest
+carried `closed=280` on 07-29 against 137 the day before, which is the D-056 rollup doing its job on
+churn rather than on real closures. **The DB-native measurement (`pipeline_runs.postings_reopened`,
+persisted since D-103) has still not been read** — the sweep session had no route to Neon. Read it
+before sizing any fix; the numbers above come from Cloud Logging summary lines and age out.
+
+**Attrition is a separate, ordinary failure mode — do not fold it into the drift item.** Camus Energy's
+Greenhouse board began 404ing on 2026-07-28 and failed every run after; the company had migrated to
+Rippling (`camus-energy`, 3 open, verified live 2026-07-29) and the seed row moved with it,
+config-only. Two things this exposed are worth keeping: a *permanently* dead board is invisible
+(`_is_hard_failure` deliberately does not alert on partial fetch failures, `nightly.py:105`), and a
+failed fetch mutates nothing, so a dead employer's postings stay `open` on the dashboard forever
+rather than closing. Neither is wrong on its own; together they mean **nobody finds out**. A
+"same employer has failed every run for N runs" signal would close that gap and is the natural
+follow-on, distinct from P4.3's rejected mass-closure threshold.
 
 ## Original framing — the D-085 churn diagnosis (superseded by the answer above)
 

@@ -5,6 +5,141 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-29 — Pre-launch sweep: code + prod logs before opening to more users
+
+**Housekeeping on the previous entry:** it is headed `2026-07-28` but was amended twice on 07-29
+(`512d00f`, `57a45c7`), so its `**Next:**` and `**Not yet done**` blocks read as pending when they are
+not. Resolving them here: D-103 **merged as #112 and is deployed** (service + both Jobs on `57a45c7`);
+the Neon migration **landed** (proved by the service being ready at all — the D-083 guard would have
+refused startup otherwise); the Scheduler **is retargeted**; `alerts.sh` was re-run. The one item it
+listed that had *not* happened is the `vja-digest` policy pair, addressed below.
+
+**Task: one last sweep of code and logs before inviting more users.** No feature work. Everything
+below is evidence-backed; where I could not get evidence, it says so.
+
+**Constraint that shaped the session:** no route to Neon (wifi). Every DB-native check is therefore
+deferred and named at the bottom, and all findings come from Cloud Logging, the Cloud Run /
+Monitoring / Scheduler APIs, live ATS probes, and the repo.
+
+### The D-103 split is proven in production, and the logs already contained the proof
+
+The previous entry asked for a manual `vja-nightly` that sends nothing. It had effectively already
+happened: runs **38, 39, 40** (two manual, then the 14:00Z scheduled one) emitted **zero** `digest [`
+lines, while run **37** — 11:00Z, the last execution on the old image with no flag — sent all ten.
+The 14:00Z run took **12m31s** inside a 240-minute window, matching the predicted 15-20 min steady
+state. Cost did not multiply either: $4.29 (07-27) and $5.52 (07-28) on the daily cadence against
+~$1.11 for 07-29's four runs combined, because extraction is `content_hash`-cached and matching
+excludes already-matched postings exactly as D-103 argued.
+
+### `vja-digest` had never run once, and tomorrow 06:00 was going to be its first attempt
+
+Zero executions. The digest *logic* is old and well-proven — it is what `vja-nightly` composed daily
+until 07-29 — but the **Job's container path** (entrypoint override, Neon connect, secret mount) was
+completely unexercised, and its first attempt would have been unattended, at 06:00, to real users.
+
+Smoked it without sending anything:
+`gcloud run jobs execute vja-digest --args=--vertical=__smoke__`. An unknown vertical makes
+`active_profiles` return empty, so the send loop body never executes and `alert_failed_digests`
+no-ops on an empty list — provably zero emails and zero `digests` rows, while still exercising
+`get_engine()` and `load_config()`. Result: `Container called exit(0)`, and zero `digest [` lines in
+its logs. **The equals form is mandatory here too** — `--args=` not `--args ` — the same gcloud
+argparse trap that killed CD yesterday. Bonus: the smoke also cleared the never-run false positive on
+the digest's did-not-run policy, since there is now a successful task attempt inside its window.
+
+### The deployed alert policies did not match `alerts.sh` — the nightly window was 26h, not 5h
+
+`alerts.sh` and `docs/INVARIANTS.md` both specify a **5h** absence window for the 4-hourly pipeline.
+Prod was still running the pre-D-103 **26h** policy, and neither did-not-run condition carried the
+job-name prefix, so an alert would still have rendered as `__missing__`. **The script could not fix
+this by being re-run** — it is idempotent by displayName, and the displayNames did not change, so
+every re-run was a silent no-op that looked like success. The two policies had to be deleted first.
+Did that via the Monitoring REST API, re-ran `alerts.sh`, and verified: `vja-nightly` 5h,
+`vja-digest` 26h, both conditions now prefixed with their job name.
+
+Worth naming the failure mode, because it will recur: **`alerts.sh` cannot express an edit.** Any
+future change to a policy's window or wording needs a delete before the re-run, and nothing in the
+script's output tells you it skipped.
+
+### Camus Energy had silently gone dark — and it turned out to be an ATS migration, not a death
+
+First failure **2026-07-28T11:04Z**, 100% failure rate since (4× on 07-29). The Greenhouse board
+`camusenergy` 404s live, and so do `camus`, `camus-energy`, `camusenergyinc` on Greenhouse *and*
+Lever, and `camus` on Ashby. Reading their careers page settled it: the page still carries a **stale
+Greenhouse embed** next to a live **Rippling** board, `data-job-board-id="camus-energy"`. Probing our
+own Rippling endpoint template with that slug returned **3 open roles**. We shipped that fetcher in
+D-096, so the fix is config-only, zero `src/` change — the D-004 rule holding up again, this time for
+attrition rather than a new vertical.
+
+Repointed the curated seed row (`greenhouse`/`camusenergy` → `rippling`/`camus-energy`, careers URL
+updated, `endpoint` emptied because Rippling is slug-derived). **Prod does not pick this up until
+someone runs `vja-import-employers` against Neon** — blocked on the same wifi, so it is a handoff item.
+The CSV was rewritten byte-wise in Python per the file's mixed-CRLF trap: `git diff --numstat` reads
+`1 1`, and the `\r` count is unchanged at 87.
+
+Two seed tests pinned Camus as their representative row and correctly failed. Updated rather than
+weakened — and Camus is now a *better* fixture than it was, because it exercises the slug-derived
+shape (empty `endpoint`, URL composed from `ats_slug` alone), so the test now asserts
+`not row["endpoint"]` on purpose.
+
+**The general lesson is bigger than Camus, and it is written into `docs/18`.** A permanently dead
+board is invisible: `_is_hard_failure` deliberately does not alert on partial fetch failures
+(`nightly.py:105`, correct — alert fatigue), *and* a failed fetch mutates nothing, so a dead
+employer's postings never close and sit on the dashboard indefinitely. Individually both are right;
+together they mean nobody ever finds out. A "this employer has failed every run for N runs" signal is
+the natural follow-on, and it is distinct from the mass-closure threshold D-103 rejected.
+
+### Churn is still climbing, and the split is not why
+
+Reopens on the daily pass: 27 (07-27) → 87 (07-28) → **136 (07-29)**; closed 277 → 481 → **522**. The
+intraday runs reopened 0 / 10 / 5 — the small diffs the cadence predicts — so this is the pre-existing
+Workday page-membership drift, not F1a. It does reach the reader: grid's 07-29 digest carried
+`closed=280` against 137 the day before. Recorded in `docs/18`. The DB-native read of
+`pipeline_runs.postings_reopened` is the measurement that should size any fix and **still has not
+happened**.
+
+### Smaller findings
+
+- **Prod logs cannot be filtered by severity.** Everything is stdout at severity `DEFAULT` with the
+  level inside the text, so `severity>=WARNING` in Cloud Logging returns *nothing* — an easy way to
+  conclude a run was clean when it was not. All triage must text-match. Not fixed; it is a logging
+  handler change, not a launch blocker.
+- **`ship.sh`'s comment claimed `--args` was asserted on both Jobs;** only the pipeline gets it. The
+  asymmetry is deliberate and already pinned by `test_pipeline_job_never_ships_without_the_no_digest_flag`,
+  and `gcloud run jobs update` has no `--clear-args`, so the code is right and the comment was wrong.
+  Fixed the comment.
+- **Reviewed the whole D-103 range** (`95cb33c..57a45c7`) as one diff, which nobody had. No defects.
+  Checked specifically: the skip guard returns `run_id=-1`/`skipped` and `nightly_main` maps it to
+  exit 0 (not a failure, per INVARIANTS); the per-run match cap applies *after* scope+prefilter, so it
+  bounds real LLM calls; `postings_needing_match`'s new ordering is present. Also confirmed a
+  non-issue I went looking for: `vja-digest` iterates `distinct_active_verticals` (DB) while
+  `run_nightly` iterates `available_verticals()` (config) — in prod both yield the same four, and the
+  per-vertical `active_profiles` call makes them equivalent regardless.
+- **Verified healthy, no action:** service `rolefeed-00067-xgl` on `57a45c7` with
+  `cpu-throttling: false`, `VJA_AUTH_REQUIRED=1`, `VJA_COOKIE_SECURE=1`, `VJA_DAILY_LLM_BUDGET_USD=25`;
+  both Jobs on `57a45c7` with correct args/timeouts/`maxRetries=0`; Scheduler on
+  `0 1,5,9,13,17,21` + `0 6` CT; anon `/api/postings?vertical=…` and `/api/postings/{id}` → 401,
+  `/api/me` → 401, bad unsubscribe token → 400 (no enumeration), SPA deep-links 200;
+  `RUN_STALE_AFTER` (4h) > task timeout (3h).
+- Other fetch failures (4-7 of 155) are all known: GE Vernova / Thales / S&P / AES
+  `missing 'title'|'externalPath'`, Airbus's accepted D-092 2000-cap. Two low-frequency shapes not
+  seen before but not new classes: Shell Trading `incomplete: got 140 of 139`, Honeywell
+  `oracle total changed 1338 → 1337`.
+
+**Verification.** ruff format + check, mypy (146 files), import-linter 1 kept / 0 broken,
+`uv lock --check`, pytest **795 passed, 35 deselected**. `bash -n` on `ship.sh`. Alert policies
+re-read from the Monitoring API after the fix. The Camus slug was probed live, not inferred.
+
+**Not done, and why:** anything needing Neon. `pipeline_runs.postings_reopened` across runs 35-41
+(D-103's own day-two check), the open-Camus-posting count, and D-095 PR 1's comp fill-rate re-run.
+
+**Next:** Hayden reviews/commits/PRs. Then, when the DB is reachable: run `vja-import-employers`
+against Neon to activate the Camus fix, and read `postings_reopened`. Still Hayden-owned and unchanged:
+publish the Google OAuth app off Testing (~100-user ceiling). **`vja-digest`'s first real send is
+tomorrow 06:00 CT** — its container path is now proven, so what remains untested is only the send
+itself, which is the same code that has sent every day until now.
+
+---
+
 ## 2026-07-28 — D-103: the pipeline goes 4-hourly, the digest stays daily
 
 **Housekeeping on the previous entry:** its "Next: Hayden reviews/commits/PRs" is **done** — the digest

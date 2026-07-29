@@ -45,7 +45,9 @@ Endpoints below are confirmed live against the seed set (2026-06-11).
 - **Response:** `{ "jobs": [ { "id", "title", "absolute_url", "updated_at", "location": {"name"}, "content" } ] }`
 - **Mapping:** `external_id = str(id)`, `title = title`, `apply_url = absolute_url`, `location = location.name`, `updated_at = updated_at`.
 - `?content=true` returns the description inline (feeds `content_hash` + L2 without a second request).
-- Verified seed examples: `amperon`, `camusenergy`, `janestreet`, `yesenergy`.
+- Verified seed examples: `amperon`, `janestreet`, `yesenergy`. (`camusenergy` was one until
+  2026-07-28, when the board began returning 404 — Camus migrated to Rippling and its seed row moved
+  with it. A slug going dead is normal attrition, not a fetcher defect; see the 2026-07-29 sweep.)
 
 ### Lever — `ats_type: lever`
 - **Endpoint:** `GET https://api.lever.co/v0/postings/{slug}?mode=json`
