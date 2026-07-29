@@ -237,9 +237,8 @@ export function Landing() {
           classmates and me. As an avid builder, I wanted to make a positive impact on the job
           search for myself and my peers, which inspired me to build Rolefeed. The four domains I
           chose reflect the general interests of my close peers and me, and they are often
-          underserved on traditional job boards. Feel free to reach me at{" "}
-          <a href="mailto:haydenham10@gmail.com">haydenham10@gmail.com</a> with any questions or
-          inquiries.
+          underserved on traditional job boards. Feel free to reach me at haydenham10 [at] gmail
+          [dot] com with any questions or inquiries.
         </p>
         <p className="founder-sig">Hayden, founder</p>
       </section>
