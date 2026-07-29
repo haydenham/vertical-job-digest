@@ -214,6 +214,12 @@ doc = (
     f"No **{job}** task has succeeded in over {window}, so {role} has silently stopped. Nothing "
     "else would have told you: the in-process failure email (D-037) needs the process to be "
     "running to send anything.\n\n"
+    "**If this Job was created within the last "
+    f"{window} and has not run yet, this is a false positive** — a never-run Job and a stopped "
+    "Job produce the identical signal (no data points). It clears itself on the first successful "
+    "run. Check before investigating:\n\n"
+    f"    gcloud run jobs executions list --job={job} --region=us-central1\n\n"
+    "An empty list means it has never run.\n\n"
     "Check, in order: that the Cloud Scheduler trigger fired "
     f"(`gcloud scheduler jobs describe {job}-trigger --location=us-central1`), that the Job "
     "exists and is not stuck, then read the logs of the last execution.\n"
@@ -226,7 +232,11 @@ body = {
     "documentation": {"mimeType": "text/markdown", "content": doc},
     "conditions": [
         {
-            "displayName": f"no successful task attempt in {window}",
+            # The job name MUST be in the condition name. `absent_over_time` matching nothing
+            # yields a series with no labels, so Google renders the alert as
+            # "... on __missing__" — an alert that cannot say which job it is about (observed
+            # 2026-07-29). The policy displayName alone is not enough; this is the line in the mail.
+            "displayName": f"{job}: no successful task attempt in {window}",
             "conditionPrometheusQueryLanguage": {
                 "query": query,
                 # The lookback IS the patience; once the query is true the situation is already a

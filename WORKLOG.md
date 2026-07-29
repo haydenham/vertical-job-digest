@@ -78,6 +78,19 @@ found" distinguish the two cleanly, with no side effects). The replacement test 
 `--args` not in equals form — and immediately found a **pre-existing** instance in the §8b discovery-agent
 runbook, which has never been run and would have failed the same way whenever it was.
 
+**The new `vja-digest did not run` policy fired immediately, and both halves of why are my defect.**
+(1) A **never-run** Job and a **stopped** Job emit the identical signal — no data points — so
+`absent_over_time` is trivially true from the moment a Job is created, and `alerts.sh` created the policy
+before `vja-digest` had ever executed. Self-clears on the first successful run; not worth engineering
+around, but it must be *documented in the alert itself*, which it now is. (2) The mail led with
+`no successful task attempt in 26h on __missing__` — because `absent_over_time` matching nothing yields a
+series with no labels, and I had put the job name only in the policy displayName, not the **condition**
+displayName, which is the line the email actually shows. An alert that cannot say which job it is about is
+barely an alert. Both fixed; note `alerts.sh` is idempotent by displayName, so applying it means deleting
+the two did-not-run policies and re-running. **Silver lining: it proved the notification channel is verified
+and delivering** — the last carried-forward D-101 item — and proved the did-not-run detection works, which
+is otherwise hard to test deliberately.
+
 **Prod state during the failure was safe and worth recording.** CD died at step 5/6, so the service had
 already rolled to the new image (`ffd6bdf`, healthy — which also proves the Neon migration landed, since the
 D-083 guard would otherwise have refused startup) while **both Jobs stayed on the old image with the old
