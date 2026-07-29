@@ -150,8 +150,12 @@ gcloud run deploy "$SERVICE" \
   --set-secrets "$SERVICE_SECRETS"
 
 # --- 5. Update both Jobs to the same image (D-031 trigger-swap: one image, three run targets) ----
-# `--args` is asserted explicitly on each: it is what separates the two halves of the D-103 split,
-# and dropping it on the pipeline Job would silently start sending digests six times a day.
+# `--args` is asserted on the PIPELINE Job only: it is what separates the two halves of the D-103
+# split, and dropping it there would silently start sending digests six times a day. The digest Job
+# deliberately carries no `--args` (it exists to send), and that absence is pinned by
+# `test_pipeline_job_never_ships_without_the_no_digest_flag` — so this asymmetry is the contract,
+# not an oversight. NB `gcloud run jobs update` has no `--clear-args`, so the digest Job's args
+# cannot be reset from here; if one were ever set manually, clear it in the console.
 #
 # ⚠ `--args=` MUST use the equals form. `--args "--no-digest"` fails in gcloud's own argument parser
 # ("argument --args: expected one argument") because the value starts with a dash and argparse reads

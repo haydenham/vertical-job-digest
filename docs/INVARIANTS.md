@@ -77,7 +77,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (`absent_over_time(...[window])`). **The absence window is per-job, keyed to its cadence** —
   `vja-nightly` 5h (4h cadence + slack), `vja-digest` 26h. `deploy/gcp/alerts.sh` is the reproducible
   source, idempotent by `displayName`, and loops over a `JOB_SPECS` list so a new scheduled Job is a
-  one-line spec. **The did-not-run policy must be PromQL, never `conditionAbsent`:** the API caps
+  one-line spec. **Because it is idempotent by `displayName`, the script cannot express an *edit*:**
+  changing a policy's window or wording and re-running is a silent no-op that looks like success (prod
+  ran the pre-D-103 26h nightly window for a day this way). Delete the affected policies first, then
+  re-run, then re-read the API to confirm. **The job name must be in the *condition* displayName**, not
+  only the policy's — that is the line the alert email shows, and `absent_over_time` matching nothing
+  yields a label-less series that renders as `__missing__`.
+  **The did-not-run policy must be PromQL, never `conditionAbsent`:** the API caps
   absence duration at 23h30m while daily runs are ~24h apart, so every legal absence window is shorter
   than the normal gap and would fire daily. The in-process failure email (D-037) is not a substitute —
   it cannot alert if the process never starts. (D-103, D-101, D-094, D-037)

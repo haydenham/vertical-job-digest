@@ -44,8 +44,12 @@ def test_known_employer_is_mapped_correctly(migrated_engine: Engine) -> None:
             .first()
         )
     assert row is not None
-    assert row["ats_type"] == "greenhouse"
-    assert row["ats_slug"] == "camusenergy"
+    # Camus moved Greenhouse → Rippling on 2026-07-28 (see the pre-launch sweep, 2026-07-29). It is
+    # kept as this test's representative row precisely because it is now the slug-derived shape:
+    # `endpoint` is empty and `build_endpoint` composes the URL from `ats_slug` alone (D-096).
+    assert row["ats_type"] == "rippling"
+    assert row["ats_slug"] == "camus-energy"
+    assert not row["endpoint"]
     assert row["verification"] == "verified"
     assert row["created_at"] is not None
 
@@ -132,8 +136,12 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Grid: 6 Greenhouse + 3 Lever + 2 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
-    # + 1 Oracle + 1 Radancy + 1 Pinpoint = 36. Aviation: 2 Greenhouse + 1 Lever +
+    # Grid: 5 Greenhouse + 3 Lever + 2 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
+    # + 1 Oracle + 1 Radancy + 1 Pinpoint + 1 Rippling = 36. (Camus Energy moved Greenhouse →
+    # Rippling: its Greenhouse board began 404ing 2026-07-28 and the tenant now embeds a Rippling
+    # board, slug `camus-energy`, re-verified live 2026-07-29. Config-only — D-096's fetcher already
+    # existed, so grid's total is unchanged and only the per-ATS split moves.)
+    # Aviation: 2 Greenhouse + 1 Lever +
     # 1 Ashby + 5 Workday + 2 iCIMS
     # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle
     # + Comply365/Vistair BambooHR (D-096, the D-078 item-5 add) = 16. Total 51,
@@ -149,7 +157,7 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # (Jane Street, DRW, SIG, CME, ICE) are second rows for companies grid already fetches, so the
     # corpus total counts them twice on purpose: one employer row per (vertical, name).
     assert len(fetchable) == 112
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 44
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 43
     assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 10
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 15
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 26
@@ -161,9 +169,10 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     assert sum(1 for e in fetchable if e.ats_type == AtsType.PHENOM) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.PINPOINT) == 1
     assert sum(1 for e in fetchable if e.ats_type == AtsType.BAMBOOHR) == 1
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.RIPPLING) == 1
     assert all(e.ats_type in SUPPORTED_ATS_TYPES for e in fetchable)
-    # Every fetchable row can build its endpoint: a slug (GH/Lever/Ashby/Workable/SR) OR an explicit
-    # endpoint (Workday/iCIMS/Oracle/Radancy/Pinpoint custom-domain — per-tenant, no slug).
+    # Every fetchable row can build its endpoint: a slug (GH/Lever/Ashby/Workable/SR/Rippling) OR an
+    # explicit endpoint (Workday/iCIMS/Oracle/Radancy/Pinpoint custom-domain — per-tenant, no slug).
     assert all(e.ats_slug or e.endpoint for e in fetchable)
 
 
