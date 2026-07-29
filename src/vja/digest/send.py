@@ -25,6 +25,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html import escape
 
 import httpx
 from dotenv import load_dotenv
@@ -223,6 +224,59 @@ def send_digest(
     return result("sent", digest_id)
 
 
+def digest_result_lines(digests: list[DigestSendResult]) -> list[str]:
+    """One human-readable line per digest attempt — shared by both halves' alert bodies."""
+    lines = []
+    for d in digests:
+        line = (
+            f"digest [{d.vertical}→{d.recipient}]: {d.status} "
+            f"new={d.new} closed={d.closed} quar={d.quarantined}"
+        )
+        lines.append(line + (f" — {d.error}" if d.error else ""))
+    return lines
+
+
+def send_failure_alert(config: DigestConfig, *, subject: str, summary: str) -> bool:
+    """Email one hard-failure alert to the ops recipient (D-037). True iff it actually sent.
+
+    Lives here rather than in `nightly.py` because the D-103 split gave the send its own Cloud Run
+    Job: both halves now need to raise the same alarm, and this module already owns `send_email`
+    and `DigestConfig`. Best-effort by nature — if Resend itself is what failed, the alert cannot
+    send either, which is exactly why the D-101 Cloud Monitoring policies sit on top.
+    """
+    text = f"{summary}\n"
+    rendered = RenderedEmail(
+        subject=subject,
+        html=f"<h1>{escape(subject)}</h1>\n<pre>{escape(text)}</pre>",
+        text=text,
+    )
+    try:
+        send_email(config, rendered)
+        return True
+    except SendError as exc:
+        print(f"failure-alert email could not be sent: {exc}", file=sys.stderr)
+        return False
+
+
+def alert_failed_digests(config: DigestConfig, digests: list[DigestSendResult]) -> bool:
+    """Alert on the digest-only run (`vja-digest`). No-op when every send succeeded.
+
+    The standalone digest Job is the delivery-sensitive half of the D-103 split, so a failed send
+    is the whole point of the alarm: nothing else in that process would report it.
+    """
+    failed = [d for d in digests if d.status == "failed"]
+    if not failed:
+        return False
+    summary = "\n".join(
+        [f"{len(failed)} of {len(digests)} digest sends failed.", "", *digest_result_lines(digests)]
+    )
+    return send_failure_alert(
+        config,
+        subject=f"vja digest FAILED — {len(failed)} send failures",
+        summary=summary,
+    )
+
+
 def send_main(argv: list[str] | None = None) -> int:
     """CLI: `vja-digest [--vertical V]` — assemble and send the digest(s) via Resend."""
     parser = argparse.ArgumentParser(
@@ -238,18 +292,25 @@ def send_main(argv: list[str] | None = None) -> int:
         return 0
 
     config = load_config()
-    failed = False
+    results: list[DigestSendResult] = []
     for vertical in verticals:
         for profile in active_profiles(engine, vertical):
             result = send_digest(engine, vertical, profile, config=config)
+            results.append(result)
             suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
             print(
                 f"[{result.vertical}→{result.recipient}] {result.status}: new={result.new} "
                 f"closed={result.closed} quarantined={result.quarantined}{suffix}"
             )
             if result.status == "failed":
-                failed = True
                 print(f"  ! {result.error}", file=sys.stderr)
+
+    # D-103: as its own scheduled Job this is the only process that sees a failed send, so it
+    # raises the D-037 alarm itself rather than relying on the nightly composer that used to.
+    alerted = alert_failed_digests(config, results)
+    failed = any(r.status == "failed" for r in results)
+    if failed:
+        print(f"failure alert {'sent' if alerted else 'COULD NOT BE SENT'}", file=sys.stderr)
     return 1 if failed else 0
 
 

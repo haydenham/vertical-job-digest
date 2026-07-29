@@ -149,6 +149,24 @@ def _backfill_max_postings() -> int:
     return int(raw) if raw else _DEFAULT_BACKFILL_MAX_POSTINGS
 
 
+def _pipeline_max_matches() -> int | None:
+    """Per-profile cap on one *pipeline* run's matching (`VJA_PIPELINE_MAX_MATCHES`), or None.
+
+    D-103's cost guard for the 4-hourly cadence. Total spend is roughly flat under the split —
+    the same postings cost the same, just discovered sooner — so this is not a budget but a
+    runaway bound: at six runs a day, a mistake that inflates the candidate set (a bad extraction
+    invalidation, a large employer add) gets six chances a day instead of one. Unset by default,
+    which is today's uncapped behavior (D-039).
+
+    Deliberately *not* the D-057 daily ceiling: that one refuses work outright and is keyed to
+    signups, so reusing it here would let a big pipeline run 429 a new user at onboarding —
+    exactly the coupling D-101 removed. Overflow here is simply deferred: uncapped candidates stay
+    in `postings_needing_match` and are picked up by the next run, 4 hours later.
+    """
+    raw = os.environ.get("VJA_PIPELINE_MAX_MATCHES")
+    return int(raw) if raw else None
+
+
 def _daily_budget_usd() -> float:
     """The global daily LLM-spend ceiling (`VJA_DAILY_LLM_BUDGET_USD`), read at call time."""
     raw = os.environ.get("VJA_DAILY_LLM_BUDGET_USD")
@@ -279,7 +297,16 @@ def _match_profile(
         )
         if in_scope(c.title, config.scope) and passes_prefilter(c.level, c.location, prefilter)
     ]
-    if max_postings is not None:
+    if max_postings is not None and len(candidates) > max_postings:
+        logger.warning(
+            "match cap hit [%s/%s/profile %d]: %d candidates truncated to %d (freshest first); "
+            "the remainder is deferred to the next run, not dropped",
+            vertical,
+            trigger.value,
+            profile.id,
+            len(candidates),
+            max_postings,
+        )
         candidates = candidates[:max_postings]
     matched = 0
     usage = TokenUsage()
@@ -319,12 +346,16 @@ def run_matching(
 ) -> MatchingSummary:
     """Match every Stage-A/B-surviving, unmatched posting for `vertical` against each active resume.
 
-    Uncapped by design (the digest's `first_seen_at` window keeps old roles out of the inbox);
-    the 5-day cap is the backfill's job (`run_backfill`). `client` is injected for offline tests.
+    Date-uncapped by design (the digest's `first_seen_at` window keeps old roles out of the inbox);
+    the 5-day cap is the backfill's job (`run_backfill`). `VJA_PIPELINE_MAX_MATCHES` optionally
+    bounds the count *per profile per vertical per run* (D-103 runaway guard, unset by default);
+    anything over the cap is not dropped, just deferred to the next run. `client` is injected for
+    offline tests.
     """
     stamp = now or datetime.now(UTC)
     cli = client or LiteLLMClient()
     profiles = active_profiles(engine, vertical)
+    max_postings = _pipeline_max_matches()
     total = matched = 0
     usage = TokenUsage()
     cost_usd: float | None = 0.0
@@ -338,6 +369,7 @@ def run_matching(
             since=None,
             trigger=MatchTrigger.NIGHTLY,
             now=stamp,
+            max_postings=max_postings,
         )
         total += prof_total
         matched += prof_matched

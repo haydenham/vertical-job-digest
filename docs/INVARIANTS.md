@@ -38,27 +38,49 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Execution & pipeline
 
-- **All fetching, API keys, and LLM calls run server-side in the nightly pipeline.** Users
-  only read precomputed DB results. Each ATS endpoint is hit **once per day per employer row**,
-  regardless of user count — the rule is user-count independence, not one row per company. A company
+- **All fetching, API keys, and LLM calls run server-side in the scheduled pipeline.** Users
+  only read precomputed DB results. Each ATS endpoint is hit **once per pipeline run per employer row**,
+  and the pipeline runs **every 4 hours** (D-103, superseding D-005's once-daily rule) — regardless of
+  user count. The rule is user-count independence, not one row per company. A company
   curated in two verticals is two rows (`UNIQUE(vertical, name)`) and costs one extra fetch plus one
   extra extraction of the same body (`postings_needing_extraction` keys on `extracted_at IS NULL` per
   row, so there is no cross-row content-hash reuse); this is permitted **only** for the eight
-  D-097 cross-vertical rows. (D-005, D-097)
+  D-097 cross-vertical rows. Total LLM spend is ≈ flat under the 4-hourly cadence: extraction is
+  `content_hash`-cached and matching excludes already-matched postings, so the same postings cost the
+  same, just discovered sooner. (D-103, D-005, D-097)
 - **Pipeline order is fetch → diff → extract → match → verify → send.** (D-003, D-005)
-- **The nightly job is `vja-nightly`** (one process: run → extract → match → digest per
-  profile, alert on hard failure). `vja-run`/`vja-extract`/`vja-match`/`vja-digest` are
-  debugging entry points. The scheduler (launchd) is a swappable trigger, not code — the
-  cloud cutover swaps it. (D-031)
+- **The pipeline and the digest are two jobs on two schedules (D-103).** `vja-nightly --no-digest`
+  runs fetch → diff → extract → match **every 4 hours** (`0 1,5,9,13,17,21` America/Chicago);
+  `vja-digest` sends **once a morning** (`0 6`), one hour after a completed pass. Without the flag
+  `vja-nightly` still composes the whole loop including the send — the flag *is* the split, and
+  dropping it in deploy config would send every user six digests a day. **The digest needed no
+  window change:** `build_digest` resolves `since` to `last_sent_at` for that recipient, not to a
+  fixed 24 hours. `vja-nightly` keeps its name despite the cadence (renaming a live Cloud Run Job,
+  its Scheduler trigger, and its alert policies buys nothing). `vja-run`/`vja-extract`/`vja-match`
+  remain debugging entry points. The scheduler is a swappable trigger, not code. (D-103, D-031)
+- **A pipeline run is skipped if a `running` row younger than `RUN_STALE_AFTER` (4h) exists**, and the
+  skip stops *before* Layer 2 — racing the in-flight run would pay the strong model twice for the same
+  postings. The staleness bound is mandatory, not a nicety: only `finish_run` moves a row off
+  `running`, so without it one crashed run would skip every subsequent run forever. This is a check,
+  **not a lock** (a read then a write), so simultaneous starts can both pass; with one Scheduler
+  trigger per Job that race does not arise, and the case it defends is a slow run after a config-only
+  vertical/employer add. A skip is `status="skipped"`, exit 0, and not a hard failure. (D-103)
 - **Every pipeline run writes a `pipeline_runs` summary; per-fetcher failures isolate** and
-  alert loudly rather than aborting the run. A digest that fails to send is itself an alert.
-- **The nightly Job has two Cloud Monitoring alert policies, wired to the `rolefeed-ops` email channel:**
-  *execution failed* (threshold on failed task attempts) and *did not run*
-  (`absent_over_time(...[26h])`). `deploy/gcp/alerts.sh` is the reproducible source and is idempotent.
-  **The did-not-run policy must be PromQL, never `conditionAbsent`:** the API caps absence duration at
-  23h30m while runs are ~24h apart, so every legal absence window is shorter than the normal gap and
-  would fire daily. The in-process failure email (D-037) is not a substitute — it cannot alert if the
-  process never starts. (D-101, D-094, D-037)
+  alert loudly rather than aborting the run. A digest that fails to send is itself an alert — raised by
+  `digest.send.alert_failed_digests` since the D-103 split, because the standalone digest Job is now the
+  only process that sees a failed send. The summary includes **`postings_reopened`** (D-103): a reopen
+  overwrites `first_seen_at` and nulls `closed_at`, so it erases its own evidence and the run row is the
+  only durable record. Existing rows keep NULL, not 0 — a pre-column run's reopen count is unknown, not
+  zero. (D-103, D-053, D-037)
+- **Each scheduled Job has its own Cloud Monitoring alert pair**, wired to the `rolefeed-ops` email
+  channel: *execution failed* (threshold on failed task attempts) and *did not run*
+  (`absent_over_time(...[window])`). **The absence window is per-job, keyed to its cadence** —
+  `vja-nightly` 5h (4h cadence + slack), `vja-digest` 26h. `deploy/gcp/alerts.sh` is the reproducible
+  source, idempotent by `displayName`, and loops over a `JOB_SPECS` list so a new scheduled Job is a
+  one-line spec. **The did-not-run policy must be PromQL, never `conditionAbsent`:** the API caps
+  absence duration at 23h30m while daily runs are ~24h apart, so every legal absence window is shorter
+  than the normal gap and would fire daily. The in-process failure email (D-037) is not a substitute —
+  it cannot alert if the process never starts. (D-103, D-101, D-094, D-037)
 - **The API service runs with CPU always allocated (`--no-cpu-throttling`), reasserted by `ship.sh`.**
   The signup flow returns 202 and finishes `run_backfill` in a background task *outside* any request;
   under default throttling that work only gets CPU when another request happens to hit the same
@@ -180,12 +202,15 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `itsdangerous` signatures over `{uid, email}` keyed on `VJA_SESSION_SECRET` (mounted on the
   nightly Job too), and the endpoint requires both to match the live row — invalid tokens get a
   generic 400, never user enumeration. (D-094)
-- **The Cloud Run nightly Job gets one attempt, with a 6-hour task timeout.** `ship.sh` reasserts
-  `--task-timeout 21600 --max-retries 0` on every deploy. The pipeline sends a vertical's digests
-  immediately after that vertical's Layer-2 pass and is not yet delivery-idempotent across whole-task
-  retries; automatic retry therefore risks duplicate email after a later vertical times out. A
-  process-level failure is operator-reviewed and manually rerun until per-execution delivery
-  idempotency exists. (D-086)
+- **Both Cloud Run Jobs get one attempt, with cadence-sized task timeouts.** `ship.sh` reasserts
+  `--max-retries 0` on both, `--task-timeout 10800` (3h) on the pipeline and `3600` (1h) on the digest.
+  **The pipeline timeout must stay below the 4h interval** or one hung execution runs through the next
+  three windows; D-086's 6h was sized for a once-daily Job. Zero retries is *mandatory* on the digest
+  Job, which sends a vertical's email immediately after its Layer-2 pass and is not delivery-idempotent
+  across whole-task retries. The pipeline half genuinely is retry-safe now that it sends nothing, but
+  retries stay off there too until the skip-if-running guard has proven itself — pairing an untested
+  overlap guard with automatic retries can wedge a run. A process-level failure is operator-reviewed
+  and manually rerun. (D-103, D-086)
 - **Closures roll up by company above 10 in the digest body** — ≤10 enumerate per role, >10 render
   `N roles across C companies` + top-10 + "…and M more". Subject keeps the true count and the audit
   blob keeps the full closed list; only the human-facing body summarizes. (D-056)
@@ -316,8 +341,14 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   date. (D-030, D-039)
 - **Signup backfill caps at 5 days, `trigger=backfill`, idempotent** — and at
   `VJA_BACKFILL_MAX_POSTINGS` candidates (D-057, the cost guard). *(Supersedes D-024's original
-  2-week cap.)* The nightly match is NOT capped (neither by date nor count); the dashboard's 14-day
-  toggle is decoupled from the backfill window. (D-039, D-057, amending D-024)
+  2-week cap.)* The pipeline match is **date-uncapped**, but optionally **count**-capped per profile
+  per run by `VJA_PIPELINE_MAX_MATCHES` (D-103; 400 in prod, unset in code); the dashboard's 14-day
+  toggle is decoupled from the backfill window. (D-039, D-057, D-103, amending D-024)
+- **`postings_needing_match` is ordered freshest-first (`first_seen_at DESC, id DESC`).** Every caller
+  that count-caps the result truncates this list, so without a deterministic order it was slicing a
+  set the database could return any way it liked — which postings got matched, and which were silently
+  skipped, was undefined. Newest-first is also the product-correct priority when a cap bites.
+  (D-103, D-057, D-039)
 
 ## Auth & identity
 
@@ -396,7 +427,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   $3.97 of the then-$5 ceiling with no signups involved. `count_matches_since` still counts every
   trigger when unfiltered. Identical-content uploads bypass this ceiling because they schedule no work;
   work-producing first/changed uploads still pass it before commit. The separate per-user changed-
-  résumé rolling guard is described above. (D-057, D-085, D-101)
+  résumé rolling guard is described above. **The pipeline path has its own, different guard** —
+  `VJA_PIPELINE_MAX_MATCHES` bounds one run rather than a day, *defers* overflow to the next run
+  instead of refusing it, and can never 429 a user (D-103). (D-057, D-085, D-101, D-103)
 - **No auto-apply.** The tool surfaces and reasons; it never submits applications. (core)
 - **Politeness is policy:** rate limits, sane user agent, respect robots.txt on the long
   tail. Getting IP-banned is a self-inflicted coverage hole. (core)

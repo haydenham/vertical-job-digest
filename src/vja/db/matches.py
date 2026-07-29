@@ -53,7 +53,9 @@ def postings_needing_match(
 
     `since` bounds the set to the recency window (`activity_window_clause`) for the signup
     backfill's 5-day cap (D-024/D-039); the default `None` is the nightly path — every unmatched
-    posting, uncapped (the digest's `first_seen_at` window keeps old roles out of the inbox).
+    posting, date-uncapped (the digest's `first_seen_at` window keeps old roles out of the inbox).
+
+    Ordered freshest-first so that callers which *count*-cap the result truncate a defined set.
     """
     already_matched = (
         select(matches.c.id)
@@ -87,6 +89,12 @@ def postings_needing_match(
     )
     if since is not None:
         stmt = stmt.where(activity_window_clause(since))
+    # Freshest first, and deterministic (D-103). Both callers that cap the result
+    # (`run_backfill`'s D-057 guard, and the D-103 per-run pipeline cap) truncate this list, so
+    # without an ORDER BY they were slicing a set the database was free to return in any order —
+    # meaning which postings got matched, and which were silently dropped, was undefined. Newest
+    # first is also the product-correct priority when the cap does bite (D-039).
+    stmt = stmt.order_by(postings.c.first_seen_at.desc(), postings.c.id.desc())
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [

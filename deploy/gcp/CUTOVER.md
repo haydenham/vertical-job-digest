@@ -144,41 +144,81 @@ Add the returned record(s) in **Cloudflare DNS** (DNS-only / grey cloud — Clou
 Wait for the managed cert to go green (`gcloud run domain-mappings describe … --format='value(status.conditions)'`),
 then confirm `https://role-feed.com/api/health` serves.
 
-## 8. Deploy the nightly Cloud Run Job + Cloud Scheduler trigger
+## 8. Deploy the two Cloud Run Jobs + their Cloud Scheduler triggers
 
-Same image, entrypoint overridden to `vja-nightly` (the D-031 trigger swap — no second build):
+Since **D-103** the pipeline and the digest are separate Jobs on separate cadences: the pipeline runs
+**every 4 hours** so postings surface within hours of hitting the ATS, while the email stays **once a
+morning**. Both are the same image with the entrypoint overridden (the D-031 trigger swap — no second
+build), so this is config, not code.
+
+`vja-nightly` **keeps its name** even though it now runs six times a day: renaming a live Job means
+recreating it, repointing its Scheduler trigger, and rewriting its alert policies, for no functional gain.
 
 ```sh
+# --- Pipeline Job: fetch → diff → extract → match, every 4h, sends NOTHING -----------------------
 gcloud run jobs create vja-nightly \
   --image "$IMAGE" \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
   --command /app/.venv/bin/vja-nightly \
-  --task-timeout 21600 \
+  --args "--no-digest" \
+  --task-timeout 10800 \
+  --max-retries 0 \
+  --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low,VJA_PUBLIC_BASE_URL=https://role-feed.com,VJA_PIPELINE_MAX_MATCHES=400" \
+  --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest"
+
+# --- Digest Job: assemble + verify + send, once a morning ---------------------------------------
+gcloud run jobs create vja-digest \
+  --image "$IMAGE" \
+  --region "$REGION" \
+  --service-account "$RUNTIME_SA" \
+  --command /app/.venv/bin/vja-digest \
+  --task-timeout 3600 \
   --max-retries 0 \
   --update-env-vars "VJA_MATCH_MODEL=openai/gpt-5.6-luna,VJA_MATCH_EFFORT=low,VJA_PUBLIC_BASE_URL=https://role-feed.com" \
   --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest"
 
-# Cloud Scheduler → Jobs Admin :run API (nightly; matches the launchd 06:00 local trigger)
+# --- Triggers. Pipeline at 01/05/09/13/17/21; digest at 06:00, one hour after a completed pass. --
 gcloud scheduler jobs create http vja-nightly-trigger \
   --location "$REGION" \
-  --schedule "0 6 * * *" --time-zone "America/Chicago" \
+  --schedule "0 1,5,9,13,17,21 * * *" --time-zone "America/Chicago" \
   --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vja-nightly:run" \
+  --http-method POST \
+  --oauth-service-account-email "$RUNTIME_SA"
+
+gcloud scheduler jobs create http vja-digest-trigger \
+  --location "$REGION" \
+  --schedule "0 6 * * *" --time-zone "America/Chicago" \
+  --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vja-digest:run" \
   --http-method POST \
   --oauth-service-account-email "$RUNTIME_SA"
 ```
 
-Prove it before trusting the cron: `gcloud run jobs execute vja-nightly --region "$REGION"` and watch logs
-(`gcloud run jobs executions list --job vja-nightly`). The Job needs DB + Anthropic (extract/match) + Resend +
-`VJA_DIGEST_*` (send) — and, as of D-094, `VJA_SESSION_SECRET` + `VJA_PUBLIC_BASE_URL` (the digest's
-unsubscribe token/link — same secret the API verifies with). It still needs **no** OAuth (no HTTP surface).
+**Retargeting the already-provisioned `vja-nightly-trigger`** (the D-103 cutover, rather than a fresh
+stand-up — the Job itself is updated by `ship.sh`, but the *cadence* lives here):
 
-**Task-attempt policy (D-086):** keep the timeout at **21,600 seconds (6h)** and automatic task retries at
-**zero**. The nightly processes verticals sequentially and sends each vertical immediately after its Layer-2
-pass; it is not yet delivery-idempotent across Cloud Run attempts. On 2026-07-14 the old 7,200-second task sent
-aviation, timed out during grid, then `maxRetries=1` restarted the whole command and sent aviation a second
-time. Six hours gives the current beta workload headroom; a process-level failure is an operator-reviewed
-manual rerun until per-execution delivery idempotency is built. `ship.sh` reasserts both values on every deploy.
+```sh
+gcloud scheduler jobs update http vja-nightly-trigger \
+  --location "$REGION" --schedule "0 1,5,9,13,17,21 * * *" --time-zone "America/Chicago"
+```
+
+Prove the pipeline half before trusting the cron: `gcloud run jobs execute vja-nightly --region "$REGION"`
+and watch logs (`gcloud run jobs executions list --job vja-nightly`). It must complete and send **nothing** —
+check the `digests` row count either side. **Do not manually execute `vja-digest`: it sends real email to
+real users.** Its proof is the next scheduled 06:00 send.
+
+Both Jobs need DB + Anthropic/OpenAI (extract/match) + Resend + `VJA_DIGEST_*`, and `VJA_SESSION_SECRET` +
+`VJA_PUBLIC_BASE_URL` (the digest's unsubscribe token/link — same secret the API verifies with, D-094).
+Neither needs OAuth (no HTTP surface).
+
+**Task-attempt policy (D-086, as amended by D-103):** automatic task retries stay at **zero on both Jobs**.
+The digest half is not delivery-idempotent across Cloud Run attempts — on 2026-07-14 the old 7,200-second
+task sent aviation, timed out during grid, then `maxRetries=1` restarted the whole command and sent aviation
+a second time. The pipeline half genuinely *is* retry-safe now that it sends no email, but retries stay off
+there too for now: pairing them with the new skip-if-running guard can wedge a run. **Timeouts differ by
+cadence** — the pipeline gets **10,800s (3h)**, which must stay *below* the 4-hour interval or one hung
+execution runs through the next three windows (D-086's 6h was sized for a once-daily Job); the digest gets
+**3,600s (1h)**. `ship.sh` reasserts all of it on every deploy.
 
 ## 8b. Weekly discovery agent (Phase 10.2 — NOT yet enabled)
 

@@ -4,7 +4,7 @@
 
 A vertical job intelligence agent: a scheduled pipeline that achieves total coverage
 of a small, bounded employer universe (~40 companies per vertical), diffs postings
-daily, and delivers a digest of new/closed roles with LLM-written match rationale
+every 4 hours, and delivers a daily digest of new/closed roles with LLM-written match rationale
 against the user's resume. NOT a live chat agent. NOT a horizontal job board.
 
 Launch verticals (the first two planned day one; **grid/power is built first** — it's the seeded/verified one.
@@ -48,9 +48,13 @@ Builder (Hayden) is the first user — actively recruiting into these verticals.
 
 ## Execution model (decided)
 
-- ALL fetching, API keys, and LLM calls run server-side in the nightly pipeline.
+- ALL fetching, API keys, and LLM calls run server-side in the scheduled pipeline.
   Users only read precomputed results from the DB. Each ATS endpoint is hit once
-  per day TOTAL regardless of user count.
+  per run TOTAL regardless of user count.
+- **The pipeline runs every 4 hours; the digest email stays once a morning (D-103,
+  superseding D-005's once-daily fetch).** Two Cloud Run Jobs: `vja-nightly --no-digest`
+  (fetch → diff → extract → match, `0 1,5,9,13,17,21` CT) and `vja-digest` (`0 6` CT).
+  Total LLM spend is ≈ flat — the same postings cost the same, just discovered sooner.
 - Pipeline order: fetch → diff → extract → match → verify → send digests.
 - **Matching is push, not pull**: nightly batch keyed on (new posting, active
   resume) pairs. **Two cheap gates precede the strong model (D-023):** a free
@@ -287,9 +291,11 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   embedded LiteLLM; provider/send config = `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VJA_DIGEST_FROM`
   (default sandbox `onboarding@resend.dev`), and `VJA_DIGEST_RECIPIENT` — which as of P5.4 is the
   **ops/alert** recipient (failure alerts); the *digest* recipient is the matched profile's
-  `user_email` (D-027/D-037). Nightly job = **`vja-nightly`** (composes run → extract → match → digest
-  per profile, alerts on hard failure), scheduled via launchd (`deploy/launchd/`); `vja-run`/`vja-extract`/
-  `vja-match`/`vja-digest` remain as separate debugging entry points. Scheduler is a swappable trigger —
+  `user_email` (D-027/D-037). **Two scheduled jobs since D-103:** `vja-nightly --no-digest` every 4h
+  (run → extract → match, alerts on hard failure) and `vja-digest` daily (assemble → verify → send,
+  alerts on a failed send). Without the flag `vja-nightly` still composes the whole loop including the
+  send. `VJA_PIPELINE_MAX_MATCHES` bounds one pipeline run's matching per profile. `vja-run`/
+  `vja-extract`/`vja-match` remain separate debugging entry points. Scheduler is a swappable trigger —
   cloud cutover swaps it, not code (D-031).
 - **Testing is policy, not preference (this code is model-written).** No behavior is "done" until a test pins it at
   the right level; bug fixes start with a failing regression test. Default `pytest` (unit+integration+system) stays
@@ -330,7 +336,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/15-beta-hardening-plan.md` — the active beta-hardening workstreams (UI · discovery run · bugs/onboarding · scaling incl. LLM spend · fetchers/company data), beta exit line, DoD per block, and what's parked. Scope of record: D-072/D-085. Read after `WORKLOG.md` top to continue.
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
-- `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing, the churn-fix prerequisite, and the rejected-features record. Planning only; nothing live.
+- `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing and the rejected-features record. **F2 Phase A ✅ (D-095) and F1a ✅ (D-103) are built; the churn diagnosis is answered in-place at the top** (artifacts, Workday-concentrated — P4.3 was the wrong tool, and "Workday page-membership drift" replaced it as F4's prerequisite).
 - `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090/D-093): extraction retained Haiku; the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live evals remain manual evidence, provider billing is authoritative, and no generic benchmark/paid CI gate/`no`-output follow-on exists.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.

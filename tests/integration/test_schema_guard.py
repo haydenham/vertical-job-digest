@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
@@ -18,7 +19,6 @@ from vja.db.engine import get_engine
 from vja.db.schema_guard import SchemaBehindError, ensure_schema_ready
 
 _PRE_BACKFILL_REVISION = "b2f4c1a9e07d"
-_PACKAGED_HEAD = "a7c15e0b93d2"
 _ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -26,6 +26,18 @@ def _alembic_config() -> Config:
     cfg = Config(str(_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(_ROOT / "migrations"))
     return cfg
+
+
+def _packaged_head() -> str:
+    """The current migration head, read from the scripts rather than hardcoded.
+
+    What these tests assert is the *guard's* behavior — that a behind database is rejected and
+    names the head it is behind. The head's literal value is incidental, so pinning it here just
+    meant every future migration broke two unrelated tests (it did, at D-103).
+    """
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+    assert head is not None
+    return head
 
 
 def test_schema_guard_accepts_database_at_packaged_head(
@@ -42,7 +54,7 @@ def test_schema_guard_rejects_database_behind_packaged_head(
     command.upgrade(_alembic_config(), _PRE_BACKFILL_REVISION)
     engine = get_engine(url)
     try:
-        with pytest.raises(SchemaBehindError, match=_PACKAGED_HEAD):
+        with pytest.raises(SchemaBehindError, match=_packaged_head()):
             ensure_schema_ready(engine, _alembic_config())
     finally:
         engine.dispose()
@@ -58,7 +70,7 @@ def test_configured_schema_guard_fails_app_startup_before_readiness(
     engine = get_engine(url)
     try:
         with (
-            pytest.raises(SchemaBehindError, match=_PACKAGED_HEAD),
+            pytest.raises(SchemaBehindError, match=_packaged_head()),
             TestClient(create_app(engine)),
         ):
             pass

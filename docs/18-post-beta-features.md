@@ -28,7 +28,55 @@ The original slate: two adaptations (**F1 freshness**, **F2 salary**) + two nove
 we already pay to collect (**F3 recurring-gaps report**, **F4 lifespan intel**). D-093 later parks **F5
 city/region preferences** as an unsequenced follow-on; it does not expand the active build slate.
 
-## Blocking prerequisite — the D-085 churn diagnosis
+## ✅ ANSWERED (2026-07-28) — the D-085 churn diagnosis
+
+**Run before F1a, exactly as this section required. Answer: artifacts, heavily concentrated in
+Workday — and P4.3 is the wrong fix, so it is NOT the prerequisite this memo assumed.** Full
+reasoning in **D-103**; the numbers, from 14 days of Cloud Logging `employer sync` lines (521
+parsed, 94 fetch-failure lines):
+
+| cut | result |
+|---|---|
+| Top 2 employers | Boeing 35% + GE Vernova 16% = **51% of all reopens** |
+| Employers reopening at all | 31 of 135 |
+| By ATS | **Workday 78-80%** (1.01% of rows fetched) vs greenhouse 0.02%, ashby 0.08%, lever 0.21%; **zero** for every single-response fetcher (rippling/workable/smartrecruiters/paylocity/bamboohr) |
+
+Two mechanisms, neither the one guessed below:
+
+1. **Outage catch-up — the spikes, already fixed.** Boeing failed **five consecutive nights**
+   (07-17…07-21, `workday total changed during fetch: 1048 → 0`), mutating nothing each night. D-092's
+   fix merged as **#94 on 07-21**, and the first success on 07-22 processed five days of drift at once:
+   217 new / 370 closed / **86 reopened** — a quarter of the 14-day total in a single day. S&P Global
+   shows the identical five-fail-then-catch-up shape.
+2. **Residual Workday page-membership drift — the steady state.** Post-#94 (07-23…07-28): ~57
+   reopens/night, 80% Workday, Boeing 36% of those. Totals agree; membership drifts across pages.
+
+**Radancy/NextEra is exonerated.** Minus the known 07-17 DB catch-up it falls from 129 reopens to 8
+(0.32% rate), so D-078's suspicion of Radancy was wrong.
+
+**Why P4.3 is not the answer.** A pipeline-level mass-closure threshold would have *blocked* Boeing's
+legitimate 07-22 catch-up — leaving the DB five days stale, then blocking again — and it is blind to
+the steady state (1-5 reopens on employers fetching 200-2,200 rows trips no threshold). The residual
+belongs to the **Workday page-membership contract**, now tracked separately (below).
+
+**Why F1a was cleared instead.** The digest stays daily and its `new` set keys on
+`first_seen_at > last_sent_at`, so a role reopened at 02:00 *and* 14:00 yields **one** line tomorrow:
+frequency cannot increase repeat lines per role, only the count of distinct reopened roles. And more
+frequency actively kills mechanism 1 — a failing Workday board gets five more attempts the same day
+instead of going dark until tomorrow.
+
+**Follow-on, built with F1a:** `pipeline_runs.postings_reopened` is now persisted, so this question is
+answerable from the DB next time instead of from logs before they expire.
+
+### New tracked item (not an F-number) — Workday page-membership drift
+
+80% of steady-state reopens. Distinct from the D-092 total-mode contract, which this does not violate:
+the totals agree, the *set* returned across paginated pages does not. Also still open and unrelated to
+cadence: **GE Vernova, S&P Global, Airbus and Thales fail intermittently or permanently**
+(`missing 'title'` / `missing 'externalPath'`, plus the accepted D-092 ambiguous-cap boards) — GE
+Vernova failed again on 07-28.
+
+## Original framing — the D-085 churn diagnosis (superseded by the answer above)
 
 Production logs (July 8–10) showed **343–654 "new" and 384–592 closed postings per night from a
 static 44 fetched employers** — posting identity is likely churning (close/reopen cycles). This
@@ -132,7 +180,10 @@ needs. Cloud Run's log retention bounds the history, so pull it before it ages o
 is answerable from the DB next time instead of from logs before they expire. One additive column,
 one manual Neon migration (D-083).
 
-No **F1a**, **F1b**, or **F4** build starts until step 1 is done and the answer is written down here.
+~~No **F1a**, **F1b**, or **F4** build starts until step 1 is done and the answer is written down
+here.~~ **Done 2026-07-28 — see the answer at the top of this section.** F1a shipped; **F4 still
+wants post-fix data** (its medians are computed from `first_seen_at`, which a reopen resets), so the
+Workday membership item remains F4's prerequisite even though it was not F1a's.
 
 ## F1 — Intraday freshness (flagship adaptation)
 
@@ -196,10 +247,29 @@ the pipeline half while the digest half keeps zero.
 **Sizing:** roughly two PRs plus the ADR. Nothing needs rewriting; the architecture anticipated
 this split.
 
-**Prereq:** the churn diagnosis above — specifically step 1. Reopens cost no LLM (see the
-correction), so the risk F1a carries is **repeat roles in the morning digest**, not spend.
+**Prereq:** the churn diagnosis above — **done 2026-07-28, and it cleared this build.**
 
-**Status:** scoped and cadence-decided; **blocked on the churn diagnosis**, not started.
+**Status: ✅ BUILT 2026-07-28 (D-103).** All seven build items landed. What differed from the plan
+above, and why:
+
+- **Item 1** became `vja-nightly --no-digest` (not a new entry point) — the flag *is* the split, so
+  `ship.sh` and `test_deploy_config.py` both assert it can never be dropped.
+- **Item 2**: the alert helper moved from `nightly.py` into `digest/send.py`, not a new
+  `digest/alert.py` — that module would have imported `send.py` for `send_email` while `send_main`
+  imported it back, a real cycle. `send.py` already owns `send_email`/`DigestConfig`.
+- **Item 3** shipped with a `RUN_STALE_AFTER` bound and stops *before* Layer 2 on a skip.
+- **Item 4**: two Jobs (`vja-nightly` keeps its name), timeouts 3h/1h, retries stay 0 on both.
+- **Item 5**: `alerts.sh` now loops over a `JOB_SPECS` list with per-job absence windows (5h/26h).
+- **Item 6** became `VJA_PIPELINE_MAX_MATCHES` — a per-run *count* bound that defers overflow, not a
+  daily ceiling that refuses work (D-101 decoupled the signup ceiling from the pipeline on purpose).
+- **Item 7**: D-103, plus the INVARIANTS replacements.
+- **Two unplanned finds, both kept:** `pipeline_runs.postings_reopened` is now persisted, and
+  `postings_needing_match` had **no `ORDER BY`**, so every count-capped caller (including the
+  pre-existing D-057 backfill) was truncating an undefined set. Now freshest-first, regression-pinned.
+
+**Not done, deliberately:** automatic retries on the pipeline Job. D-086's duplicate-delivery reason
+dissolves once that half sends no email, but pairing retries with a brand-new skip-if-running guard
+can wedge a run. Worth revisiting once the guard has a few weeks of production behind it.
 
 ### F1b — instant alerts (parked)
 
@@ -308,17 +378,18 @@ wiring wait for a dedicated post-beta decision rather than riding the Luna cutov
 
 ## Sequencing (post-beta-exit)
 
-1. **Churn diagnosis** (D-085 queue — blocking F1a, F1b, F4). Read-only; runbook above. **Next up.**
-   → if the reopens are artifacts, **P4.3** (pipeline-level mass-closure threshold guard) becomes
-   the real prerequisite and moves to position 2.
+1. ~~**Churn diagnosis**~~ ✅ done 2026-07-28 (D-103) — artifacts, Workday-concentrated; **P4.3 was
+   the wrong tool and is not queued**. Spawned the *Workday page-membership drift* item instead.
 2. ~~**F2 Phase A** — salary surfacing~~ ✅ built 2026-07-24 (D-095), with description display
    added to the same block
-3. **F1a** — 4-hourly pipeline, daily digest (flagship; own ADR superseding D-005). Promoted
-   ahead of F4: it is the user-visible freshness win, and F4 needs *post-fix* data to be
-   meaningful anyway.
-4. **F4** — lifespan intel (read-only, zero LLM; needs post-churn-fix data)
-5. **F3** — recurring-gaps report
-6. **F1b** — instant alerts (needs F1a + alert idempotency)
+3. ~~**F1a** — 4-hourly pipeline, daily digest~~ ✅ built 2026-07-28 (D-103, superseding D-005's
+   once-daily fetch rule)
+4. **Workday page-membership drift** (new, from the diagnosis) — 80% of steady-state reopens, and
+   **F4's real prerequisite**. Read-only investigation first.
+5. **F4** — lifespan intel (read-only, zero LLM; needs post-fix data — a reopen resets
+   `first_seen_at`, which the medians are computed from)
+6. **F3** — recurring-gaps report (no churn dependency; could jump the queue)
+7. **F1b** — instant alerts (needs F1a ✅ + alert idempotency)
 - **F2 Phase B** (H1B enrichment) — parallel track, data-only, no ordering dependency.
 
 ## Explicitly rejected / parked (the anti-clutter record)

@@ -9,6 +9,7 @@ posting's failure is isolated; cost is summed; multiple active profiles are each
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
 from sqlalchemy import Engine, func, select
 
 from vja.db.engine import begin
@@ -212,3 +213,76 @@ def test_multiple_active_profiles_each_match(migrated_engine: Engine) -> None:
     assert summary.profiles == 2
     assert summary.total == 2 and summary.matched == 2  # the one survivor matched per profile
     assert _match_count(migrated_engine) == 2
+
+
+def test_pipeline_cap_bounds_one_run_and_defers_the_rest(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`VJA_PIPELINE_MAX_MATCHES` bounds a run without dropping work (D-103).
+
+    The runaway guard for the 4-hourly cadence: at six runs a day, an inflated candidate set gets
+    six chances instead of one. Overflow is deferred, not discarded — the leftovers are still
+    unmatched, so the next run picks them up.
+    """
+    profile_id = _seed(migrated_engine)
+    gridco = _employer(migrated_engine, vertical=_VERTICAL, name="GridTwo")
+    for n in range(4):
+        _posting(migrated_engine, gridco, f"extra{n}", "Software Engineer")
+    assert profile_id  # 5 in-scope survivors in total (the original `swe` plus these four)
+
+    monkeypatch.setenv("VJA_PIPELINE_MAX_MATCHES", "2")
+    first = _run(migrated_engine)
+    assert (first.total, first.matched) == (2, 2)
+    assert _match_count(migrated_engine) == 2
+
+    # The other three were never candidates for that run, not failures — the next run takes them.
+    monkeypatch.delenv("VJA_PIPELINE_MAX_MATCHES")
+    second = _run(migrated_engine)
+    assert (second.total, second.matched) == (3, 3)
+    assert _match_count(migrated_engine) == 5
+
+
+def test_capped_run_matches_the_freshest_postings_first(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A capped run truncates a *deterministic*, freshest-first list (D-103).
+
+    Regression test for a latent bug the cap exposed: `postings_needing_match` had no ORDER BY, so
+    every capped caller (this one and the D-057 backfill) sliced whatever order the database
+    happened to return. Which roles got matched, and which were silently skipped, was undefined.
+    """
+    _seed(migrated_engine)
+    gridco = _employer(migrated_engine, vertical=_VERTICAL, name="GridThree")
+    # Days chosen to straddle `swe`'s own first_seen_at (_NOW, 06-19) unambiguously.
+    for day, external_id in ((10, "oldest"), (12, "middle"), (30, "newest")):
+        with begin(migrated_engine) as conn:
+            conn.execute(
+                postings.insert().values(
+                    employer_id=gridco,
+                    external_id=external_id,
+                    content_hash=f"h-{external_id}",
+                    raw_payload={},
+                    title="Software Engineer",
+                    level="new_grad",
+                    location="Houston, TX",
+                    stack=["Python"],
+                    status="open",
+                    first_seen_at=datetime(2026, 6, day, tzinfo=UTC),
+                    last_seen_at=_NOW,
+                    extracted_at=_NOW,
+                    extraction_model="claude-haiku-4-5",
+                )
+            )
+
+    monkeypatch.setenv("VJA_PIPELINE_MAX_MATCHES", "2")
+    _run(migrated_engine)
+
+    with migrated_engine.connect() as conn:
+        matched_ids = {
+            row[0]
+            for row in conn.execute(
+                select(postings.c.external_id).join(matches, matches.c.posting_id == postings.c.id)
+            ).all()
+        }
+    # `newest` (06-30) and `swe` (06-19) beat `middle` (06-12) and `oldest` (06-10).
+    assert matched_ids == {"swe", "newest"}

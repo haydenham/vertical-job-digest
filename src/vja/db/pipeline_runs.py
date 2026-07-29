@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import pipeline_runs
@@ -18,6 +19,23 @@ from vja.models import PipelineRunStatus, TokenUsage
 
 # Module-level default (frozen/immutable) — avoids a call in the arg default (ruff B008).
 _NO_USAGE = TokenUsage()
+
+
+def latest_running_started_at(conn: Connection) -> datetime | None:
+    """`started_at` of the newest `running` row, or None when no run is in flight.
+
+    The overlap check behind D-103's skip-if-running guard. A row is only moved off `running` by
+    `finish_run`, so a killed process leaves one behind forever — the caller must therefore treat
+    an old `running` row as stale rather than as a live run, or one crash wedges the pipeline
+    permanently.
+    """
+    row = conn.execute(
+        select(pipeline_runs.c.started_at)
+        .where(pipeline_runs.c.status == PipelineRunStatus.RUNNING.value)
+        .order_by(pipeline_runs.c.started_at.desc())
+        .limit(1)
+    ).first()
+    return row[0] if row is not None else None
 
 
 def start_run(conn: Connection, now: datetime) -> int:
@@ -41,11 +59,17 @@ def finish_run(
     employers_fetched: int,
     fetch_failures: int,
     postings_new: int,
+    postings_reopened: int,
     postings_closed: int,
     errors: list[dict[str, Any]],
     now: datetime,
 ) -> None:
-    """Finalize the run row with its terminal status, counts, and `finished_at`."""
+    """Finalize the run row with its terminal status, counts, and `finished_at`.
+
+    `postings_reopened` is persisted as of D-103. It was computed per run all along and thrown
+    away, which left close/reopen churn answerable only from Cloud Logging before it aged out —
+    a worse trade once the pipeline runs six times a day instead of once.
+    """
     conn.execute(
         pipeline_runs.update()
         .where(pipeline_runs.c.id == run_id)
@@ -55,6 +79,7 @@ def finish_run(
             employers_fetched=employers_fetched,
             fetch_failures=fetch_failures,
             postings_new=postings_new,
+            postings_reopened=postings_reopened,
             postings_closed=postings_closed,
             extraction_calls=0,  # Layer-2 totals land via update_llm_metrics after the run (P5.4)
             match_calls=0,

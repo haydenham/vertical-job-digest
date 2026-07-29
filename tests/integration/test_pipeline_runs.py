@@ -41,6 +41,7 @@ def test_finish_run_finalizes_the_row(migrated_engine: Engine) -> None:
             employers_fetched=3,
             fetch_failures=0,
             postings_new=7,
+            postings_reopened=2,
             postings_closed=1,
             errors=[],
             now=end,
@@ -51,5 +52,8 @@ def test_finish_run_finalizes_the_row(migrated_engine: Engine) -> None:
     assert row["finished_at"] is not None
     assert row["employers_fetched"] == 3
     assert row["postings_new"] == 7
+    # D-103: computed all along, thrown away until now. A reopen erases its own evidence from the
+    # posting row (`first_seen_at` is overwritten), so this column is the only durable record.
+    assert row["postings_reopened"] == 2
     assert row["postings_closed"] == 1
     assert row["llm_cost_usd"] == 0.0

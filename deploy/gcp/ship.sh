@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Thin scripted redeploy for Rolefeed (Cloud Run service + nightly Job) — Phase A / D-066.
+# Thin scripted redeploy for Rolefeed (Cloud Run service + two Jobs) — Phase A / D-066, D-103.
 #
 # One idempotent command that captures the CUTOVER.md flags so no deploy ever forgets
 # `--platform linux/amd64`, a secret mount, or the Job image update. NOT full CI/CD (that's the
 # deferred 9.6) — a thin wrapper over the exact flags CUTOVER §1/§5/§8 already proved.
 #
-# Scope: REDEPLOY of already-provisioned resources. The `rolefeed` service + `vja-nightly` Job must
-# already exist (stood up via deploy/gcp/CUTOVER.md). This script rebuilds the image at the current
-# commit and rolls it onto both. It does NOT migrate the schema (Alembic stays a deliberate manual
-# step — CUTOVER §3), seed, or touch the domain / OAuth redirect URIs.
+# Scope: REDEPLOY of already-provisioned resources. The `rolefeed` service + the `vja-nightly` and
+# `vja-digest` Jobs must already exist (stood up via deploy/gcp/CUTOVER.md §8). This script rebuilds
+# the image at the current commit and rolls it onto all three. It does NOT migrate the schema
+# (Alembic stays a deliberate manual step — CUTOVER §3), seed, touch the domain / OAuth redirect
+# URIs, or create/retarget the Cloud Scheduler triggers (CUTOVER §8 owns the cadence).
 #
 # It also NEVER writes the *service's* prod guard env vars (VJA_AUTH_REQUIRED / VJA_COOKIE_SECURE /
 # VJA_PUBLIC_BASE_URL, set once in CUTOVER §9): omitting --set-env-vars preserves them, so a
@@ -17,7 +18,7 @@
 # digest's unsubscribe links need the public origin, D-094 — which is additive, not a guard.)
 #
 # Usage:
-#   ./deploy/gcp/ship.sh          # build → push → deploy service → update Job → smoke
+#   ./deploy/gcp/ship.sh          # build → push → deploy service → update both Jobs → smoke
 #   ./deploy/gcp/ship.sh --force  # skip the dirty-working-tree confirmation
 #
 # Requires: gcloud (authenticated, docker configured for Artifact Registry), docker, git. No secret
@@ -30,15 +31,32 @@ set -euo pipefail
 : "${AR_REPO:=rolefeed}"
 : "${SERVICE:=rolefeed}"
 : "${JOB:=vja-nightly}"
+: "${DIGEST_JOB:=vja-digest}"
 : "${RUNTIME_SA:=850723734041-compute@developer.gserviceaccount.com}"
 
-# D-086: the nightly is not delivery-idempotent across Cloud Run task attempts. A 2026-07-14
-# execution hit the old 2h timeout after aviation emails had sent; maxRetries=1 restarted the
-# whole process and sent aviation again before reaching grid. Give the current sequential pipeline
-# ample headroom and require an explicit operator rerun on process-level failure until durable
-# per-execution delivery idempotency exists.
-: "${JOB_TASK_TIMEOUT_SECONDS:=21600}"
+# D-103: the pipeline and the digest are two Jobs on two schedules. `vja-nightly` keeps its name
+# (renaming a live Job means recreating it, repointing its Scheduler trigger and rewriting the
+# alert policies, for no functional gain) but now runs every 4 HOURS with --no-digest; `vja-digest`
+# sends once a morning. The pipeline timeout must sit BELOW the 4h interval — D-086's 6h was sized
+# for a once-daily job and would let one hung run overlap the next three. 3h leaves ample headroom
+# over a ~15-20 min steady-state run while still failing fast enough to matter.
+: "${JOB_TASK_TIMEOUT_SECONDS:=10800}"
+: "${JOB_ARGS:=--no-digest}"
+: "${DIGEST_JOB_TASK_TIMEOUT_SECONDS:=3600}"
+
+# D-086: the digest half is not delivery-idempotent across Cloud Run task attempts. A 2026-07-14
+# execution hit the old 2h timeout after aviation emails had sent; maxRetries=1 restarted the whole
+# process and sent aviation again before reaching grid. Zero retries therefore stays on BOTH jobs:
+# mandatory on `vja-digest` (which sends), and kept on the pipeline for now because pairing
+# automatic retries with the new skip-if-running guard (D-103) can wedge a run. A process-level
+# failure is an operator-reviewed manual rerun.
 : "${JOB_MAX_RETRIES:=0}"
+
+# D-103 runaway guard: bounds ONE run's matching per profile, unset by default in code. At six runs
+# a day an inflated candidate set gets six chances instead of one; overflow is deferred to the next
+# run, never dropped. Deliberately NOT the D-057 daily ceiling, which refuses work outright and is
+# keyed to signups (D-101 decoupled the two on purpose).
+: "${PIPELINE_MAX_MATCHES:=400}"
 
 # D-090: matching cut over only after the human-reviewed eight-case Sonnet/Luna comparison.
 # `--update-env-vars` preserves the auth/cookie/public-URL guards while making the exact route and
@@ -73,6 +91,7 @@ JOB_SECRETS="ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_AP
 # Job needs the env var explicitly; the *service* keeps its CUTOVER §9 guard policy (never written
 # here — see header comment).
 JOB_ENV="${LAYER2_ENV},VJA_PUBLIC_BASE_URL=${VJA_PUBLIC_BASE_URL:-https://role-feed.com}"
+PIPELINE_JOB_ENV="${JOB_ENV},VJA_PIPELINE_MAX_MATCHES=${PIPELINE_MAX_MATCHES}"
 
 FORCE=0
 [[ "${1:-}" == "--force" || "${1:-}" == "-y" ]] && FORCE=1
@@ -100,20 +119,20 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud config set run/region "$REGION" >/dev/null
 
 echo "==> Deploying $IMAGE"
-echo "    project=$PROJECT_ID region=$REGION service=$SERVICE job=$JOB"
+echo "    project=$PROJECT_ID region=$REGION service=$SERVICE jobs=$JOB,$DIGEST_JOB"
 
 # --- 1+2. Build + push (⚠ --platform linux/amd64 is mandatory: arm64 laptop → amd64 Cloud Run) ---
-echo "==> [1/5] docker build --platform linux/amd64"
+echo "==> [1/6] docker build --platform linux/amd64"
 docker build --platform linux/amd64 -t "$IMAGE" .
-echo "==> [2/5] docker push"
+echo "==> [2/6] docker push"
 docker push "$IMAGE"
 
 # --- 3. Capture the current serving revision BEFORE deploying, for one-command rollback ----------
 PREV="$(gcloud run services describe "$SERVICE" --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-echo "==> [3/5] prior serving revision: ${PREV:-<none>}"
+echo "==> [3/6] prior serving revision: ${PREV:-<none>}"
 
 # --- 4. Deploy the service (re-asserts the full CUTOVER §5 config; NO --set-env-vars → guards kept)
-echo "==> [4/5] deploy service $SERVICE"
+echo "==> [4/6] deploy service $SERVICE"
 # --no-cpu-throttling (D-101) is load-bearing, not a performance tweak: the signup flow returns 202
 # and finishes `run_backfill` in a FastAPI BackgroundTask, i.e. OUTSIDE a request. Under Cloud Run's
 # default throttling that work only gets CPU when another request happens to land on the same
@@ -130,13 +149,26 @@ gcloud run deploy "$SERVICE" \
   --update-env-vars "$SERVICE_ENV" \
   --set-secrets "$SERVICE_SECRETS"
 
-# --- 5. Update the nightly Job to the same image (D-031 trigger-swap: one image, two run targets) -
-echo "==> [5/5] update job $JOB"
+# --- 5. Update both Jobs to the same image (D-031 trigger-swap: one image, three run targets) ----
+# `--args` is asserted explicitly on each: it is what separates the two halves of the D-103 split,
+# and dropping it on the pipeline Job would silently start sending digests six times a day.
+echo "==> [5/6] update pipeline job $JOB (every 4h, --no-digest)"
 gcloud run jobs update "$JOB" \
   --image "$IMAGE" \
   --region "$REGION" \
   --service-account "$RUNTIME_SA" \
+  --args "$JOB_ARGS" \
   --task-timeout "$JOB_TASK_TIMEOUT_SECONDS" \
+  --max-retries "$JOB_MAX_RETRIES" \
+  --update-env-vars "$PIPELINE_JOB_ENV" \
+  --set-secrets "$JOB_SECRETS"
+
+echo "==> [6/6] update digest job $DIGEST_JOB (daily)"
+gcloud run jobs update "$DIGEST_JOB" \
+  --image "$IMAGE" \
+  --region "$REGION" \
+  --service-account "$RUNTIME_SA" \
+  --task-timeout "$DIGEST_JOB_TASK_TIMEOUT_SECONDS" \
   --max-retries "$JOB_MAX_RETRIES" \
   --update-env-vars "$JOB_ENV" \
   --set-secrets "$JOB_SECRETS"
