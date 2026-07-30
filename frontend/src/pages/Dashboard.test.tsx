@@ -144,6 +144,18 @@ describe("Dashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/matching in progress/i);
   });
 
+  it("the banner promises an honest duration and keeps the tab open", async () => {
+    // Both claims are the point of the copy, not decoration. Beta users read the old one-liner as
+    // a broken app; the duration has to match reality (6-25 min, D-101) and the tab instruction
+    // protects the 10s poll that keeps the Cloud Run instance warm. A future copy edit that drops
+    // either should fail here.
+    mockUseAuth.mockReturnValue(auth("running"));
+    renderDashboard();
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent(/5 to 20 minutes/i);
+    expect(banner).toHaveTextContent(/keep this tab open/i);
+  });
+
   it("no banner and no poll once the server reports done", async () => {
     vi.useFakeTimers();
     mockUseAuth.mockReturnValue(auth("done"));

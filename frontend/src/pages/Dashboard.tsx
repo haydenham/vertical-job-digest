@@ -88,9 +88,15 @@ export function Dashboard({ vertical }: { vertical: string }) {
       </div>
 
       {matching && (
+        // The time range is honest, not padding: production backfills run 6-25 minutes (D-101,
+        // which is why BACKFILL_STALE_AFTER is 30). Promising "a few minutes" is what made beta
+        // users conclude the app was broken. "Keep this tab open" is load-bearing too — this
+        // page's 10s poll is what keeps the Cloud Run instance warm, and Cloud Run cannot see
+        // background work when scaling down, so a closed tab can starve the backfill itself.
         <div className="notice busy banner" role="status">
           <span className="spinner" aria-hidden="true" />
-          Matching in progress. Results update live
+          Matching in progress. Our AI is reading every open role against your résumé, which usually
+          takes 5 to 20 minutes. Keep this tab open and matches will appear as they’re ready.
         </div>
       )}
 

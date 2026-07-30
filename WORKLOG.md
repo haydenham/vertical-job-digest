@@ -5,6 +5,101 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-30 — Morning-run verification under D-103, and honest copy on the matching banner
+
+**Housekeeping on the previous entry:** its `**Next:**` block is **done on both halves**. Hayden reviewed,
+committed and merged (**#113**, plus the `Camus fix` commit `525a558`), *and* the Neon-dependent half
+happened too — `vja-import-employers` was run against prod overnight, proven by the 02:00Z pipeline run
+fetching `camus-energy` through **Rippling** (`fetched=4 new=4 closed=3`) where 07-29's runs were all
+404ing on Greenhouse. So the D-096 Rippling fetcher picked up an ATS migration config-only, exactly as
+D-004 predicts. Still Hayden-owned and unchanged: publish the Google OAuth app off Testing (~100-user
+ceiling).
+
+### `vja-digest`'s first real send worked
+
+The previous entry flagged this morning 06:00 CT as the one genuinely untested thing about D-103 — the
+digest Job had only ever been smoked with a `__smoke__` vertical that sends nothing. It ran:
+`vja-digest-mrv2f`, 11:00:01Z → 11:02:57Z, `Container called exit(0)`, **10 digests sent** (`digests` rows
+161-170) across aviation/grid/trading, **`quarantined=0` on every one**, exactly one execution so no
+duplicate send. Scheduler fired both triggers on time; both Jobs and the service are on `badeeb1` with the
+right args, timeouts (10800/3600) and `maxRetries=0`.
+
+**The split held on the other side too:** the 02:00Z, 06:00Z and 10:00Z pipeline runs each logged
+`digests=skipped (--no-digest)` and emitted zero `sent:` lines. Run durations 17m/23m/15m inside the
+240-minute window.
+
+**Churn is not worse under the 4-hourly cadence** — reopens summed across today's eight intraday runs
+come to **105**, against **136** in the single 07-29 daily pass; grid's digest closure count fell 280 →
+**227**. **Cost fell hard:** $0.26 so far today and $1.64 for all of 07-29, against $4.29 (07-27) and
+$5.52 (07-28) pre-split. Fetch failures are only the known three of 155 (Airbus, Thales, GE Vernova).
+
+### A latent digest hole, found by reading — recorded, not fixed (Hayden's call)
+
+`build_digest` picks `new` as `first_seen_at > last_sent_at` INNER-JOINed to a match row
+(`digest/assembly.py:98,165`), and a successful send advances `last_sent_at`. **The window only ever moves
+forward.** So a posting first seen *before* the digest but matched *after* it can never appear in any
+digest — it exists only on the dashboard, and the user is never told. Two routes in: a per-posting match
+failure (**pre-existing since Phase 5**, not D-103's doing) and D-103's `VJA_PIPELINE_MAX_MATCHES`
+deferral (new). This means the ADR's and `match.py:349`'s "not dropped, just deferred" is true of the
+dashboard and **false of the digest**.
+
+**Not observed:** the largest run since the split matched 33 across all ten profiles against a cap of 400,
+so the cap is nowhere near binding. Raising the cap was considered and rejected — it does not touch the
+match-failure route and the number is not doing anything today. The fix is one WHERE clause and **no
+migration** (`matches` already carries `created_at` and `trigger`): `first_seen_at > since OR
+(matches.created_at > since AND matches.trigger == NIGHTLY)`, where the trigger half is load-bearing
+because a résumé reupload bumps `resume_version` and re-matches the whole universe. Deferred to its own
+session with an ADR; nothing is bleeding.
+
+### The actual change this session: the matching banner tells the truth
+
+**Beta feedback: new users thought the app was broken.** They sign up, land on the dashboard, see no
+matches, and the banner said only *"Matching in progress. Results update live"* — no duration, no
+explanation. Now:
+
+> Matching in progress. Our AI is reading every open role against your résumé, which usually takes 5 to
+> 20 minutes. Keep this tab open and matches will appear as they’re ready.
+
+**Two things about that wording are deliberate, and both came out of D-101 rather than taste.** Hayden's
+brief said "a few minutes"; production backfills measure **6-25 minutes**, which is exactly why
+`BACKFILL_STALE_AFTER` is 30 after the original 10 fired on healthy runs. Promising "a few minutes" to
+someone still waiting at minute 12 reproduces the bug we are fixing, so the copy quotes an honest range.
+And it must **never** invite closing the tab: the dashboard's own 10s poll is what keeps the Cloud Run
+instance warm, and Cloud Run cannot see background work when scaling down, so a closed tab can starve the
+backfill the user is waiting on. That coupling between UI copy and infra is now written into
+`docs/INVARIANTS.md` rather than living only in a code comment.
+
+Scope stayed on the reported problem. `Upload.tsx:133` and `WelcomeTour.tsx:30` keep their "within
+minutes" wording — they describe the reupload path, a smaller candidate set that genuinely is faster.
+The matching empty state (`Dashboard.tsx:118`) was **deliberately left alone**: it renders below the new
+banner, still reads correctly, and changing it would churn three literal test assertions for no user gain.
+
+**No CSS change was needed,** which I checked rather than assumed: rendered against the real `theme.css`,
+the message fits on **one line** at desktop width and wraps to four at ~380px with the spinner centred
+against the block. `.notice.banner`'s existing `align-items: center` handles both.
+
+**Verification.** Frontend gate green: eslint clean, `tsc --noEmit` clean, **vitest 168 passed / 17
+files** (Dashboard 11 → 12 tests). The new assertion was **confirmed failing against the old copy**
+before being kept (1 failed | 11 passed with `Dashboard.tsx` stashed) — and note the three existing
+`/matching in progress/i` assertions passed in both states, which is why the new copy keeps that opener.
+No `src/` change, so the Python gates are untouched.
+
+**Not done / parked (all Hayden's call, deliberately not touched pre-launch):** the GCP budget alert
+(none exists; the Budget API is not even enabled on `role-feed-prod`), the digest-hole fix, and the
+deferred Neon reads (`pipeline_runs.postings_reopened` for runs 35-45, open-Camus count, D-095 comp
+fill-rate).
+
+**One dated item worth not losing.** `--no-cpu-throttling` has been on since revision `rolefeed-00063-b4f`
+(2026-07-28 14:00Z, D-101). Billable Cloud Run instance-seconds/day jumped from 280-460 to **41,168**
+(07-29) and **45,811** (07-30), with instance state flipping from mostly `idle` to `active` — the flag's
+signature, and **not traffic** (requests/day went 283 → 785 → 300). The bill still reads ~$0 only because
+the monthly free tier is not yet consumed and July has a day left. **Check Billing → Reports grouped by
+SKU in the first week of August**, when the projection (~$25-30/month) either holds or doesn't.
+
+**Next:** Hayden reviews/commits/PRs the banner branch (`fix/matching-banner-copy`), then launch.
+
+---
+
 ## 2026-07-29 — Pre-launch sweep: code + prod logs before opening to more users
 
 **Housekeeping on the previous entry:** it is headed `2026-07-28` but was amended twice on 07-29
