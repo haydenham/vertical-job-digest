@@ -312,7 +312,13 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   poll that was keeping the instance busy. The
   dashboard polls (~10s, silent `/api/me` re-probe + postings refetch) while `running`, shows the
   "Matching in progress" banner (over existing rows too — the reupload case), and stops when the server flips
-  the status; the poll is bounded by the server's staleness guard, not a client timer. (D-082, D-057, D-005)
+  the status; the poll is bounded by the server's staleness guard, not a client timer. **The banner copy owes
+  the user two things, and both are load-bearing rather than decorative:** an *honest* duration (it says 5 to
+  20 minutes, against the measured 6-25 — beta users read the old "Results update live" one-liner as a broken
+  app), and an instruction to **keep the tab open**, because that ~10s poll is what keeps the Cloud Run
+  instance warm and Cloud Run cannot see background work when scaling down, so a closed tab can starve the
+  very backfill being waited on. Never tell the user they may leave; pinned in `Dashboard.test.tsx`.
+  (D-082, D-101, D-057, D-005)
 
 ## Dashboard & freshness
 
