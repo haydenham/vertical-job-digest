@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PostingRow } from "../api";
@@ -120,4 +121,55 @@ describe("PostingsTable", () => {
     const { container } = renderTable([row()], { selectedId: 1 });
     expect(container.querySelector(".row.selected .cell-chevron")).not.toBeNull();
   });
+
+  // --- the public demo board (D-105) -----------------------------------------------------------
+
+  it("locked: keeps the match column but offers sign-in in place of a verdict", () => {
+    renderLockedTable([row()]);
+    const lock = screen.getByRole("link", { name: /sign in/i });
+    expect(lock).toHaveAttribute("href", "/login");
+    // The column header is still there — the demo is the dashboard, not a cut-down table.
+    expect(screen.getByRole("button", { name: /match/ })).toBeInTheDocument();
+  });
+
+  it("locked: never renders a score or verdict, even if one somehow reaches the row", () => {
+    // A public row carries no match fields at all; passing one that does is the belt-and-braces
+    // check that this component, not just the API response, is what withholds them.
+    renderLockedTable([row({ verdict: "strong_yes", score: 98 })]);
+    expect(screen.queryByText("98")).not.toBeInTheDocument();
+    expect(screen.queryByText("strong")).not.toBeInTheDocument();
+  });
+
+  it("locked: the match header does not sort, since every cell is the same lock", () => {
+    const { props } = renderLockedTable([row()]);
+    return userEvent.click(screen.getByRole("button", { name: /match/ })).then(() => {
+      expect(props.onSort).not.toHaveBeenCalled();
+    });
+  });
+
+  it("locked: clicking the lock does not also open the detail panel", async () => {
+    const { props } = renderLockedTable([row()]);
+    await userEvent.click(screen.getByRole("link", { name: /sign in/i }));
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
 });
+
+function renderLockedTable(postings: PostingRow[]) {
+  const props = {
+    postings,
+    sort: DEFAULT_SORT,
+    onSort: vi.fn(),
+    selectedId: null,
+    locked: true,
+    onSelect: vi.fn(),
+  };
+  // The locked cell is a router `Link`, so this half of the suite needs a router around it.
+  return {
+    ...render(
+      <MemoryRouter>
+        <PostingsTable {...props} />
+      </MemoryRouter>,
+    ),
+    props,
+  };
+}

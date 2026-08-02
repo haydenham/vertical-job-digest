@@ -5,6 +5,7 @@ import { useAuth } from "./auth/useAuth";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { TOUR_SEEN_KEY, WelcomeTour } from "./components/WelcomeTour";
 import { Dashboard } from "./pages/Dashboard";
+import { Demo } from "./pages/Demo";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Privacy } from "./pages/Privacy";
@@ -174,6 +175,9 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/upload" element={<UploadRoute />} />
         <Route path="/settings" element={<SettingsRoute />} />
+        {/* The one route with no auth guard at all (D-105): the demo board exists to be seen by
+            people who have not signed in, and it renders the same for those who have. */}
+        <Route path="/demo" element={<Demo />} />
         <Route path="/privacy" element={<Privacy />} />
       </Routes>
       {/* The landing page owns its own footer (with its own Privacy link), so the shell footer

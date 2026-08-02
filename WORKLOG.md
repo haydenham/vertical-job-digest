@@ -5,6 +5,85 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-08-02 — The funnel block, PR 2: a login-free demo board at `/demo` (D-105)
+
+**Housekeeping on the previous entry:** its `**Next:**` is **done on the parts Hayden owns** — the
+Neon migration `3f8ad42c17be` has been run, and `feat/vertical-switching` is committed and pushed
+(`0998630`), still unmerged. The paste-résumé question resolved itself: `feat/paste-resume` now
+carries **zero diff against `main`**, and the working tree was clean at the start of this session,
+so the two dirty files that entry warned about are not in anyone's commit. Unchanged and still
+Hayden's: publishing the Google OAuth app off Testing, the GCP budget alert, the digest `new`-window
+hole, and the **August billing check** (now due — `--no-cpu-throttling` pushed billable
+instance-seconds to ~45k/day and the ~$25-30/month projection is still unverified).
+
+### Session scope changed once, on purpose
+
+It opened as "new testing protocol before the prod push". Reading the code answered the question
+that was actually behind it — *is there an abuse guard on vertical switching, or can a user take all
+four verticals at will?* There is: one **new** vertical per 24 hours (`users.last_vertical_switch_at`),
+while returning to a vertical already matched against the current résumé version is free and
+unlimited, because it creates no work. Hayden tested the switch live, judged the existing gates good
+enough, and dropped the protocol doc in favour of PR 2. The 429's presentation came out of that same
+test and rode along.
+
+### `/demo` is the dashboard, not a marketing mock
+
+The shape mattered more than the plumbing, and it got corrected mid-plan: **matching is replaced
+where it appears, never removed.** The match column keeps its header and every row offers `□ sign
+in`; the panel's match slot reads "Log in to view your matches"; *Matched for you* stays on screen
+and routes to `/login` rather than switching. A cut-down table would have been easier and would
+never have shown a visitor what signing in buys.
+
+**The anti-leak guarantee is structural at two independent layers**, because "remember to filter" is
+not a guarantee. `dashboard_statement(profile_id=None)` builds SQL that never references `matches`
+at all (a test compiles it and asserts the table name is absent), and the endpoints serialize
+`PublicPostingRow`, which does not *declare* the five match fields. A leak needs two independent
+mistakes. `_resolve_profile` was not touched and `/api/postings` still 401s anonymously — asserted
+in the same test module, since that guard is exactly what a change like this erodes by accident.
+The locked table and panel also gate on `locked` rather than on missing data, so the components hold
+the line too; both are tested by handing them a full private row and asserting nothing shows.
+
+**Caching is the abuse guard** (there is no rate limiting anywhere in the app): a per-process TTL
+cache on `(vertical, window)` plus `Cache-Control: public, max-age=300, s-maxage=900`, which is
+invisible against a 4-hourly pipeline. `vertical` is validated against the configured list on every
+public endpoint so it cannot be a free existence oracle or an unbounded cache key.
+
+**Measured before building, as `docs/20` demanded:** ~250 in-scope open rows per vertical, so the
+response **ships whole** — no cap, no "showing the newest N of M" copy to maintain.
+
+### The 429 that read like a footnote
+
+`.notice.error` was styled as accent-lavender text and nothing else, so the "one vertical switch per
+24 hours" message looked like ordinary muted copy rather than the reason nothing happened. The
+delete-account zone's hardcoded reds became `--danger-*` tokens and **red is now the error family**,
+not the deletion-only family; the two comments claiming otherwise were corrected in place. One CSS
+rule, and every error notice in the app — settings, dashboard, account-load, auth cards, feedback —
+starts reading as an error.
+
+### Verification
+
+Python gates green: **830 tests pass**, mypy clean on 59 files, ruff + format clean, `lint-imports`
+KEPT (the new `vja.api.public_cache` sits inside the api layer and disturbs nothing). New Python
+tests: 13 in `test_public_api.py` (the leak test, the compiled-SQL pin, the still-401 control, the
+toggle counts, the cache) and 6 in `test_public_cache.py`. Frontend: eslint + `tsc -b` clean,
+**vitest 176 → 204**, including a new `Demo.test.tsx`.
+
+**Ran the real thing, not just the tests.** Seeded a scratch SQLite via the real migrations with a
+match row attached to posting 1, built the SPA, and served it through `vja-api` with
+`VJA_AUTH_REQUIRED=1`: `/api/public/verticals` → `[{grid,4},{robotics,2}]` with the cache header;
+`/api/public/postings` returned posting 1 with **zero** occurrences of verdict/score/fits/gaps/
+rationale or its private text; `/api/postings` still **401**; a cross-vertical id and an unknown
+vertical both **404**; `/robots.txt` and `/demo` both served from `dist/`. What I could not do is
+look at it — jsdom is not a browser, so **the visual pass on `/demo` is Hayden's**.
+
+**Next:** Hayden reviews/commits/PRs `feat/demo-board` (branched off `feat/vertical-switching`, so
+switching merges first). No migration. After merge: confirm Cloudflare is **proxying
+(orange-cloud)** before trusting the `s-maxage` half, and `curl` the deployed `/robots.txt`. Named
+and deliberately not fixed: **dead apply links now go public** — D-008 verification runs pre-digest
+only, and that is its own session.
+
+---
+
 ## 2026-07-31 — The funnel block, PR 1: vertical is now self-serve switchable (D-104)
 
 **Housekeeping on the previous entry:** its `**Next:**` is **done** — the banner branch merged as **#114**

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Engine, and_, case, func, select
+from sqlalchemy import ColumnElement, Engine, Select, and_, case, func, select
 from sqlalchemy.engine import Connection
 
 from vja.db.schema import employers, matches, postings
@@ -479,11 +479,88 @@ def _loads(value: Any) -> list[str] | None:
     return cast("list[str]", json.loads(value))
 
 
+def dashboard_statement(
+    vertical: str,
+    profile_id: int | None,
+    resume_version: str | None,
+    *,
+    cutoff: datetime | None,
+    by_first_seen: bool = False,
+    cleaned: bool = False,
+) -> Select[Any]:
+    """The dashboard SELECT, built for either an identified profile or for nobody.
+
+    Split out of `open_postings_with_match_quality` so that the **anonymous shape is structural
+    rather than a filter applied afterwards** (D-105). With `profile_id is None` this statement
+    selects no `matches` columns and joins no `matches` table, so there is no code path — however
+    wrong a caller is — by which résumé-derived commentary about a named beta user can reach a
+    public response. `test_public_api` compiles this statement and asserts `matches` is absent
+    from the SQL text; that assertion is the first of the demo board's two structural layers.
+    """
+    if profile_id is None and not cleaned:
+        # The *Matched* view means "this résumé's relevant verdicts". Without a profile there is no
+        # résumé, so the question is malformed — a caller bug, not a 404.
+        raise ValueError("the matched view requires a profile_id")
+
+    freshness = func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at)
+    columns: list[Any] = [
+        postings.c.id.label("posting_id"),
+        employers.c.name.label("company"),
+        postings.c.title,
+        postings.c.location,
+        postings.c.apply_url,
+        postings.c.first_seen_at,
+        postings.c.source_updated_at,
+        postings.c.comp_min,
+        postings.c.comp_max,
+        postings.c.comp_raw,
+    ]
+    source: Any = postings.join(employers, postings.c.employer_id == employers.c.id)
+
+    if profile_id is not None:
+        columns += [
+            matches.c.verdict,
+            matches.c.score,
+            matches.c.fits,
+            matches.c.gaps,
+            matches.c.rationale,
+        ]
+        source = source.outerjoin(
+            matches,
+            and_(
+                matches.c.posting_id == postings.c.id,
+                matches.c.profile_id == profile_id,
+                matches.c.resume_version == resume_version,
+            ),
+        )
+
+    stmt = (
+        select(*columns)
+        .select_from(source)
+        .where(
+            employers.c.vertical == vertical,
+            postings.c.status == PostingStatus.OPEN.value,
+            postings.c.in_scope.is_(True),
+        )
+        .order_by(freshness.desc())
+    )
+    if cutoff is not None:
+        in_window = (
+            postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
+        )
+        stmt = stmt.where(in_window)
+    if (
+        not cleaned
+    ):  # *Matched* view: only this résumé's relevant verdicts (excludes `no` + unassessed)
+        stmt = stmt.where(matches.c.verdict.in_(RELEVANT_VERDICTS))
+    return stmt
+
+
 def open_postings_with_match_quality(
     engine: Engine,
     vertical: str,
-    profile_id: int,
-    resume_version: str,
+    profile_id: int | None,
+    resume_version: str | None,
     *,
     cutoff: datetime | None,
     by_first_seen: bool = False,
@@ -502,54 +579,21 @@ def open_postings_with_match_quality(
       and not-yet-assessed (objective job list, same set for any profile; match columns decorate).
       (D-045)
 
+    **`profile_id=None` serves the public demo board (D-105):** the same universe with every match
+    field `None`, computed by a statement that never mentions `matches`. It requires `cleaned=True`
+    — there is no résumé for a *Matched* view to be about.
+
     Floor is always the durable in-scope set (`in_scope IS TRUE`, D-043) — out-of-scope and
     out-of-US/level roles never appear. Newest-activity-first (D-010).
     """
-    freshness = func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at)
-    match_join = and_(
-        matches.c.posting_id == postings.c.id,
-        matches.c.profile_id == profile_id,
-        matches.c.resume_version == resume_version,
+    stmt = dashboard_statement(
+        vertical,
+        profile_id,
+        resume_version,
+        cutoff=cutoff,
+        by_first_seen=by_first_seen,
+        cleaned=cleaned,
     )
-    stmt = (
-        select(
-            postings.c.id.label("posting_id"),
-            employers.c.name.label("company"),
-            postings.c.title,
-            postings.c.location,
-            postings.c.apply_url,
-            postings.c.first_seen_at,
-            postings.c.source_updated_at,
-            postings.c.comp_min,
-            postings.c.comp_max,
-            postings.c.comp_raw,
-            matches.c.verdict,
-            matches.c.score,
-            matches.c.fits,
-            matches.c.gaps,
-            matches.c.rationale,
-        )
-        .select_from(
-            postings.join(employers, postings.c.employer_id == employers.c.id).outerjoin(
-                matches, match_join
-            )
-        )
-        .where(
-            employers.c.vertical == vertical,
-            postings.c.status == PostingStatus.OPEN.value,
-            postings.c.in_scope.is_(True),
-        )
-        .order_by(freshness.desc())
-    )
-    if cutoff is not None:
-        in_window = (
-            postings.c.first_seen_at >= cutoff if by_first_seen else activity_window_clause(cutoff)
-        )
-        stmt = stmt.where(in_window)
-    if (
-        not cleaned
-    ):  # *Matched* view: only this résumé's relevant verdicts (excludes `no` + unassessed)
-        stmt = stmt.where(matches.c.verdict.in_(RELEVANT_VERDICTS))
     with engine.connect() as conn:
         rows = conn.execute(stmt).mappings().all()
     return [
@@ -564,11 +608,35 @@ def open_postings_with_match_quality(
             comp_min=row["comp_min"],
             comp_max=row["comp_max"],
             comp_raw=row["comp_raw"],
-            verdict=row["verdict"],
-            score=row["score"],
-            fits=_loads(row["fits"]),
-            gaps=_loads(row["gaps"]),
-            rationale=row["rationale"],
+            # The anonymous statement omits these columns outright, so `.get` — not `[...]` — is
+            # what lets one row-builder serve both shapes.
+            verdict=row.get("verdict"),
+            score=row.get("score"),
+            fits=_loads(row.get("fits")),
+            gaps=_loads(row.get("gaps")),
+            rationale=row.get("rationale"),
         )
         for row in rows
     ]
+
+
+def open_posting_counts_by_vertical(engine: Engine) -> dict[str, int]:
+    """`{vertical: in-scope open posting count}` — the public board's toggle source (D-105).
+
+    Deliberately *not* `available_verticals()`: that is the onboarding picker's config-driven list,
+    which must stay joinable at zero rows (the B-4 fix). The demo toggle needs the opposite — a
+    vertical with nothing in it would open onto an empty table and read as a broken product.
+    """
+    stmt = (
+        # Positional unpacking below rather than `row.count`: `count` is a method on SQLAlchemy's
+        # Row, so a labelled column of that name resolves to the method, not the value.
+        select(employers.c.vertical, func.count())
+        .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
+        .where(
+            postings.c.status == PostingStatus.OPEN.value,
+            postings.c.in_scope.is_(True),
+        )
+        .group_by(employers.c.vertical)
+    )
+    with engine.connect() as conn:
+        return {vertical: count for vertical, count in conn.execute(stmt)}

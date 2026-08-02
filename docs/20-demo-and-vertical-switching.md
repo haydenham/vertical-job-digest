@@ -4,6 +4,9 @@
 unchanged): live rules go to `docs/INVARIANTS.md`, decisions to `DECISIONS.md`, and this file's
 status lines get updated as each PR lands.*
 
+**Status: both PRs built** — PR 1 vertical switching (D-104, 2026-07-31), PR 2 the `/demo` board
+(D-105, 2026-08-02). The block is complete pending Hayden's review/merge of each.
+
 ## Why this block exists
 
 The funnel, not the pipeline, is the constraint. The LinkedIn launch measured **5,000 views → 150
@@ -43,11 +46,33 @@ the live rules are in `docs/INVARIANTS.md` (Auth & identity). What is worth carr
 **Requires a manual Neon migration before merge** (D-083/D-068): export `VJA_DATABASE_URL`, then
 `alembic current` → `alembic upgrade head` → `alembic current`.
 
-## PR 2 — public demo board at `/demo` · NOT STARTED
+## PR 2 — public demo board at `/demo` · ✅ BUILT 2026-08-02 (D-105)
 
-**Decided:** a new `/demo` route with Landing keeping its job (its secondary CTA changes from the
-`#how-it-works` anchor to "Browse live roles"); the detail panel's match slot renders a **locked
-CTA**, never a fabricated rationale; the vertical toggle is honest now that PR 1 shipped.
+**Built as decided**, with one shape correction taken during the build: the demo **is** the
+dashboard — same subbar, table, panel and copy — and matching is *replaced* wherever it appears
+rather than removed. The match column keeps its header and offers sign-in on every row; the panel's
+match slot reads "Log in to view your matches"; *Matched for you* stays visible and routes to
+`/login`. Dropping those would have produced a smaller, different product that never shows a
+visitor what signing in buys. Landing's secondary CTA moved off the `#how-it-works` anchor to
+"Browse live roles".
+
+Full reasoning in **D-105**; the live rules are in `docs/INVARIANTS.md` (Dashboard & freshness).
+What is worth carrying forward:
+
+- **The two structural layers held up in the build**, and the second earned its keep: gating the
+  panel and table on `locked` (not merely on the absence of data) means the guarantee lives in the
+  components too, so a future caller passing a full row cannot leak through them. Pinned by tests
+  that deliberately hand the locked components a row carrying a verdict and rationale.
+- **`Controls` stayed router-free.** The locked view button takes an `onLockedView` callback rather
+  than calling `useNavigate` itself — otherwise every bare-rendered `Controls`/`Dashboard` test
+  needs a router wrapper for a behavior neither of them has. Landing likewise keeps a plain `<a>`
+  for the same reason it always has.
+- **The row count question is closed:** ~250 in-scope open rows per vertical, so the response ships
+  whole. No cap, no "newest N of M" copy.
+- **`.notice.error` rode along** and turned the palette's red into the error family (D-105's second
+  half). It was one CSS rule, and it fixes every error notice in the app at once.
+
+**No migration.** Read-only endpoints over existing tables.
 
 **The hard rule.** Match text is résumé-derived commentary about named beta users, and D-067 flipped
 `VJA_AUTH_REQUIRED` on so anonymous `/api/postings` 401s. That must not be weakened. Leaking is
@@ -73,18 +98,23 @@ recency-only mode (the matched/cleaned axis is meaningless without a résumé); 
 a `locked` prop. Plus `frontend/public/robots.txt` (allow `/` and `/demo`, disallow `/api/`) — neither
 the file nor the directory exists today.
 
-### Measure before building
-
-The in-scope open row count per vertical is **unknown** (no Neon route in the planning session), and
-it decides whether the public response ships whole or needs a cap:
+### Measured before building · ✅ answered 2026-08-02
 
 ```sql
 SELECT e.vertical, count(*) FROM postings p JOIN employers e ON e.id = p.employer_id
 WHERE p.status = 'open' AND p.in_scope IS TRUE GROUP BY 1 ORDER BY 2 DESC;
 ```
 
-Under ~1,500 rows a vertical: ship whole. Above: cap at the newest N with an honest "showing the
-newest N of M" line.
+**~250 rows a vertical** — comfortably under the ~1,500 line, so the public response **ships
+whole**. The cap and its "showing the newest N of M" copy were not built. Revisit only if a
+vertical's universe grows several-fold.
+
+### Open after merge (Hayden)
+
+- **Confirm Cloudflare is proxying (orange-cloud), not DNS-only**, before relying on the `s-maxage`
+  half of the cache header. The in-process TTL cache works either way; the edge half does not.
+- `curl https://role-feed.com/robots.txt` once the revision is live (the file is new, and it ships
+  through Vite's `public/` → `dist/` copy, verified locally in the build).
 
 ## Named, not fixed
 

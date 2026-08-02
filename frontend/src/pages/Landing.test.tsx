@@ -29,12 +29,19 @@ describe("Landing", () => {
     expect(screen.getByRole("heading", { name: /know where you stand/i })).toBeInTheDocument();
   });
 
-  it("renders how-it-works as the anchor the hero's secondary CTA points at", () => {
+  it("points its secondary CTA at the demo board, not at an on-page anchor", () => {
+    // D-105: the funnel, not the pipeline, was the constraint — the second CTA now goes somewhere
+    // a stranger can see actual roles, rather than scrolling to a section already on the page.
     render(<Landing />);
-    expect(screen.getByRole("link", { name: /how it works/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /browse live roles/i })).toHaveAttribute(
       "href",
-      "#how-it-works",
+      "/demo",
     );
+    expect(screen.queryByRole("link", { name: /how it works/i })).not.toBeInTheDocument();
+  });
+
+  it("still renders the how-it-works section itself", () => {
+    render(<Landing />);
     expect(screen.getByRole("heading", { name: /^how it works$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /curate the universe/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /fetch, diff, and verify/i })).toBeInTheDocument();
