@@ -1,9 +1,11 @@
-import type { PostingRow } from "../api";
+import { Link } from "react-router-dom";
+
+import type { DisplayPosting } from "../api";
 import { NATURAL_DIR, activityIso, type SortKey, type SortState } from "../postingsView";
 import { MatchCell } from "./Verdict";
 
 // Activity date shown as a short UTC-ish date (see postingsView.activityIso — D-024/D-030).
-function activityDate(p: PostingRow): string {
+function activityDate(p: DisplayPosting): string {
   return new Date(activityIso(p)).toLocaleDateString("en-CA"); // YYYY-MM-DD
 }
 
@@ -15,13 +17,28 @@ const COLUMNS: { key: SortKey; label: string; right?: boolean }[] = [
   { key: "score", label: "match", right: true },
 ];
 
+// The demo board's stand-in for the match cell (D-105). The column stays — the table's shape is
+// the dashboard's — and what would be a verdict is the offer to go and get one. A link, not a
+// button, because the label says "sign in" and that is exactly what clicking it does.
+function LockedMatchCell() {
+  return (
+    <span className="cell-match locked">
+      <Link to="/login" className="match-lock" onClick={(e) => e.stopPropagation()}>
+        <span aria-hidden="true">□</span> sign in
+      </Link>
+    </span>
+  );
+}
+
 function Row({
   p,
   selected,
+  locked,
   onSelect,
 }: {
-  p: PostingRow;
+  p: DisplayPosting;
   selected: boolean;
+  locked: boolean;
   onSelect: (id: number) => void;
 }) {
   const rejected = p.verdict === "no";
@@ -46,7 +63,7 @@ function Row({
       </span>
       <span className="cell-location">{p.location ?? "—"}</span>
       <span className="cell-date">{activityDate(p)}</span>
-      <MatchCell verdict={p.verdict} score={p.score} />
+      {locked ? <LockedMatchCell /> : <MatchCell verdict={p.verdict ?? null} score={p.score ?? null} />}
       {/* Persistent affordance that the row opens a detail panel (D-087). Decorative only — the
           row itself already carries role="button" + aria-expanded, so this is hidden from AT. */}
       <span className="cell-chevron" aria-hidden="true">
@@ -63,15 +80,21 @@ export function PostingsTable({
   sort,
   onSort,
   selectedId,
+  locked = false,
   onSelect,
 }: {
-  postings: PostingRow[];
+  postings: DisplayPosting[];
   sort: SortState;
   onSort: (next: SortState) => void;
   selectedId: number | null;
+  // The public demo board (D-105): identical table, with the match column locked behind sign-in.
+  locked?: boolean;
   onSelect: (id: number) => void;
 }) {
   function headClick(key: SortKey) {
+    // Sorting a column whose every cell is the same lock would silently do nothing; leaving the
+    // header inert is more honest than a control that appears to work.
+    if (locked && key === "score") return;
     onSort(sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: NATURAL_DIR[key] });
   }
   return (
@@ -97,7 +120,13 @@ export function PostingsTable({
         <span aria-hidden="true" />
       </div>
       {postings.map((p) => (
-        <Row key={p.posting_id} p={p} selected={p.posting_id === selectedId} onSelect={onSelect} />
+        <Row
+          key={p.posting_id}
+          p={p}
+          selected={p.posting_id === selectedId}
+          locked={locked}
+          onSelect={onSelect}
+        />
       ))}
     </div>
   );

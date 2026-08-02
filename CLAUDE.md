@@ -116,6 +116,10 @@ dashboard.
 - **Email digest = push** (primary). New postings + match rationale + closures,
   sent at the end of the nightly pipeline. Postings are time-sensitive; output
   must arrive whether or not the user remembers the tool exists.
+- **Demo board = public pull** (`/demo`, D-105). The dashboard rendered logged-out over the same
+  data, with everything résumé-derived replaced by a sign-in offer — never a fabricated rationale.
+  It exists because login + a résumé upload sat in front of every job we have (5,000 launch views →
+  10 uploads). Served by `/api/public/*`, which is structurally incapable of carrying match text.
 - **Dashboard = pull** (read-only). A single-page React table over the same
   nightly-computed data: title, company, apply link, match quality (verdict/score),
   default sort newest-first. Updates once daily with the pipeline — no live fetching,

@@ -36,6 +36,7 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
+    Response,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,9 +56,14 @@ from vja.api.auth import (
     session_max_age,
     session_secret,
 )
+from vja.api.public_cache import TTLCache
 from vja.comp import annual_usd_display
 from vja.db.engine import get_engine
-from vja.db.postings import open_postings_with_match_quality, posting_description
+from vja.db.postings import (
+    open_posting_counts_by_vertical,
+    open_postings_with_match_quality,
+    posting_description,
+)
 from vja.db.profiles import (
     BackfillStatus,
     NoActiveProfile,
@@ -164,6 +170,63 @@ class PostingRow(BaseModel):
         when present and falls back to `comp_raw` verbatim, so the decision stays server-side and
         testable (F2 Phase A, D-087)."""
         return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
+
+
+class PublicPostingRow(BaseModel):
+    """One row on the login-free demo board (D-105) — **the second structural anti-leak layer.**
+
+    This is `PostingRow` minus every match field, and the omission is the point: it does not
+    *declare* `verdict`/`score`/`fits`/`gaps`/`rationale`, so even a query that wrongly selected
+    them could not serialize them to an anonymous caller. Match text is résumé-derived commentary
+    about named beta users; D-067 turned `VJA_AUTH_REQUIRED` on and this PR does not weaken it.
+    The first layer is `db.postings.dashboard_statement`, which never joins `matches` without a
+    profile.
+
+    `comp_display` is kept, so the `vja.comp` corroboration guard (D-087/D-095) still decides
+    server-side whether a salary is safe to render. A stranger sees exactly the same salary
+    judgment a logged-in user does.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    posting_id: int
+    company: str
+    title: str | None
+    location: str | None
+    apply_url: str | None
+    first_seen_at: datetime
+    source_updated_at: datetime | None
+    comp_min: int | None
+    comp_max: int | None
+    comp_raw: str | None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def comp_display(self) -> str | None:
+        """The guarded annual-USD range — see `PostingRow.comp_display`."""
+        return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
+
+
+class PublicPostingsResponse(BaseModel):
+    """`GET /api/public/postings` — the whole in-scope open set for one vertical.
+
+    No `view` axis and no `profile_id`: without a résumé there is nothing to be matched against, so
+    the public board is always the objective universe (the *All in-scope* set, D-045). The demo
+    ships it whole — ~250 rows a vertical measured against Neon, well under the point where a cap
+    would earn its complexity.
+    """
+
+    vertical: str
+    window: Window
+    count: int
+    postings: list[PublicPostingRow]
+
+
+class PublicVerticalRow(BaseModel):
+    """One entry in the demo's vertical toggle: the key plus how many roles stand behind it."""
+
+    vertical: str
+    count: int
 
 
 class PostingDetailRow(BaseModel):
@@ -281,6 +344,23 @@ def _window_cutoff(window: Window, now: datetime) -> tuple[datetime | None, bool
     if window is Window.WEEK:
         return now - timedelta(days=7), False
     return now - timedelta(days=14), False  # TWO_WEEKS
+
+
+# The public board's cache header (D-105). `max-age` is the browser's copy, `s-maxage` the shared
+# edge's — Cloudflare holds it for 15 minutes, which is well inside the four-hour pipeline cadence
+# (D-103) and is what stops a link going round LinkedIn from reaching Neon once per reader.
+# NB the `s-maxage` half only does anything while the zone is proxied (orange-cloud), not DNS-only.
+_PUBLIC_CACHE_CONTROL = "public, max-age=300, s-maxage=900"
+
+
+def _require_configured_vertical(vertical: str) -> None:
+    """404 a vertical that has no config — the public endpoints' only input validation.
+
+    Without it, `vertical` is an unvalidated string on an unauthenticated endpoint: harmless to the
+    query (it would simply return nothing) but a free existence oracle and an unbounded cache key.
+    """
+    if vertical not in set(available_verticals()):
+        raise HTTPException(404, f"unknown vertical {vertical!r}")
 
 
 def _resolve_profile(
@@ -409,6 +489,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     app = FastAPI(title="VJA dashboard API", version="0.1.0", lifespan=lifespan)
     app.state.engine = resolved_engine
+    # Per-app rather than module-level, so each test's app starts cold and one test's rows can
+    # never be served to another (D-105).
+    _public_postings_cache: TTLCache[list[PublicPostingRow]] = TTLCache()
+    _public_verticals_cache: TTLCache[dict[str, int]] = TTLCache()
+    app.state.public_caches = (_public_postings_cache, _public_verticals_cache)
     # OAuth registry (None until GOOGLE_CLIENT_* are set); the login routes report 503 when absent.
     app.state.oauth = build_oauth()
 
@@ -586,6 +671,94 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         profiles in it, else B-4 (deactivating the aviation seed) would hide aviation from a new
         aviation user. The dashboard routes on `/api/me`, not on this list (the D-064 fix)."""
         return available_verticals()
+
+    # ---- the public demo board (D-105) -------------------------------------------------------
+    # Three unauthenticated endpoints, and the only ones in this file that never call
+    # `_resolve_profile` or touch `get_current_user`. They exist because login + a résumé upload
+    # sat in front of every job we have: 5,000 launch views produced 10 uploads, so ~99.9% of
+    # interest never saw the product's actual claim. Nothing here relaxes the authenticated path —
+    # `/api/postings` still 401s anonymously and is untouched.
+    @app.get("/api/public/verticals")
+    def public_verticals(
+        engine: Annotated[Engine, Depends(_get_engine)], response: Response
+    ) -> list[PublicVerticalRow]:
+        """Verticals with something to show, newest-universe-first, for the demo's toggle.
+
+        Not `/api/verticals`, which is the onboarding picker's config-driven list and must stay
+        joinable at zero rows (the B-4 fix). This is the mirror image: a vertical with no in-scope
+        open roles is omitted, because a toggle that opens onto an empty table reads as breakage.
+        """
+        response.headers["Cache-Control"] = _PUBLIC_CACHE_CONTROL
+        counts = _public_verticals_cache.get_or_compute(
+            "all", lambda: open_posting_counts_by_vertical(engine)
+        )
+        configured = set(available_verticals())
+        return [
+            PublicVerticalRow(vertical=vertical, count=count)
+            for vertical, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            # A vertical whose config was retired keeps its rows in the DB (D-009 never deletes),
+            # but it is not something we can send a visitor to sign up for.
+            if count > 0 and vertical in configured
+        ]
+
+    @app.get("/api/public/postings")
+    def public_postings(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        response: Response,
+        vertical: str,
+        window: Window = Window.ALL,
+    ) -> PublicPostingsResponse:
+        """The in-scope open set for one vertical, with no match data of any kind.
+
+        `profile_id=None` is what makes that structural rather than careful: the statement never
+        references `matches` (`db.postings.dashboard_statement`), and `PublicPostingRow` does not
+        declare the match fields. `_window_cutoff` and the `Window` enum are shared with the
+        authenticated dashboard, so the recency toggle means exactly the same thing on both.
+        """
+        _require_configured_vertical(vertical)
+        response.headers["Cache-Control"] = _PUBLIC_CACHE_CONTROL
+
+        def load() -> list[PublicPostingRow]:
+            cutoff, by_first_seen = _window_cutoff(window, datetime.now(UTC))
+            rows = open_postings_with_match_quality(
+                engine,
+                vertical,
+                None,
+                None,
+                cutoff=cutoff,
+                by_first_seen=by_first_seen,
+                cleaned=True,
+            )
+            return [PublicPostingRow.model_validate(r) for r in rows]
+
+        postings_out = _public_postings_cache.get_or_compute((vertical, window), load)
+        return PublicPostingsResponse(
+            vertical=vertical,
+            window=window,
+            count=len(postings_out),
+            postings=postings_out,
+        )
+
+    @app.get("/api/public/postings/{posting_id}")
+    def public_posting_detail(
+        engine: Annotated[Engine, Depends(_get_engine)],
+        response: Response,
+        posting_id: int,
+        vertical: str,
+    ) -> PostingDetailRow:
+        """One posting's body, for the demo panel — the same `posting_description` the dashboard
+        uses, which needs no profile and already 404s an id from another vertical.
+
+        Uncached: the key space is one entry per posting and each open is a single indexed lookup,
+        so an in-process cache would trade memory for nothing. The HTTP header still lets the edge
+        hold it.
+        """
+        _require_configured_vertical(vertical)
+        response.headers["Cache-Control"] = _PUBLIC_CACHE_CONTROL
+        detail = posting_description(engine, posting_id, vertical)
+        if detail is None:
+            raise HTTPException(404, f"no posting {posting_id} in {vertical!r}")
+        return PostingDetailRow.model_validate(detail)
 
     @app.get("/api/postings")
     def postings(

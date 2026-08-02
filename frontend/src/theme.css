@@ -17,6 +17,15 @@
   --accent-tint-text: #a5adf0;
   --success: #4cc38a;
 
+  /* The one red family. It began as the delete-account danger zone's private hardcodes; it is now
+     also what every error notice is drawn in, because an error rendered in the accent colour reads
+     as a footnote — the vertical-switch 429 was being missed entirely. Red means "this failed or
+     will destroy something", and nothing else may use it. */
+  --danger-border: #7a3b3b;
+  --danger-border-hover: #a05252;
+  --danger-text: #e08d85;
+  --danger-tint: #2a1517;
+
   --font-ui: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
@@ -189,6 +198,38 @@ summary:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+/* ---- the public demo board (D-105) ----
+   The page below this header is the dashboard verbatim, so the header is the only thing that has
+   to say what a stranger is looking at: real live data, and what signing in adds. */
+.demo-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.demo-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.demo-lede {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.demo-cta {
+  color: var(--accent-tint-text);
+  font-weight: 500;
+}
+.demo-cta:hover {
+  color: var(--accent-hover);
+}
+.demo-verticals {
+  align-self: flex-start;
 }
 
 /* ---- section labels ---- */
@@ -409,6 +450,26 @@ summary:focus-visible {
   color: var(--text-dim);
   text-align: right;
 }
+/* The demo board's locked match cell (D-105). Quiet on purpose: it repeats on every row, so it
+   has to sit at roughly the weight of the "—" it replaces rather than shouting 250 times. The
+   accent colour arrives on hover, which is where the offer actually is. */
+.cell-match.locked {
+  text-align: right;
+  font-size: 12px;
+}
+.match-lock {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-in-out);
+}
+.match-lock:hover {
+  color: var(--accent-tint-text);
+}
+.view-lock {
+  color: var(--text-dim);
+}
+
 .score {
   font-family: var(--font-mono);
   font-weight: 700;
@@ -637,8 +698,13 @@ summary:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+/* An error has to look like one. This used to be accent-lavender text on the default notice
+   ground, which is indistinguishable from ordinary muted copy — the "one vertical switch per 24
+   hours" 429 read as a footnote rather than as the reason nothing happened. */
 .notice.error {
-  color: var(--accent-tint-text);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+  background: var(--danger-tint);
 }
 
 /* the dashboard's matching-in-progress banner (D-082): compact, above the table, not an
@@ -1513,14 +1579,14 @@ summary:focus-visible {
   font-weight: 500;
 }
 
-/* danger zone (deletion) — the palette's one red family; used nowhere else */
+/* danger zone (deletion) — the red family's other home, alongside `.notice.error` */
 .btn-danger {
-  border-color: #7a3b3b;
-  color: #e08d85;
+  border-color: var(--danger-border);
+  color: var(--danger-text);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #2a1517;
-  border-color: #a05252;
+  background: var(--danger-tint);
+  border-color: var(--danger-border-hover);
 }
 .settings-danger {
   border-color: #3a2226;
@@ -1652,10 +1718,10 @@ summary:focus-visible {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
-/* Over the cap. Uses the accent-tint error colour `.notice.error` already uses rather than the
-   deletion red, which the palette reserves for the danger zone. Send is disabled here anyway. */
+/* Over the cap — now the same red every other failure state uses. A character counter that has
+   gone past its limit IS an error, and Send is already disabled by the time it turns. */
 .feedback-count.over {
-  color: var(--accent-tint-text);
+  color: var(--danger-text);
 }
 .feedback-actions {
   display: flex;

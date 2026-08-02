@@ -160,8 +160,13 @@ export function Landing() {
           <a className="btn btn-primary" href={loginUrl()}>
             Sign in with Google
           </a>
-          <a className="btn" href="#how-it-works">
-            How it works
+          {/* Was the `#how-it-works` anchor. The demo board (D-105) is a stronger second CTA: the
+              section it used to scroll to is still right there on the page, while this is the only
+              way to see the actual roles without signing up first. A plain `<a>`, like every other
+              link on this page — Landing stays router-free so it renders for a logged-out
+              visitor (and in a bare test) with no context around it. */}
+          <a className="btn" href="/demo">
+            Browse live roles
           </a>
         </div>
         <HeroMock />

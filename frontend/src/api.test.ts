@@ -5,9 +5,13 @@ import {
   deleteAccount,
   fetchMe,
   fetchPostingDescription,
+  fetchPublicPostingDescription,
+  fetchPublicPostings,
+  fetchPublicVerticals,
   loginUrl,
   postingDetailPath,
   postingsPath,
+  publicPostingsPath,
   setDigestPaused,
   UPLOAD_TIMEOUT_MS,
   uploadResume,
@@ -260,6 +264,74 @@ describe("fetchPostingDescription", () => {
     const err = await fetchPostingDescription(42, "energy_software").catch(
       (e: unknown) => e,
     );
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
+  });
+});
+
+// The public demo board (D-105). Two things matter here: the URL shape the toggle rests on, and
+// that these calls send NO credentials — a signed-in visitor's cookie has no business on a public
+// route, and an uncredentialed request is what the edge is allowed to cache.
+describe("public board client", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("builds the postings path with vertical + window, and no view axis", () => {
+    const params = new URLSearchParams(
+      publicPostingsPath("robotics_software", "week").split("?")[1],
+    );
+    expect(params.get("vertical")).toBe("robotics_software");
+    expect(params.get("window")).toBe("week");
+    // There is no résumé to match against, so a `view` param would be meaningless here.
+    expect(params.has("view")).toBe(false);
+    expect(params.has("profile_id")).toBe(false);
+  });
+
+  it("fetches postings without credentials", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        vertical: "grid_power_software",
+        window: "all",
+        count: 0,
+        postings: [],
+      }),
+    );
+    await fetchPublicPostings("grid_power_software", "all");
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/public/postings?vertical=grid_power_software&window=all");
+    expect(init).toMatchObject({ credentials: "omit" });
+  });
+
+  it("fetches the toggle's verticals with their counts, uncredentialed", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, [{ vertical: "grid_power_software", count: 251 }]),
+    );
+    await expect(fetchPublicVerticals()).resolves.toEqual([
+      { vertical: "grid_power_software", count: 251 },
+    ]);
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/public/verticals");
+    expect(init).toMatchObject({ credentials: "omit" });
+  });
+
+  it("fetches a posting body from the public endpoint, passing the abort signal through", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { posting_id: 42, description: "Body." }));
+    const controller = new AbortController();
+    await expect(
+      fetchPublicPostingDescription(42, "energy_software", controller.signal),
+    ).resolves.toEqual({ posting_id: 42, description: "Body." });
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/public/postings/42?vertical=energy_software");
+    expect(init).toMatchObject({ credentials: "omit", signal: controller.signal });
+  });
+
+  it("raises an ApiError on an unknown vertical", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(404, { detail: "unknown vertical" }));
+    const err = await fetchPublicPostings("nope", "all").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(404);
   });

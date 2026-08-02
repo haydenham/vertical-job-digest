@@ -228,10 +228,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `/login` (logged-out only; an existing session routes onward), `/onboarding` (pick vertical +
   upload), `/dashboard` (their vertical), `/upload` (résumé update, vertical locked), `/settings`
   (login-gated only — digest pause toggle + **vertical switch** + account deletion, D-094/D-104),
-  `/privacy` (public);
+  `/demo` (**public — the one route with no `useAuth` guard**, D-105), `/privacy` (public);
   `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
   is credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
-  server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
+  server-side (D-055) — **except the `/api/public/*` calls, which send `credentials: "omit"`**: a
+  signed-in visitor's cookie has no business on a public route, and an uncredentialed request is what
+  the edge may cache (D-105). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
   serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
   `/app/frontend/dist` in the container, where the non-editable install moves the package off the repo
   layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
@@ -270,6 +272,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `/onboarding`; the smart root routes all three cases. `/privacy` uses a plain `<a>` to stay Router-free
   for logged-out visitors. `/upload`'s link keeps `/dashboard` (that route is already profile-gated).
   (D-099, D-094, D-065)
+- **Red is the error family, and nothing else may use it.** `--danger-border`/`--danger-border-hover`/
+  `--danger-text`/`--danger-tint` in `theme.css`'s `:root` are the palette's one red, shared by
+  `.notice.error` (border + tint + text), `.btn-danger`, and the feedback dialog's over-cap counter.
+  **Red means "this failed, or this destroys something"** — before D-105 it was reserved for the
+  delete-account zone and errors were drawn in accent-lavender, which reads as ordinary muted copy;
+  the vertical-switch 429 was being missed entirely. (D-105, D-094, D-080)
 - **All UI motion comes from six tokens in `theme.css`'s `:root`** — `--ease-out-expo` (things that
   arrive) / `--ease-in-out` (states that flip back and forth), `--dur-fast` 150ms (hover/focus/press) /
   `--dur-mid` 300ms (a surface that moves and stops) / `--dur-slow` 700ms (reveals), plus
@@ -328,6 +336,24 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Dashboard & freshness
 
+- **`/demo` is the dashboard, rendered logged-out, and it can never carry match text.** Same subbar,
+  table, panel and live rows; matching is *replaced* in its three places (the match column keeps its
+  header and offers sign-in per row, the panel's match slot reads "Log in to view your matches",
+  *Matched for you* stays visible but routes to `/login`), never removed and **never fabricated**.
+  D-067's `VJA_AUTH_REQUIRED` is untouched — anonymous `/api/postings` still 401s. The anti-leak
+  guarantee is **structural at two independent layers**: `dashboard_statement(profile_id=None)`
+  builds SQL that never references `matches` (pinned by compiling it and asserting the table name is
+  absent), and the public endpoints serialize `PublicPostingRow`, which does not *declare*
+  `verdict`/`score`/`fits`/`gaps`/`rationale`. Endpoints: `GET /api/public/postings?vertical=&window=`
+  (no `view` axis — always the in-scope universe), `/api/public/postings/{id}?vertical=`, and
+  `/api/public/verticals` → `[{vertical, count}]`, which unlike `/api/verticals` **omits verticals
+  with zero open rows** (the picker must stay joinable at zero; a toggle must not open onto an empty
+  table). **Caching is the abuse guard** — there is no rate limiting anywhere in the app: a
+  per-process TTL cache on `(vertical, window)` plus `Cache-Control: public, max-age=300,
+  s-maxage=900`; the `s-maxage` half needs Cloudflare **proxied (orange-cloud)**, not DNS-only.
+  `vertical` is validated against the configured list on every public endpoint. Response ships whole
+  (~250 rows a vertical, measured); dead apply links going public is **named and not fixed** (D-008
+  verifies pre-digest only). (D-105, D-067, D-045, D-103, D-008)
 - **Dashboard universe = the persisted in-scope set, never raw open.** The query floors on
   `postings.in_scope IS TRUE` (the durable Stage-A+B marker, stamped at extraction from
   `passes_prefilter`), so out-of-scope *and* out-of-US/level roles never surface. "Full open set"

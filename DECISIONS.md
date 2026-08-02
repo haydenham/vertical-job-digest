@@ -2454,3 +2454,66 @@ while the ≤4 expensive first-visits are rationed.
 (the estimate counts committed rows) — a pre-existing signup race, not introduced here. Switch backfills
 inherit the Cloud Run "keep the tab open" coupling (D-101), which the dashboard banner already states.
 References D-064, D-065, D-085, D-101, D-057, D-094, D-055, D-039, D-021, D-083.
+
+### D-105 · Product/Funnel · A login-free demo board at `/demo`, with matching locked behind sign-in · accepted · 2026-08-02
+The funnel, not the pipeline, is the constraint. The LinkedIn launch measured **5,000 views → 150
+reactions → 15 signups → 10 résumé uploads**: Google login plus a résumé upload sat in front of
+everything, so ~99.9% of interest never saw a single job — while the product's entire claim is a
+curated, total-coverage universe per vertical that nobody could look at without committing first.
+`/demo` is that universe, readable by a stranger. D-104 (self-serve vertical switching) shipped
+first and deliberately: the demo wants a vertical toggle, and offering one that signup could not
+honour would have taught the opposite of what the product does.
+
+**The demo IS the dashboard.** Same subbar, same filter, same six-column table, same detail panel,
+same live rows — rendered logged-out. Matching is *replaced* in the three places it appears, never
+removed and never fabricated: the match column keeps its header and offers sign-in per row, the
+panel's match slot reads "Log in to view your matches", and *Matched for you* stays visible but
+routes to `/login` instead of switching. Removing them instead would have produced a smaller,
+different product that never shows a visitor what signing in buys. Every locked affordance is a
+link to `/login`, so the click does what the label says.
+
+**The auth rule is not weakened, and the defense is structural rather than careful.** Match text is
+résumé-derived commentary about named beta users, and D-067 turned `VJA_AUTH_REQUIRED` on so
+anonymous `/api/postings` 401s — that still holds, untouched, and is asserted in the same test
+module as the public endpoints. Two independent layers stop a leak: `db.postings.dashboard_statement`
+takes `profile_id: int | None` and with `None` builds a statement that **never references the
+`matches` table at all** (a test compiles it and asserts `matches` is absent from the SQL); and the
+public endpoints serialize their own `PublicPostingRow`, which does not *declare*
+`verdict`/`score`/`fits`/`gaps`/`rationale`. Either layer alone would do; together, a leak requires
+two independent mistakes. `_resolve_profile` was not modified. The panel and table also gate on
+`locked` rather than on the absence of data, so the guarantee lives in the components too.
+
+**Caching is the abuse guard.** There is no rate limiting anywhere in the app and `/api/public/*` is
+the first surface a stranger can call at will, so an in-process TTL cache keyed on `(vertical,
+window)` keeps repeat traffic off Neon and `Cache-Control: public, max-age=300, s-maxage=900` lets
+Cloudflare absorb the rest. Five minutes is invisible against a four-hour pipeline cadence (D-103).
+The cache is per-process and unshared: several Cloud Run instances mean several warm copies, which
+is the right trade rather than introducing Redis. **The `s-maxage` half only does anything while the
+zone is proxied (orange-cloud), not DNS-only** — unverified at merge. Vertical is validated against
+the configured list on every public endpoint, so it cannot be a free existence oracle or an
+unbounded cache key.
+
+**Shipped whole, not capped.** Measured against Neon before building: **~250 in-scope open rows per
+vertical**, well under the ~1,500 line where a cap would earn its complexity, so the response ships
+entire and there is no "showing the newest N of M" copy to maintain.
+
+`GET /api/public/verticals` is deliberately **not** `/api/verticals`: the latter is the onboarding
+picker's config-driven list and must stay joinable at zero rows (the B-4 fix), while the toggle needs
+the mirror image — a vertical with nothing open is omitted, because a toggle opening onto an empty
+table reads as breakage. `/demo` is the first route in the SPA with no `useAuth` guard, honours
+`?vertical=` so a single-vertical post can deep-link its own board, and leaves `?src=` alone —
+linking `/demo?src=li` and watching signups against the baseline is the cheapest honest substitute
+for the analytics we do not have. `frontend/public/robots.txt` (a new file *and* directory) allows
+`/` and `/demo`, disallows `/api/`.
+
+**Riding along, and a real palette change:** `.notice.error` was styled only as accent-lavender
+text, which is indistinguishable from ordinary muted copy — the "one vertical switch per 24 hours"
+429 read as a footnote rather than as the reason nothing happened. The danger zone's hardcoded reds
+became `--danger-*` tokens and **red is now the error family, not the deletion-only family**; the
+two comments asserting otherwise were corrected in place. Every error notice in the app inherits it.
+
+**Known and not fixed:** dead apply links now go public. D-008 verification runs pre-digest only, so
+the dashboard is unverified and `docs/18` records that a permanently-dead board stays `open`
+forever. A stranger's first impression is exactly where "one fake posting costs more trust than ten
+real ones earn" bites hardest; it is named here and left to its own session rather than bundled.
+References D-104, D-067, D-045, D-043, D-030, D-103, D-101, D-095, D-087, D-008, D-064, D-065, D-021.

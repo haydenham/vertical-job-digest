@@ -14,7 +14,10 @@ export type View = "matched" | "cleaned";
 // Match verdicts (matches `models.RELEVANT_VERDICTS` + the rejecting "no"). Order = strength.
 export type Verdict = "strong_yes" | "yes" | "maybe" | "no";
 
-export interface PostingRow {
+// Everything about a posting that is NOT about a résumé. Split out for the public demo board
+// (D-105): `PublicPostingRow` is exactly this and nothing more, mirroring `PublicPostingRow` in
+// `app.py`, which deliberately does not declare the match fields.
+export interface BasePostingRow {
   posting_id: number;
   company: string;
   title: string | null;
@@ -29,12 +32,23 @@ export interface PostingRow {
   comp_max: number | null;
   comp_raw: string | null;
   comp_display: string | null;
+}
+
+export interface PostingRow extends BasePostingRow {
   verdict: Verdict | null;
   score: number | null;
   fits: string[] | null;
   gaps: string[] | null;
   rationale: string | null;
 }
+
+// A row on the public demo board: the same posting, with no match data of any kind.
+export type PublicPostingRow = BasePostingRow;
+
+// What the shared table/panel components accept. Optional match fields rather than a union, so one
+// component renders both boards and `locked` decides what it shows instead of a type guard at
+// every reference.
+export type DisplayPosting = BasePostingRow & Partial<Omit<PostingRow, keyof BasePostingRow>>;
 
 export interface PostingsResponse {
   vertical: string;
@@ -126,6 +140,64 @@ export function fetchPostings(q: PostingsQuery): Promise<PostingsResponse> {
 
 export function fetchVerticals(): Promise<string[]> {
   return getJson<string[]>("/api/verticals");
+}
+
+// ---- the public demo board (D-105) ----
+//
+// The login-free half of the app: same live data, no match text, no session. These are the only
+// calls that send no credentials — a signed-in visitor's cookie has no business on a public route,
+// and omitting it also keeps the responses cacheable by the edge.
+
+export interface PublicPostingsResponse {
+  vertical: string;
+  window: Window;
+  count: number;
+  postings: PublicPostingRow[];
+}
+
+// One entry in the demo's vertical toggle. `count` is why this exists rather than reusing
+// `/api/verticals`: a vertical with nothing open would open onto an empty table.
+export interface PublicVertical {
+  vertical: string;
+  count: number;
+}
+
+async function getPublicJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const resp = await fetch(`${API_BASE}${path}`, { credentials: "omit", signal });
+  if (!resp.ok) {
+    throw new ApiError(resp.status, `${resp.status} ${resp.statusText} for ${path}`);
+  }
+  return (await resp.json()) as T;
+}
+
+// No `view` param: without a résumé there is nothing to be matched against, so the public board is
+// always the whole in-scope universe. Recency is the one axis that still means something.
+export function publicPostingsPath(vertical: string, window: Window): string {
+  const params = new URLSearchParams({ vertical, window });
+  return `/api/public/postings?${params.toString()}`;
+}
+
+export function fetchPublicPostings(
+  vertical: string,
+  window: Window,
+  signal?: AbortSignal,
+): Promise<PublicPostingsResponse> {
+  return getPublicJson<PublicPostingsResponse>(publicPostingsPath(vertical, window), signal);
+}
+
+export function fetchPublicVerticals(): Promise<PublicVertical[]> {
+  return getPublicJson<PublicVertical[]>("/api/public/verticals");
+}
+
+export function fetchPublicPostingDescription(
+  postingId: number,
+  vertical: string,
+  signal?: AbortSignal,
+): Promise<PostingDetail> {
+  return getPublicJson<PostingDetail>(
+    `/api/public/postings/${postingId}?vertical=${encodeURIComponent(vertical)}`,
+    signal,
+  );
 }
 
 // ---- posting body (D-095) ----

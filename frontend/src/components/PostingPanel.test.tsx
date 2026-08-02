@@ -1,18 +1,27 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchPostingDescription, type PostingDetail, type PostingRow } from "../api";
+import {
+  fetchPostingDescription,
+  fetchPublicPostingDescription,
+  type PostingDetail,
+  type PostingRow,
+} from "../api";
 import { PostingPanel } from "./PostingPanel";
 
 // The body is a per-open fetch (D-095), so every panel render hits this. Default: no stored body,
-// which is also the state most rows are in until the corpus fills.
+// which is also the state most rows are in until the corpus fills. The public twin (D-105) is
+// stubbed alongside it so the locked tests can assert which of the two was called.
 vi.mock("../api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api")>()),
   fetchPostingDescription: vi.fn(),
+  fetchPublicPostingDescription: vi.fn(),
 }));
 
 const mockFetch = vi.mocked(fetchPostingDescription);
+const mockPublicFetch = vi.mocked(fetchPublicPostingDescription);
 
 function detail(description: string | null): PostingDetail {
   return { posting_id: 1, description };
@@ -49,6 +58,8 @@ beforeEach(() => {
   // Default: a request that never settles. The panel's other content renders regardless, and no
   // late state update lands after a test that isn't about the body has finished.
   mockFetch.mockReturnValue(new Promise<PostingDetail>(() => undefined));
+  mockPublicFetch.mockReset();
+  mockPublicFetch.mockReturnValue(new Promise<PostingDetail>(() => undefined));
 });
 
 describe("PostingPanel", () => {
@@ -183,5 +194,59 @@ describe("PostingPanel", () => {
     expect(await screen.findByText("Second body")).toBeInTheDocument();
     expect(firstSignal?.aborted).toBe(true); // the stale body can't land in the new panel
     expect(mockFetch).toHaveBeenLastCalledWith(2, "energy_software", expect.any(AbortSignal));
+  });
+
+  // --- the public demo board (D-105) -----------------------------------------------------------
+
+  describe("locked", () => {
+    function renderLocked(p: PostingRow = row()) {
+      return render(
+        <MemoryRouter>
+          <PostingPanel p={p} vertical="energy_software" locked onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+    }
+
+    it("offers sign-in in the match slot rather than a verdict", () => {
+      renderLocked();
+      const cta = screen.getByRole("link", { name: /log in to view your matches/i });
+      expect(cta).toHaveAttribute("href", "/login");
+      expect(screen.queryByText("72")).not.toBeInTheDocument();
+    });
+
+    it("shows no rationale, fits or gaps even when the row carries them", () => {
+      // The row here is a full private one on purpose: the guarantee has to hold in this
+      // component, not merely because the public API omits the fields.
+      renderLocked();
+      expect(screen.queryByText("Strong on dispatch optimization.")).not.toBeInTheDocument();
+      expect(screen.queryByText("power markets")).not.toBeInTheDocument();
+      expect(screen.queryByText("no SCADA")).not.toBeInTheDocument();
+    });
+
+    it("still shows the real posting: salary, location, body and apply link", async () => {
+      mockPublicFetch.mockResolvedValue(detail("The full role description."));
+      renderLocked(row({ comp_display: "$150,000 – $180,000" }));
+
+      expect(await screen.findByText("The full role description.")).toBeInTheDocument();
+      expect(screen.getByText("$150,000 – $180,000")).toBeInTheDocument();
+      expect(screen.getByText("Remote")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /apply/i })).toHaveAttribute(
+        "href",
+        "https://example.com/apply",
+      );
+    });
+
+    it("loads the body from the public endpoint, never the authenticated one", async () => {
+      mockPublicFetch.mockResolvedValue(detail("Public body"));
+      renderLocked();
+
+      expect(await screen.findByText("Public body")).toBeInTheDocument();
+      expect(mockPublicFetch).toHaveBeenCalledWith(
+        1,
+        "energy_software",
+        expect.any(AbortSignal),
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 });

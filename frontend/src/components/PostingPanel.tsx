@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
-import { fetchPostingDescription, type PostingRow } from "../api";
+import {
+  fetchPostingDescription,
+  fetchPublicPostingDescription,
+  type DisplayPosting,
+} from "../api";
 import { activityIso } from "../postingsView";
 import { MatchCell } from "./Verdict";
 
@@ -15,10 +20,14 @@ type Description = string | null | undefined;
 export function PostingPanel({
   p,
   vertical,
+  locked = false,
   onClose,
 }: {
-  p: PostingRow;
+  p: DisplayPosting;
   vertical: string;
+  // The public demo board (D-105): the match slot offers sign-in instead of a rationale, and the
+  // body comes from the public endpoint. Everything else in the panel is the real posting.
+  locked?: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -30,14 +39,15 @@ export function PostingPanel({
   useEffect(() => {
     const controller = new AbortController();
     setDescription(undefined);
-    fetchPostingDescription(p.posting_id, vertical, controller.signal)
+    const fetchBody = locked ? fetchPublicPostingDescription : fetchPostingDescription;
+    fetchBody(p.posting_id, vertical, controller.signal)
       .then((detail) => setDescription(detail.description))
       // A missing body is not worth an error state — the panel's other content stands alone.
       .catch(() => {
         if (!controller.signal.aborted) setDescription(null);
       });
     return () => controller.abort();
-  }, [p.posting_id, vertical]);
+  }, [p.posting_id, vertical, locked]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -70,7 +80,14 @@ export function PostingPanel({
         <div>
           <dt>match</dt>
           <dd>
-            <MatchCell verdict={p.verdict} score={p.score} />
+            {locked ? (
+              // Never a fabricated rationale — the offer to earn a real one (D-105).
+              <Link to="/login" className="match-lock">
+                Log in to view your matches
+              </Link>
+            ) : (
+              <MatchCell verdict={p.verdict ?? null} score={p.score ?? null} />
+            )}
           </dd>
         </div>
         <div>
@@ -97,9 +114,12 @@ export function PostingPanel({
         )}
       </div>
 
-      {p.rationale && <p className="rationale">{p.rationale}</p>}
+      {/* Explicitly gated on `locked` as well as on the data: a public row carries no rationale,
+          but relying on that alone would make the anti-leak guarantee a property of the API
+          response rather than of this component. */}
+      {!locked && p.rationale && <p className="rationale">{p.rationale}</p>}
 
-      {(p.fits?.length || p.gaps?.length) && (
+      {!locked && (p.fits?.length || p.gaps?.length) && (
         <div className="fits-gaps">
           <div className="fits">
             <span className="label">fits</span>

@@ -1,0 +1,9 @@
+# Rolefeed (D-105). The demo board is meant to be found; the API is not.
+#
+# `/dashboard`, `/settings` and friends are all behind a login and return the SPA shell to a
+# crawler anyway, so there is nothing to hide there and nothing worth indexing either.
+
+User-agent: *
+Allow: /
+Allow: /demo
+Disallow: /api/
