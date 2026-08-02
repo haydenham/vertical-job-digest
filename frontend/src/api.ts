@@ -182,19 +182,40 @@ export async function logout(): Promise<void> {
 
 // ---- settings (D-094 PR 3) ----
 
-// Pause/resume the digest email. Matching and the dashboard keep running server-side; only the
-// email stops. Mirrors `MeSettings` in `app.py`.
-export async function setDigestPaused(paused: boolean): Promise<{ digest_paused: boolean }> {
+// `PATCH /api/me` response (mirrors `MeSettings` in `app.py`): the full settings state, including
+// the fields this request did not touch, so the caller never has to guess what it now holds.
+// `vertical` is null for a signed-in user with no profile.
+export interface MeSettings {
+  digest_paused: boolean;
+  vertical: string | null;
+}
+
+// `PATCH /api/me` is a partial update: send only the fields that change. An empty body is a 422.
+async function patchMe(body: Record<string, unknown>): Promise<MeSettings> {
   const resp = await fetch(`${API_BASE}/api/me`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ digest_paused: paused }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     throw new ApiError(resp.status, await errorDetail(resp));
   }
-  return (await resp.json()) as { digest_paused: boolean };
+  return (await resp.json()) as MeSettings;
+}
+
+// Pause/resume the digest email. Matching and the dashboard keep running server-side; only the
+// email stops.
+export function setDigestPaused(paused: boolean): Promise<MeSettings> {
+  return patchMe({ digest_paused: paused });
+}
+
+// Self-serve vertical switch: re-files the user's *existing* résumé under `vertical` (no
+// re-upload — the server already holds the résumé text) and starts a backfill. Typed failures:
+// 409 nothing to switch yet, 429 the rolling window is still closed (`Retry-After` in seconds),
+// 404 unknown vertical.
+export function switchVertical(vertical: string): Promise<MeSettings> {
+  return patchMe({ vertical });
 }
 
 // Hard account deletion (D-094): removes the user, their profile, matches, and digest history

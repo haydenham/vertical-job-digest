@@ -2402,3 +2402,55 @@ recreating it, repointing its Scheduler trigger, and rewriting its alert policie
 The alert policies are now a **per-job pair** with per-job absence windows (pipeline 5h, digest 26h);
 D-101's PromQL-not-`conditionAbsent` finding is unchanged and still load-bearing for the daily half.
 References D-005, D-085, D-087, D-092, D-086, D-101, D-057, D-039, D-060, D-031, D-021, D-083.
+
+### D-104 · Product/Identity · Vertical is self-serve switchable (supersedes D-064's immutability) · accepted · 2026-07-31
+D-064 fixed a user's vertical **once at signup and made it immutable** — "changing verticals is a
+manual/support action, out of scope for v1" — and that sentence shipped to users inside the `POST
+/api/profiles` 409 string. Two things made it untenable at the same moment. It is a **standing promise to do
+manual work**: every user who picks wrong, and the likeliest moment to pick wrong is onboarding itself, has
+to reach a human. And it **blocks the login-free demo board**: a demo that lets a visitor browse all four
+verticals and then hands them an irreversible one-time choice at signup teaches the opposite of what the
+product does, so the demo either lies or ships without the toggle that makes it useful to someone arriving
+from a single-vertical post.
+
+**What is superseded is only the immutability half. One active vertical per user at a time still stands**,
+and so does everything built on it: `/api/me` resolving a single profile, the SPA routing on it, the
+`POST /api/profiles` 409 on a cross-vertical *upload* (that path is the résumé form; silently moving
+someone's vertical from a file upload is worse than an error), and the digest sending one vertical's roles.
+Multi-vertical users remain out of scope.
+
+**Almost none of this needed building, which is why it was worth doing now.** `profiles` was already keyed
+`(user_email, vertical, resume_version)` with an `active` flag, and `_upsert_profile` only deactivates rows
+*within the vertical it writes* — so multiple verticals per user was already representable and one line
+forbade it. `last_sent_at` keys on `(vertical, recipient)`, so a switcher has no send history in the new
+vertical and their first digest there is a correct full baseline, exactly like a fresh signup: **zero digest
+work**. And the résumé never moves, because `resume_text` already lives on the profile row. The switch is
+`PATCH /api/me {vertical}`, which turns D-094's settings endpoint into a real partial update (an empty body
+is now 422 rather than a silent no-op).
+
+**One correctness trap, caught in build and pinned by a test:** `_upsert_profile` deactivates only the
+target vertical's other versions, so a switch must *explicitly* deactivate the old vertical or the user is
+left active in two at once — which breaks `/api/me` routing and, far worse, makes the nightly match and bill
+them in both.
+
+**The cost model is what makes this safe, and it is structural rather than a guard.** Matching is idempotent
+per `(posting, profile, resume_version)` (`postings_needing_match`), and a return visit reactivates the
+*same* profile row, so the old vertical's matches survive on it. Cost is therefore **once per (user,
+vertical, résumé version)**, not once per switch: worst case 4 verticals × `VJA_BACKFILL_MAX_POSTINGS` (100)
+≈ 400 matches ≈ $4 per résumé version, then exhausted, and a changed résumé is itself capped at one per 24h
+(D-085). Oscillating between two verticals is free after the first visit to each.
+
+**So the per-user clock is not there to protect the money — it protects other people's signups.** The
+global daily ceiling (`check_backfill_budget`, $25 in prod) is what a switch spends, and that ceiling 429s
+`POST /api/profiles` when exhausted; that is D-101's exact failure mode, arrived at from the other side.
+Hence a **new `users.last_vertical_switch_at`** column (one additive migration) rather than reusing
+`last_resume_reupload_at` — conflating them would make an upload block a switch and trap the very
+onboarding-mistake case this is for. And the clock is **charged only when the switch creates work**: if a
+profile row already exists for `(user, target vertical, current résumé version)` the switch is a near-free
+revisit and consumes nothing, so unlimited switching among verticals already seen is deliberately allowed
+while the ≤4 expensive first-visits are rationed.
+
+**Known and accepted:** N concurrent switches can each clear the budget check before any matches persist
+(the estimate counts committed rows) — a pre-existing signup race, not introduced here. Switch backfills
+inherit the Cloud Run "keep the tab open" coupling (D-101), which the dashboard banner already states.
+References D-064, D-065, D-085, D-101, D-057, D-094, D-055, D-039, D-021, D-083.

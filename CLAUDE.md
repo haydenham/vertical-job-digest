@@ -26,7 +26,8 @@ Added later, config-only (each one a fresh proof of D-004):
    exchanges/market infrastructure (CME, ICE, Nasdaq, Cboe, IEX, MEMX), trading technology, crypto
    (Coinbase, Kraken, Galaxy) and prediction markets (Kalshi, Polymarket). 44 employers, 36 fetchable.
    **Eight are deliberate cross-vertical duplicates** of grid/power rows curated for their energy desks —
-   a user gets one vertical (D-064), so each universe carries its own row; the physical energy merchants
+   a user gets one vertical at a time (D-064, self-serve switchable since D-104), so each universe carries
+   its own row; the physical energy merchants
    stay grid-only.
 
 Builder (Hayden) is the first user — actively recruiting into these verticals.
@@ -336,6 +337,8 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - `docs/15-beta-hardening-plan.md` — the active beta-hardening workstreams (UI · discovery run · bugs/onboarding · scaling incl. LLM spend · fetchers/company data), beta exit line, DoD per block, and what's parked. Scope of record: D-072/D-085. Read after `WORKLOG.md` top to continue.
 - `docs/16-ui-rework-plan.md` — the Day-1 UI rework plan of record (D-080): Linear reference, design-language v2 direction, the 4 PRs (foundation → landing → auth → dashboard) with per-PR scope + DoD. All 4 merged (#74–77).
 - `docs/17-onboarding-plan.md` — the onboarding-overhaul plan of record (D-082): the 3 PRs (upload-flow bug fixes → backfill-status signal + migration → welcome-slides tutorial + toggle clarity) with per-PR scope + DoD. Read to continue the overhaul after a chat reset.
+- `docs/20-demo-and-vertical-switching.md` — the funnel block (D-104): self-serve vertical switching, then
+  the login-free `/demo` board. Read with the WORKLOG top entry to continue.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing and the rejected-features record. **F2 Phase A ✅ (D-095) and F1a ✅ (D-103) are built; the churn diagnosis is answered in-place at the top** (artifacts, Workday-concentrated — P4.3 was the wrong tool, and "Workday page-membership drift" replaced it as F4's prerequisite).
 - `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090/D-093): extraction retained Haiku; the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live evals remain manual evidence, provider billing is authoritative, and no generic benchmark/paid CI gate/`no`-output follow-on exists.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.

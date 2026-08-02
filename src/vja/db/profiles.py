@@ -33,6 +33,12 @@ BACKFILL_STALE_AFTER = timedelta(minutes=30)
 # rolling window. Kept as a timedelta so the comparison and Retry-After derive from one value.
 RESUME_REUPLOAD_COOLDOWN = timedelta(hours=24)
 
+# The self-serve vertical-switch clock. Deliberately *not* the same clock as the résumé one: a
+# switch and a reupload are different actions, and blocking one on the other would trap a new user
+# who picked the wrong vertical minutes after uploading. Only a switch that creates real matching
+# work consumes it (see `switch_vertical`).
+VERTICAL_SWITCH_COOLDOWN = timedelta(hours=24)
+
 BackfillStatus = Literal["running", "done"]
 
 _PROFILE_COLS = (
@@ -57,7 +63,12 @@ class Profile:
 
 @dataclass(frozen=True)
 class ProfileUpload:
-    """The committed upload result and whether it needs a new background backfill."""
+    """A committed profile change and whether it needs a new background backfill.
+
+    Shared by both write paths — `upload_profile` (a résumé) and `switch_vertical` (the same
+    résumé, a different vertical) — because the caller's job is identical either way: schedule
+    `run_backfill` iff `backfill_required`.
+    """
 
     profile: Profile
     backfill_required: bool
@@ -77,6 +88,18 @@ class ResumeReuploadLimited(RuntimeError):
     def __init__(self, retry_after: int) -> None:
         self.retry_after = retry_after
         super().__init__(retry_after)
+
+
+class VerticalSwitchLimited(RuntimeError):
+    """A work-producing vertical switch arrived before the user's rolling window reopened."""
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+        super().__init__(retry_after)
+
+
+class NoActiveProfile(RuntimeError):
+    """There is no active profile to switch — the caller is signed in but never onboarded."""
 
 
 def _row_to_profile(row: dict[str, object]) -> Profile:
@@ -248,6 +271,116 @@ def upload_profile(
             vertical=vertical,
             version=version,
             resume_text=resume_text,
+            domain_vocabulary=domain_vocabulary,
+            user_id=user_id,
+            stamp=stamp,
+        )
+        conn.execute(
+            profiles.update().where(profiles.c.id == profile_id).values(backfill_started_at=stamp)
+        )
+        row = (
+            conn.execute(select(*_PROFILE_COLS).where(profiles.c.id == profile_id)).mappings().one()
+        )
+        return ProfileUpload(profile=_row_to_profile(dict(row)), backfill_required=True)
+
+
+def switch_vertical(
+    engine: Engine,
+    *,
+    user_id: int,
+    user_email: str,
+    target_vertical: str,
+    domain_vocabulary: Sequence[str],
+    before_backfill: Callable[[], None],
+    now: datetime | None = None,
+    cooldown: timedelta = VERTICAL_SWITCH_COOLDOWN,
+) -> ProfileUpload:
+    """Move this user's active profile to `target_vertical`, keeping their résumé.
+
+    The self-serve replacement for what used to be a support action. The résumé is never
+    re-uploaded — `resume_text` already lives on the profile row, so a switch is "re-file the same
+    résumé under a different vertical, with that vertical's domain vocabulary" plus a backfill.
+
+    **The cost model, and why the cooldown is conditional.** Matching is idempotent per
+    `(posting, profile, resume_version)` (`db.matches.postings_needing_match`), and
+    `_upsert_profile` reactivates the *same* profile row for a `(user, vertical, resume_version)`
+    seen before — so the old vertical's matches survive on the deactivated row and returning to it
+    re-runs nothing but the remainder. A first visit pays a real backfill and therefore consumes
+    the rolling clock; a revisit is near-free and does not. The clock exists to stop one user
+    exhausting the *global* daily ceiling (`match.check_backfill_budget`), which would 429 other
+    people's signups — it is not there to protect the few dollars.
+
+    Raises `NoActiveProfile` (nothing to switch — that user belongs in onboarding) and
+    `VerticalSwitchLimited` (rolling window still closed). `before_backfill` applies the global
+    budget guard after the transaction has established that real work is needed but before any
+    write, mirroring `upload_profile`; raising rolls back cleanly.
+    """
+    stamp = now or datetime.now(UTC)
+
+    with begin(engine) as conn:
+        user_row = conn.execute(
+            select(users.c.last_vertical_switch_at).where(users.c.id == user_id).with_for_update()
+        ).one()
+        active_row = (
+            conn.execute(
+                select(*_PROFILE_COLS)
+                .where(profiles.c.user_email == user_email, profiles.c.active == 1)
+                .order_by(profiles.c.vertical)
+                .with_for_update()
+            )
+            .mappings()
+            .first()
+        )
+        if active_row is None:
+            raise NoActiveProfile(user_email)
+
+        active = _row_to_profile(dict(active_row))
+        if active.vertical == target_vertical:
+            return ProfileUpload(profile=active, backfill_required=False)
+
+        # Has this résumé version already been filed under the target vertical? If so the matches
+        # from that visit are still on the row and this switch creates almost no work.
+        revisit = (
+            conn.execute(
+                select(profiles.c.id).where(
+                    profiles.c.user_email == user_email,
+                    profiles.c.vertical == target_vertical,
+                    profiles.c.resume_version == active.resume_version,
+                )
+            ).scalar_one_or_none()
+            is not None
+        )
+
+        if not revisit:
+            last_switch = cast("datetime | None", user_row.last_vertical_switch_at)
+            if last_switch is not None:
+                retry_at = last_switch + cooldown
+                if stamp < retry_at:
+                    raise VerticalSwitchLimited(ceil((retry_at - stamp).total_seconds()))
+
+        before_backfill()
+
+        if not revisit:
+            conn.execute(
+                users.update().where(users.c.id == user_id).values(last_vertical_switch_at=stamp)
+            )
+
+        # Deactivate every *other* vertical this user holds. `_upsert_profile` only clears versions
+        # within the vertical it is writing, so without this the user would be left active in two
+        # verticals at once — breaking the surviving half of D-064 and, worse, making the nightly
+        # match them (and bill them) in both.
+        conn.execute(
+            profiles.update()
+            .where(profiles.c.user_email == user_email, profiles.c.vertical != target_vertical)
+            .values(active=0)
+        )
+
+        profile_id = _upsert_profile(
+            conn,
+            user_email=user_email,
+            vertical=target_vertical,
+            version=active.resume_version,
+            resume_text=active.resume_text,
             domain_vocabulary=domain_vocabulary,
             user_id=user_id,
             stamp=stamp,

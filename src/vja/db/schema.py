@@ -227,6 +227,13 @@ users = Table(
     # D-094: pauses the digest *email* only (matching + dashboard continue). Lives on `users`,
     # not the versioned `profiles`, so a résumé reupload can't reset it.
     Column("digest_paused", Boolean, nullable=False, server_default=false()),
+    # The self-serve vertical-switch clock. Its own column rather than a reuse of
+    # `last_resume_reupload_at`: conflating the two would make a résumé upload block a vertical
+    # switch (and vice versa), and the likeliest switch of all is a brand-new user fixing a wrong
+    # pick moments after onboarding. Only a switch that actually creates matching work advances it
+    # — returning to a vertical already matched against this résumé version is near-free and does
+    # not consume the clock.
+    Column("last_vertical_switch_at", UTCDateTime()),
 )
 
 

@@ -3,20 +3,34 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, deleteAccount, setDigestPaused } from "../api";
+import { ApiError, deleteAccount, fetchVerticals, setDigestPaused, switchVertical } from "../api";
 import { useAuth, type AuthState } from "../auth/useAuth";
 import { Settings } from "./Settings";
 
 // Keep the real ApiError (error mapping branches on `instanceof`); mock only the network calls.
 vi.mock("../api", async (importActual) => {
   const actual = await importActual<typeof import("../api")>();
-  return { ...actual, setDigestPaused: vi.fn(), deleteAccount: vi.fn() };
+  return {
+    ...actual,
+    setDigestPaused: vi.fn(),
+    deleteAccount: vi.fn(),
+    fetchVerticals: vi.fn(),
+    switchVertical: vi.fn(),
+  };
 });
 vi.mock("../auth/useAuth", () => ({ useAuth: vi.fn() }));
 
 const mockSetPaused = vi.mocked(setDigestPaused);
 const mockDelete = vi.mocked(deleteAccount);
+const mockVerticals = vi.mocked(fetchVerticals);
+const mockSwitch = vi.mocked(switchVertical);
 const mockUseAuth = vi.mocked(useAuth);
+
+const PROFILE = {
+  vertical: "grid_power_software",
+  resume_version: "v1",
+  backfill_status: "done" as const,
+};
 
 function auth(over: Partial<AuthState> = {}): AuthState {
   return {
@@ -30,6 +44,16 @@ function auth(over: Partial<AuthState> = {}): AuthState {
   };
 }
 
+/** Auth state for an onboarded user, with the vertical list already resolving. */
+function onboarded(over: Partial<AuthState> = {}): AuthState {
+  mockVerticals.mockResolvedValue([
+    "aviation_software",
+    "grid_power_software",
+    "robotics_software",
+  ]);
+  return auth({ profile: PROFILE, ...over });
+}
+
 function renderSettings() {
   return render(
     <MemoryRouter initialEntries={["/settings"]}>
@@ -37,6 +61,7 @@ function renderSettings() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/login" element={<div>login-page</div>} />
         <Route path="/" element={<div>root-page</div>} />
+        <Route path="/dashboard" element={<div>dashboard-page</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -79,7 +104,7 @@ describe("Settings", () => {
   it("flipping the switch pauses the digest and re-syncs /api/me", async () => {
     const state = auth();
     mockUseAuth.mockReturnValue(state);
-    mockSetPaused.mockResolvedValue({ digest_paused: true });
+    mockSetPaused.mockResolvedValue({ digest_paused: true, vertical: null });
     renderSettings();
 
     await userEvent.click(screen.getByRole("switch"));
@@ -92,7 +117,7 @@ describe("Settings", () => {
     mockUseAuth.mockReturnValue(
       auth({ user: { email: "a@b.co", name: "A", digest_paused: true } }),
     );
-    mockSetPaused.mockResolvedValue({ digest_paused: false });
+    mockSetPaused.mockResolvedValue({ digest_paused: false, vertical: null });
     renderSettings();
 
     await userEvent.click(screen.getByRole("switch"));
@@ -206,5 +231,94 @@ describe("Settings", () => {
     mockUseAuth.mockReturnValue(auth({ profile: null }));
     renderSettings();
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/");
+  });
+
+  // --- vertical switching ---
+
+  it("hides the vertical section for a user with no profile", () => {
+    mockUseAuth.mockReturnValue(auth({ profile: null }));
+    renderSettings();
+    expect(screen.queryByRole("group", { name: /vertical/i })).not.toBeInTheDocument();
+  });
+
+  it("marks the user's current vertical as selected", async () => {
+    mockUseAuth.mockReturnValue(onboarded());
+    renderSettings();
+
+    const grid = await screen.findByRole("button", { name: /energy & grid/i });
+    expect(grid).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /robotics/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("choosing another vertical confirms first and never switches on the click alone", async () => {
+    mockUseAuth.mockReturnValue(onboarded());
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole("button", { name: /robotics/i }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(mockSwitch).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockSwitch).not.toHaveBeenCalled();
+  });
+
+  it("clicking the current vertical does nothing", async () => {
+    mockUseAuth.mockReturnValue(onboarded());
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole("button", { name: /energy & grid/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockSwitch).not.toHaveBeenCalled();
+  });
+
+  it("confirming switches, re-reads /api/me, and lands on the dashboard", async () => {
+    const state = onboarded();
+    mockUseAuth.mockReturnValue(state);
+    mockSwitch.mockResolvedValue({ digest_paused: false, vertical: "robotics_software" });
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole("button", { name: /robotics/i }));
+    await userEvent.click(screen.getByRole("button", { name: /switch vertical/i }));
+
+    expect(mockSwitch).toHaveBeenCalledWith("robotics_software");
+    await waitFor(() => expect(state.refresh).toHaveBeenCalledWith({ silent: true }));
+    expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+  });
+
+  it("a rate-limited switch shows the server's reason and stays put", async () => {
+    const state = onboarded();
+    mockUseAuth.mockReturnValue(state);
+    mockSwitch.mockRejectedValue(
+      new ApiError(429, "vertical switches are limited to one per user every 24 hours"),
+    );
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole("button", { name: /robotics/i }));
+    await userEvent.click(screen.getByRole("button", { name: /switch vertical/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/one per user every 24 hours/i);
+    // Still on settings, dialog still open so the button is a real retry.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByText("dashboard-page")).not.toBeInTheDocument();
+    expect(state.refresh).not.toHaveBeenCalled();
+  });
+
+  it("the confirm copy promises the old vertical is kept, because the server keeps it", async () => {
+    mockUseAuth.mockReturnValue(onboarded());
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole("button", { name: /robotics/i }));
+
+    const dialog = screen.getByRole("dialog");
+    // The switch-back-is-quick claim rests on matches surviving on the deactivated profile row
+    // (pinned server-side in test_profiles.py). If that ever stops being true, this copy lies.
+    expect(dialog).toHaveTextContent(/nothing in energy & grid is deleted/i);
+    expect(dialog).toHaveTextContent(/5 to 20 minutes/i);
   });
 });
