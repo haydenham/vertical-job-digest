@@ -60,13 +60,16 @@ from vja.db.engine import get_engine
 from vja.db.postings import open_postings_with_match_quality, posting_description
 from vja.db.profiles import (
     BackfillStatus,
+    NoActiveProfile,
     Profile,
     ProfileVerticalConflict,
     ResumeReuploadLimited,
+    VerticalSwitchLimited,
     active_profile_for_user,
     active_profiles,
     backfill_stamps,
     derive_backfill_status,
+    switch_vertical,
     upload_profile,
 )
 from vja.db.schema_guard import ensure_configured_schema_ready
@@ -194,16 +197,24 @@ class MeUser(BaseModel):
 
 
 class MeSettingsUpdate(BaseModel):
-    """`PATCH /api/me` body — the settings surface (D-094). One field today; partial-update
-    semantics if it grows."""
+    """`PATCH /api/me` body — the settings surface (D-094), now a true partial update: send only
+    the fields that change, and an empty body is a 422 rather than a silent no-op.
 
-    digest_paused: bool
+    `digest_paused` is D-094's email flag. `vertical` is the self-serve vertical switch: it re-files
+    the user's *existing* résumé under a different vertical and schedules a backfill (no re-upload
+    — `resume_text` already lives on the profile row)."""
+
+    digest_paused: bool | None = None
+    vertical: str | None = None
 
 
 class MeSettings(BaseModel):
-    """`PATCH /api/me` response: the applied settings state."""
+    """`PATCH /api/me` response: the applied settings state, including the fields this request
+    did not touch, so the client never has to guess what it now holds. `vertical` is null for a
+    signed-in user with no profile."""
 
     digest_paused: bool
+    vertical: str | None = None
 
 
 class FeedbackIn(BaseModel):
@@ -488,18 +499,69 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def update_me(
         engine: Annotated[Engine, Depends(_get_engine)],
         user: Annotated[User, Depends(require_user)],
+        background: BackgroundTasks,
         body: MeSettingsUpdate,
     ) -> MeSettings:
-        """Update the authed user's settings (D-094) — today just the digest pause/resume flag.
+        """Update the authed user's settings: the digest pause flag (D-094) and/or their vertical.
 
-        Reuses the unsubscribe path's `set_digest_paused` (idempotent; the email predicate is the
-        same stale-identity defense). A vanished row (deleted concurrently) → 404."""
-        updated = set_digest_paused(
-            engine, user_id=user.id, email=user.email, paused=body.digest_paused
+        `digest_paused` reuses the unsubscribe path's `set_digest_paused` (idempotent; the email
+        predicate is the same stale-identity defense). A vanished row → 404.
+
+        `vertical` is the self-serve switch that replaced D-064's support-only vertical change. It
+        runs *first* when both fields are sent, because it is the half that can fail — a rejected
+        switch then leaves nothing applied. Work-producing switches pass the same global daily
+        ceiling as a signup (`check_backfill_budget`) before committing and schedule the same
+        background `run_backfill`; the per-user rolling clock lives in `switch_vertical` and is
+        charged only when the switch actually creates matching work."""
+        if body.digest_paused is None and body.vertical is None:
+            raise HTTPException(422, "no settings supplied")
+
+        if body.vertical is not None:
+            try:
+                cfg = load_vertical_config(body.vertical)
+            except ConfigError as exc:
+                raise HTTPException(404, f"unknown vertical {body.vertical!r}") from exc
+            stamp = datetime.now(UTC)
+            try:
+                switched = switch_vertical(
+                    engine,
+                    user_id=user.id,
+                    user_email=user.email,
+                    target_vertical=body.vertical,
+                    domain_vocabulary=cfg.domain_vocabulary,
+                    before_backfill=lambda: check_backfill_budget(engine, now=stamp),
+                    now=stamp,
+                )
+            except NoActiveProfile as exc:
+                raise HTTPException(
+                    409, "no active profile to switch; upload a résumé first"
+                ) from exc
+            except VerticalSwitchLimited as exc:
+                raise HTTPException(
+                    429,
+                    "vertical switches are limited to one per user every 24 hours",
+                    headers={"Retry-After": str(exc.retry_after)},
+                ) from exc
+            except BackfillBudgetExceeded as exc:
+                raise HTTPException(429, str(exc)) from exc
+            if switched.backfill_required:
+                background.add_task(
+                    run_backfill, engine, body.vertical, switched.profile, config=cfg
+                )
+
+        paused = user.digest_paused
+        if body.digest_paused is not None:
+            updated = set_digest_paused(
+                engine, user_id=user.id, email=user.email, paused=body.digest_paused
+            )
+            if not updated:
+                raise HTTPException(404, "user not found")
+            paused = body.digest_paused
+
+        profile = active_profile_for_user(engine, user.email)
+        return MeSettings(
+            digest_paused=paused, vertical=profile.vertical if profile is not None else None
         )
-        if not updated:
-            raise HTTPException(404, "user not found")
-        return MeSettings(digest_paused=body.digest_paused)
 
     @app.delete("/api/me", status_code=204)
     def delete_me(
@@ -617,10 +679,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 now=stamp,
             )
         except ProfileVerticalConflict as exc:
+            # Still a hard 409: this is the résumé form, and silently moving someone's vertical
+            # from a file upload is worse than an error. The switch has its own deliberate
+            # surface now (`PATCH /api/me`), so the message points there instead of at support.
             raise HTTPException(
                 409,
                 f"already onboarded to {exc.vertical!r}; one vertical per user "
-                f"(changing verticals is a manual/support action)",
+                f"(change it in Settings)",
             ) from exc
         except ResumeReuploadLimited as exc:
             raise HTTPException(

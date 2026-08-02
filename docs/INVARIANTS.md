@@ -227,14 +227,16 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (D-065): `/` (smart root: logged-out → `Landing`, no-profile → `/onboarding`, has-profile → `/dashboard`),
   `/login` (logged-out only; an existing session routes onward), `/onboarding` (pick vertical +
   upload), `/dashboard` (their vertical), `/upload` (résumé update, vertical locked), `/settings`
-  (login-gated only — digest pause toggle + account deletion, D-094), `/privacy` (public);
+  (login-gated only — digest pause toggle + **vertical switch** + account deletion, D-094/D-104),
+  `/privacy` (public);
   `App.tsx` is the shell + auth-aware nav, pages live in `frontend/src/pages/`. **Every fetch
   is credentialed** (`credentials: "include"`) so the session cookie resolves the authed user's profile
   server-side (D-055). Dev = Vite dev server + CORS (`VJA_CORS_ORIGINS`, default `:5173`); prod = FastAPI
   serves the built SPA same-origin from `frontend_dist_dir()` — `VJA_FRONTEND_DIST` (set to
   `/app/frontend/dist` in the container, where the non-editable install moves the package off the repo
   layout) or the repo-layout default (a catch-all → `index.html` keeps deep-links/hard-refreshes off a 404;
-  mount gated on a real `index.html`, D-059/D-060). **One vertical per user (D-064):** the SPA routes each user
+  mount gated on a real `index.html`, D-059/D-060). **One vertical per user at a time (D-064, switchable
+  since D-104):** the SPA routes each user
   to *their own* vertical via **`GET /api/me`** (`{user, profile|null}`), never a cross-user picker; the
   dashboard never renders logged-out (killing the old 401-as-error leak). **Only a 401 means
   logged-out:** a non-401 `/api/me` failure renders a retryable account-load error, never Landing.
@@ -289,6 +291,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   server-side, so extra body fields cannot forge a reporter. The category picker reuses the `.segmented`
   control and the dialog reuses the tour/delete-confirm scaffold, deliberately **without an entrance
   animation** (neither sibling dialog has one). A failed send keeps the typed text so Send is a real retry.
+  Settings owns two confirm modals (vertical switch, account deletion) over **one** `ConfirmDialog`
+  scaffold — focus on open, Escape and backdrop close, neither possible while the action is in flight.
+  The switch is confirmed rather than immediate because it restarts matching, and its section is hidden
+  entirely without a profile (nothing to switch; the server 409s that case). (D-104, D-100, D-094)
 - **Résumé upload is the SPA's largest write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
   `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
@@ -368,12 +374,26 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   login. **Identity still anchors on email** (D-027): `upsert_user_by_google` adopts a pre-existing
   email-only row and **backfills `profiles.user_id` by email**, so the seed profile attaches on first
   login with no data migration. `profiles.user_email` is retained (match/digest recipient unchanged). (D-055)
-- **One vertical per user (policy — D-064).** A user has exactly **one** active profile, in **one** vertical,
-  chosen **once at signup** and **immutable** (changing verticals = a manual/support action, out of scope for
-  v1). The dashboard shows *that* user's vertical (resolved via `/api/me` → `active_profile_for_user`) — there is
-  **no cross-user vertical picker**. **Enforced** at the write path: `POST /api/profiles` **409s** a second
-  vertical for an already-onboarded user; re-upload of the *same* vertical stays an idempotent résumé update.
-  (Enforced in the endpoint, not `upsert_profile`, so the CLI/seed loader stays unconstrained.) (D-064, D-065)
+- **One vertical per user at a time, and it is self-serve switchable (D-104, superseding D-064's
+  immutability).** A user has exactly **one** active profile in **one** vertical; the dashboard shows *that*
+  user's vertical (resolved via `/api/me` → `active_profile_for_user`) and there is **no cross-user vertical
+  picker**. Multi-vertical users stay out of scope. The switch is **`PATCH /api/me {vertical}`** →
+  `switch_vertical`, which re-files the user's **existing `resume_text`** under the target vertical (never a
+  re-upload) and schedules the same background `run_backfill` a signup does. `POST /api/profiles` still
+  **409s** a cross-vertical *upload* — that path is the résumé form, and silently moving a vertical from a
+  file upload is worse than an error; re-upload of the *same* vertical stays an idempotent résumé update.
+  (Enforced in the endpoint, not `upsert_profile`, so the CLI/seed loader stays unconstrained.) **A switch
+  must explicitly deactivate the old vertical**: `_upsert_profile` only clears other versions *within the
+  vertical it writes*, so omitting that leaves the user active in two verticals and the nightly matches and
+  bills them in both. (D-104, D-064, D-065)
+- **A vertical switch costs once per (user, vertical, résumé version), not once per switch.** Matching is
+  idempotent per `(posting, profile, resume_version)` and a revisit reactivates the *same* profile row, so
+  the old vertical's matches survive on it and returning re-runs only the remainder. Worst case per résumé
+  version is 4 verticals × `VJA_BACKFILL_MAX_POSTINGS` ≈ 400 matches, then exhausted. The per-user clock
+  (`users.last_vertical_switch_at`, 24h rolling, **its own column** so a résumé upload can never block a
+  switch) exists to stop one user exhausting the *global* signup ceiling and 429ing other people's signups
+  (D-101), not to protect the spend — and it is **charged only when the switch creates work**, so switching
+  among verticals already visited is unlimited. (D-104, D-101, D-085, D-057)
 - **Login is Authlib OIDC → a signed-cookie session** (`SessionMiddleware`, secret `VJA_SESSION_SECRET`).
   Login routes are **inert (503) until `GOOGLE_CLIENT_*` are set**; the real Google round-trip is a manual
   check, the suite mocks the token exchange. Cookie hardening (`Secure` via `VJA_COOKIE_SECURE`, `SameSite=Lax`,
@@ -391,7 +411,9 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   text PDF; scanned/empty/non-text → 422; PII text never logged) → `upsert_profile` (which now stamps
   `user_id` at creation, the D-055 link at upload not just login) → a **background** `run_backfill`,
   returning 202. The read API stays read-only (D-005); the write exceptions are **three** — this path, the
-  D-094 settings surface (`PATCH`/`DELETE /api/me`), and **`POST /api/feedback`** (D-100). (D-057, D-094, D-100)
+  settings surface (`PATCH`/`DELETE /api/me`; `PATCH` carries both the D-094 digest flag and the D-104
+  vertical switch, and is a true partial update — an empty body is 422), and **`POST /api/feedback`**
+  (D-100). (D-057, D-094, D-100, D-104)
 - **`POST /api/feedback` stores nothing; it emails the ops recipient and returns 202** (D-100). Behind
   `require_user`; the body is `{category, message, page}` only, capped at **5,000 chars** — that cap plus the
   login gate is the entire abuse guard, because a durable per-user throttle would cost a `users` column and

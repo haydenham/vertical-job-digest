@@ -5,6 +5,75 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-07-31 — The funnel block, PR 1: vertical is now self-serve switchable (D-104)
+
+**Housekeeping on the previous entry:** its `**Next:**` is **done** — the banner branch merged as **#114**
+(`4c3a0e7`, on top of `7063197`). Its parked items are unchanged and still Hayden's: the GCP budget alert,
+the digest `new`-window hole, the deferred Neon reads, and **the August billing check** (`--no-cpu-throttling`
+pushed billable instance-seconds to ~45k/day; the ~$25-30/month projection is unverified until Billing →
+Reports by SKU is read in the first week of August). Publishing the OAuth app off Testing also still stands.
+
+### The task: the funnel, not the pipeline
+
+The LinkedIn launch measured **5,000 views → 150 reactions → 15 signups → 10 résumé uploads**. Login plus a
+résumé upload sits in front of everything, so ~99.9% of interest never sees a job. The fix is a read-only
+board anyone can look at. Plan of record: **`docs/20-demo-and-vertical-switching.md`**, two PRs.
+
+**Why switching came first, and it was Hayden's call, not mine.** The demo wants a vertical toggle (someone
+arriving from a robotics post should not land on grid roles), but D-064 made a user's vertical immutable
+after signup. Hayden's rule: *if we don't allow it at signup, we can't allow it in the demo.* So switching
+is not a demo feature, it is the demo's prerequisite — and it independently retires a standing promise to do
+manual support work, which shipped to users inside the `POST /api/profiles` 409 string.
+
+### What the costing found, before any code
+
+Nearly all of it was already supported, which is why this was worth doing now rather than deferring:
+`profiles` was already keyed `(user_email, vertical, resume_version)` with an `active` flag and
+`_upsert_profile` only deactivates rows *within the vertical it writes*; `last_sent_at` keys on
+`(vertical, recipient)`, so a switcher's first digest in the new vertical is a correct full baseline and the
+**digest needed zero work**; and `resume_text` already lives on the profile row, so a switch is never a
+re-upload. One line at `profiles.py:227` forbade the entire feature.
+
+**The cost question Hayden pushed on — "matches would be run over and over" — is the one thing that
+structurally cannot happen.** `postings_needing_match` excludes anything already matched for
+`(posting, profile, resume_version)`, and a revisit reactivates the *same* profile row, so the old
+vertical's matches survive on it. Cost is once per (user, vertical, résumé version), worst case ~400 matches
+≈ $4 per résumé version, then exhausted. **What the per-user clock actually protects is other people's
+signups:** a switch spends the global `check_backfill_budget` ceiling, and that ceiling 429s
+`POST /api/profiles` — D-101's failure mode arrived at from the other side. That reframing produced a better
+guard than the one planned: the clock is charged **only when the switch creates work**, so switching among
+verticals already visited is unlimited and free, and the ≤4 expensive first-visits are what gets rationed.
+
+### The bug worth remembering
+
+`_upsert_profile` deactivates only the **target** vertical's other versions. A switch that does not
+explicitly deactivate the old vertical leaves the user **active in two at once** — which breaks `/api/me`
+routing and, far worse, makes the nightly match and bill them in both. Caught while writing
+`switch_vertical`, not by a test failing; now pinned by `test_switch_deactivates_the_old_vertical`.
+
+`PATCH /api/me` also became a true partial update (an empty body is 422, not a silent no-op), and the switch
+half runs **first** when both fields are sent, so a rejected switch applies nothing at all.
+
+### Verification
+
+Python gates green: **mypy clean on 146 files**, ruff + format clean, `lint-imports` KEPT. New tests: 8 in
+`test_profiles.py` (including the two that pin the cost model — a revisit re-runs nothing and does **not**
+consume the clock, versus a first visit that does) and 9 in `test_settings_api.py`. Frontend: `tsc -b` and
+eslint clean, **Settings vitest 13 → 20**.
+
+**One honest caveat about the frontend run.** `npx vitest run` on this branch reports **10 failures, all in
+`Upload.test.tsx`**, and none of them are mine: the working tree carries uncommitted `feat/paste-resume`
+work (`Upload.tsx` +167/-46, `theme.css` +22) that adds a second element labelled `résumé`, so
+`getByLabelText(/résumé/i)` now matches multiple. My branch touches `api.ts`, `Settings.tsx`,
+`Settings.test.tsx` only. **Those two dirty files must not go into this PR's commit.**
+
+**Next:** Hayden runs the Neon migration (`3f8ad42c17be`, additive `users.last_vertical_switch_at`) *before*
+merging, reviews/commits/PRs `feat/vertical-switching`, and decides what to do with the paste-résumé work.
+Then PR 2, the `/demo` board — whose one open prerequisite is measuring in-scope open rows per vertical
+against Neon (query in `docs/20`) to decide whether the public response ships whole or capped.
+
+---
+
 ## 2026-07-30 — Morning-run verification under D-103, and honest copy on the matching banner
 
 **Housekeeping on the previous entry:** its `**Next:**` block is **done on both halves**. Hayden reviewed,
