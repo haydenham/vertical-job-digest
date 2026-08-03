@@ -40,6 +40,7 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     comp_max: null,
     comp_raw: null,
     comp_display: null,
+    location_display: null,
     verdict: "yes",
     score: 72,
     fits: ["power markets"],
@@ -116,6 +117,19 @@ describe("PostingPanel", () => {
     expect(screen.getByText("—")).toBeInTheDocument(); // unassessed match cell
     expect(screen.queryByText("fits")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  // --- location (D-106) -----------------------------------------------------------------------
+
+  it("shows the normalized location, falling back to the raw string", () => {
+    renderPanel(row({ location: "USA - Seal Beach, CA", location_display: "Seal Beach, California" }));
+    expect(screen.getByText("Seal Beach, California")).toBeInTheDocument();
+    expect(screen.queryByText("USA - Seal Beach, CA")).not.toBeInTheDocument();
+  });
+
+  it("shows the raw location when the server had nothing to improve", () => {
+    renderPanel(row({ location: "Olathe, Kansas", location_display: null }));
+    expect(screen.getByText("Olathe, Kansas")).toBeInTheDocument();
   });
 
   // --- salary (F2 Phase A, D-087) -------------------------------------------------------------

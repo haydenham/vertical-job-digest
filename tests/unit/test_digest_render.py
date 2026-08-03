@@ -26,12 +26,13 @@ def _posting(
     rationale: str | None = None,
     fits: list[str] | None = None,
     gaps: list[str] | None = None,
+    location: str | None = "Remote",
 ) -> DigestPosting:
     return DigestPosting(
         external_id=external_id,
         company=company,
         title="Software Engineer",
-        location="Remote",
+        location=location,
         apply_url=apply_url,
         first_seen_at=_NOW,
         verdict=verdict,
@@ -265,3 +266,23 @@ def test_digest_copy_carries_no_em_dashes() -> None:
         assert "—" not in rendered.text
         assert "—" not in rendered.html
         assert "—" not in rendered.subject
+
+
+def test_location_is_normalized_in_the_body_but_raw_in_the_audit_blob() -> None:
+    """The email reads the normalized location (D-106); `contents_to_dict` keeps what the ATS
+    actually sent, because the audit record's job is to say what we were given."""
+    contents = _contents(new=[_matched("a", location="USA - Seal Beach, CA")])
+    rendered = render_digest(contents)
+
+    for body in (rendered.html, rendered.text):
+        assert "(Seal Beach, California)" in body
+        assert "USA - Seal Beach, CA" not in body
+
+    assert contents_to_dict(contents)["new"][0]["location"] == "USA - Seal Beach, CA"
+
+
+def test_an_unnormalizable_location_still_renders_verbatim() -> None:
+    """`us_location_display` returns None for an already-clean string; the label must fall back to
+    the stored location, not render an empty pair of parentheses."""
+    rendered = render_digest(_contents(new=[_matched("a", location="Olathe, Kansas")]))
+    assert "(Olathe, Kansas)" in rendered.text

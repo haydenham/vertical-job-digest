@@ -20,6 +20,7 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     comp_max: null,
     comp_raw: null,
     comp_display: null,
+    location_display: null,
     verdict: "yes",
     score: 72,
     fits: ["power markets"],
@@ -50,6 +51,16 @@ describe("PostingsTable", () => {
     const link = screen.getByRole("link", { name: "Grid Engineer" });
     expect(link).toHaveAttribute("href", "https://example.com/apply");
     expect(screen.getByText("72")).toBeInTheDocument();
+  });
+
+  it("renders the normalized location, falling back to the raw string (D-106)", () => {
+    renderTable([
+      row({ posting_id: 1, location: "USA - Seal Beach, CA", location_display: "Seal Beach, California" }),
+      row({ posting_id: 2, location: "Olathe, Kansas", location_display: null }),
+    ]);
+    expect(screen.getByText("Seal Beach, California")).toBeInTheDocument();
+    expect(screen.queryByText("USA - Seal Beach, CA")).not.toBeInTheDocument();
+    expect(screen.getByText("Olathe, Kansas")).toBeInTheDocument();
   });
 
   it("shows a dim em-dash, not a fake score, for an unassessed posting", () => {

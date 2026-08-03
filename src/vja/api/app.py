@@ -95,6 +95,7 @@ from vja.digest.feedback import (
 from vja.digest.send import ConfigError as SendConfigError
 from vja.digest.send import SendError, load_config
 from vja.digest.unsubscribe import parse_unsubscribe_token
+from vja.location import us_location_display
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
 from vja.resume import ResumeError, extract_resume_text
 from vja.verticals import ConfigError, available_verticals, load_vertical_config
@@ -171,6 +172,15 @@ class PostingRow(BaseModel):
         testable (F2 Phase A, D-087)."""
         return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def location_display(self) -> str | None:
+        """The stored ATS location rendered in one consistent US form, or `None` when there is
+        nothing to improve (`vja.location`, D-106). The stored `location` stays L1-authoritative
+        (D-043) and is still served beside this; the SPA renders this when present and falls back
+        to `location` verbatim."""
+        return us_location_display(self.location)
+
 
 class PublicPostingRow(BaseModel):
     """One row on the login-free demo board (D-105) — **the second structural anti-leak layer.**
@@ -205,6 +215,13 @@ class PublicPostingRow(BaseModel):
     def comp_display(self) -> str | None:
         """The guarded annual-USD range — see `PostingRow.comp_display`."""
         return annual_usd_display(self.comp_min, self.comp_max, self.comp_raw)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def location_display(self) -> str | None:
+        """The normalized location — see `PostingRow.location_display`. Posting data, not
+        résumé-derived, so it belongs on the public board (D-106/D-105)."""
+        return us_location_display(self.location)
 
 
 class PublicPostingsResponse(BaseModel):

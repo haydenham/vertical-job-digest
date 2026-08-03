@@ -65,6 +65,7 @@ def _posting(
     comp_max: int | None = None,
     comp_raw: str | None = None,
     description: str | None = None,
+    location: str | None = None,
     in_scope: bool = True,
 ) -> int:
     with begin(engine) as conn:
@@ -82,6 +83,7 @@ def _posting(
                 extracted_at=first_seen,
                 in_scope=in_scope,
                 description=description,
+                location=location,
                 comp_min=comp_min,
                 comp_max=comp_max,
                 comp_raw=comp_raw,
@@ -196,6 +198,27 @@ def test_compensation_fields_and_guarded_display(migrated_engine: Engine) -> Non
 
     assert rows["none_stated"]["comp_display"] is None
     assert rows["none_stated"]["comp_raw"] is None
+
+
+def test_location_display_is_served_beside_the_raw_location(migrated_engine: Engine) -> None:
+    """`location_display` is the server's normalization (D-106) and `location` stays the raw
+    L1-authoritative string (D-043); an already-clean location gets `null` so the SPA falls back."""
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    for title, location in (
+        ("messy", "USA - Seal Beach, CA"),
+        ("clean", "Olathe, Kansas"),
+        ("nowhere", None),
+    ):
+        _match(migrated_engine, _posting(migrated_engine, emp, title, location=location), prof)
+
+    body = _client(migrated_engine).get("/api/postings", params={"vertical": _VERTICAL}).json()
+    rows = {p["title"]: p for p in body["postings"]}
+
+    assert rows["messy"]["location"] == "USA - Seal Beach, CA"  # stored value is untouched
+    assert rows["messy"]["location_display"] == "Seal Beach, California"
+    assert rows["clean"]["location_display"] is None
+    assert rows["nowhere"]["location_display"] is None
 
 
 def test_cleaned_view_param(migrated_engine: Engine) -> None:

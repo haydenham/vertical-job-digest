@@ -2517,3 +2517,55 @@ the dashboard is unverified and `docs/18` records that a permanently-dead board 
 forever. A stranger's first impression is exactly where "one fake posting costs more trust than ten
 real ones earn" bites hardest; it is named here and left to its own session rather than bundled.
 References D-104, D-067, D-045, D-043, D-030, D-103, D-101, D-095, D-087, D-008, D-064, D-065, D-021.
+
+### D-106 · Product/Display · US locations are normalized for display only, never in the DB · accepted · 2026-08-02
+`postings.location` is whatever the board wrote, and it renders that way. A survey of the dev corpus
+(12,010 rows) found the same place written four ways across employers: `Olathe, Kansas` beside
+`Kinston, NC`, plus `USA - Seal Beach, CA`, `Atlanta, GA, United States`, `US, Dayton, OH`,
+`West Palm Beach, FL, US, 33407`. Sorting the dashboard's location column put every Workday
+`USA - …` row under **U**, and filtering for a state found half the rows that matched it. The fix is
+deterministic string work — no new data, no LLM, no model prompt touched.
+
+**Display-only, and that is not a compromise.** `vja.location.us_location_display` is a bottom-layer
+pure function surfaced as a `location_display` computed field on both `PostingRow` and
+`PublicPostingRow`, exactly as `vja.comp` is surfaced as `comp_display` (D-095/D-087). The stored
+`location` stays **L1-authoritative** (D-043) and ships beside it; the digest's audit blob keeps the
+raw string while the email body reads the normalized one. Persisting instead would have cost an
+Alembic migration, a manual Neon run, and a backfill over 12k rows, and would have blurred both the
+L1 rule and `repair.py`'s re-derivation from `raw_payload` — for a change that alters nothing but
+what a human reads. `content_hash` was never at risk either way (`pipeline._hash` keys on the
+fetcher's `RawPosting`, not the stored row), but the whole class of risk is now moot.
+
+**Expansion, not contraction.** `Kinston, NC` → `Kinston, North Carolina`, not the reverse.
+Contracting names to codes has to decide whether `Georgia` is a state or a country and whether
+`Washington` is a state, a city or DC; expanding a code faces only the reverse collision, which was
+*measured* rather than guessed: in 12,010 rows exactly **three** would be mangled by naive expansion
+(`Gurugram, IN`, `Buenos Aires, AR`, `Bogota, CO`), because most countries these employers post from
+carry codes that are not US states at all (`UK`, `JP`, `MX`, `SG`, `BR`, `PH`, `QC`) and never reach
+the check. So the guard is small and closed: an explicit US mention settles it; a code that is not
+also an ISO-3166 alpha-2 country code cannot be a country; otherwise the preceding segment must not
+name a known foreign city for that code. `DC` is never expanded — "Washington, District of Columbia"
+reads as a mistake.
+
+**Scope beyond the state code** is the country affix (`USA - `, `US, `, `, United States`, a bare
+trailing ` USA`) and a trailing ZIP, because they are the same pass and most of the visible ugliness.
+Deliberately **not** title-casing: `OAKBROOK TERRACE` stays shouty rather than risk `McLean`,
+`NASA Ames` and `IBM`. Multi-site rows (Rippling's merged `"; "` join, Workday's multi-site text —
+real rows run to fourteen segments) normalize per segment and rejoin; exactly duplicated segments
+collapse in order, since two spellings of one office would otherwise normalize into a visible
+stutter.
+
+**The match prompt is untouched, on purpose.** `match.py` puts `Location:` in the model prompt, and a
+prompt change requires the representative eval suite and explicit signoff (D-020 as amended by
+D-090/D-093). It buys nothing here — the model already reads both forms — so it stays out.
+`prefilter`/`in_scope` are likewise untouched: this changes rendering, not which postings exist.
+`vja.location` duplicates `prefilter`'s state table because same-layer siblings cannot import each
+other under import-linter; a test asserts the two copies are equal rather than a comment asking
+nicely.
+
+**Known residuals, measured and left:** boards writing `Country - State - City` lose the country but
+keep their dash order (80 postings corpus-wide, 1 in-scope and open — reordering is a rule with more
+risk than reach), and an *unlisted* foreign city paired with its own country code still reads as a
+US state, which is the same coarse-gate residual `prefilter` already documents for "Munich, DE".
+Both are pinned by tests so a future change is deliberate.
+References D-095, D-087, D-043, D-105, D-099, D-038, D-030, D-023, D-020, D-090, D-093, D-021.

@@ -21,6 +21,7 @@ from html import escape
 from typing import Any
 
 from vja.digest.assembly import DigestContents, DigestPosting
+from vja.location import us_location_display
 
 # Above this many closures the body rolls them up by company instead of one bullet each — a
 # backlog day would otherwise bury the new roles under hundreds of dead-link lines (D-056).
@@ -45,12 +46,17 @@ def _humanize(vertical: str) -> str:
 
 
 def _label(posting: DigestPosting) -> str:
-    """`Company · Title (Location)`, gracefully degrading when fields are missing."""
+    """`Company · Title (Location)`, gracefully degrading when fields are missing.
+
+    The location is normalized for reading (D-106); the raw ATS string is what `_posting_to_dict`
+    records in the audit blob, so the email and the audit trail differ on purpose.
+    """
     parts = [posting.company]
     if posting.title:
         parts.append(posting.title)
     head = " · ".join(parts)
-    return f"{head} ({posting.location})" if posting.location else head
+    location = us_location_display(posting.location) or posting.location
+    return f"{head} ({location})" if location else head
 
 
 def _verdict_tag(posting: DigestPosting) -> str:

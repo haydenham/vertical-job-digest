@@ -36,6 +36,7 @@ function row(over: Partial<PublicPostingRow> = {}): PublicPostingRow {
     comp_max: null,
     comp_raw: null,
     comp_display: null,
+    location_display: null,
     ...over,
   };
 }

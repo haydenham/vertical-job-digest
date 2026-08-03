@@ -6,7 +6,7 @@ import {
   fetchPublicPostingDescription,
   type DisplayPosting,
 } from "../api";
-import { activityIso } from "../postingsView";
+import { activityIso, displayLocation } from "../postingsView";
 import { MatchCell } from "./Verdict";
 
 // The posting body, loaded on open (D-095). `undefined` is "still loading" — deliberately NOT a
@@ -92,7 +92,7 @@ export function PostingPanel({
         </div>
         <div>
           <dt>location</dt>
-          <dd>{p.location ?? "—"}</dd>
+          <dd>{displayLocation(p) ?? "—"}</dd>
         </div>
         <div>
           <dt>activity</dt>
