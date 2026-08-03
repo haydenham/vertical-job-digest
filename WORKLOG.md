@@ -5,6 +5,76 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-08-02 (later) — Rolefeed has a favicon
+
+**Housekeeping on the previous entry:** its `**Next:**` is **done** — both funnel PRs are merged
+into `main` (`1ddfbc8`): vertical switching as **#115** and the demo board as **#116**. Its two
+post-merge checks are unchanged and still Hayden's: confirm Cloudflare is **proxying
+(orange-cloud)** before trusting the `s-maxage` half of the public cache header, and `curl` the
+deployed `/robots.txt`. Also unchanged: publishing the Google OAuth app off Testing, the GCP budget
+alert, the digest `new`-window hole, dead apply links now going public, and the **August billing
+check** (now due).
+
+### The gap D-105 exposed
+
+`frontend/index.html` had a `<title>` and nothing else — no favicon of any kind, so every tab,
+bookmark and phone home screen showed the browser's blank-page glyph. That was survivable while the
+only visitors were logged-in beta users. `/demo` and a `robots.txt` that invites crawlers put a
+blank tab on the funnel's **first** impression, which is the one thing the whole block exists to fix.
+
+Hayden generated the set with favicon.io. Six binaries (`favicon.ico`, 16/32px PNGs,
+`apple-touch-icon`, two `android-chrome` sizes, ~460 KB, of which the 512 is 353 KB and is only ever
+fetched on PWA install) went into `frontend/public/` beside D-105's `robots.txt`, plus the four
+`<link>` tags. **`favicon.ico` is deliberately not linked** — it answers the browser's automatic
+root request, and the catch-all at `app.py:423` already serves it (`test_serving.py` has asserted
+exactly that since 9.5a).
+
+**Zero backend work, confirmed rather than assumed.** Vite copies `public/` to `dist/` root, the SPA
+catch-all serves real static files verbatim before falling through to `index.html`, and Python's
+`mimetypes` already maps `.webmanifest` → `application/manifest+json`, so `FileResponse` sets the
+right type with no registration.
+
+### The manifest was wrong out of the generator
+
+favicon.io emits `name` and `short_name` as **empty strings** and both colours as `#ffffff` — white,
+against a `color-scheme: dark`, dark-only design language (D-080/D-081). Shipping it verbatim would
+have named the install prompt after nothing and flashed a white splash. It is now `Rolefeed` with
+`theme_color`/`background_color` at `#08090c`, the `--bg` token, plus a matching
+`<meta name="theme-color">` so mobile browser chrome stops flashing white above a near-black page.
+
+**That colour now lives in four places and structurally cannot live in one** — neither an HTML
+attribute nor a JSON manifest can read a CSS custom property. So `src/favicon.test.ts` pins the
+duplication instead: it parses `--bg` out of `theme.css` and asserts the meta tag and both manifest
+colours equal it. The same suite resolves every linked `href` and every manifest `icons[].src`
+against the actual contents of `public/` (via Vite `?raw` + `import.meta.glob`, so no `@types/node`
+and no new dependency), and separately asserts `favicon.ico` ships despite having no `<link>` to
+catch its deletion. A broken icon path is otherwise **silent**: tests pass, the build succeeds, and
+only a human looking at a browser notices.
+
+**No ADR and no INVARIANTS line, on purpose.** A favicon is not a re-litigable cross-cutting rule.
+The one judgment worth recording is the hardcoded `#08090c` outside `theme.css`, and it is recorded
+here and held by a test rather than by a rule nobody would read.
+
+### Verification
+
+Frontend gate green: eslint clean, `tsc -b` clean, **vitest 204 → 210** (19 files). `pytest
+tests/integration/test_serving.py` green (no Python changed; run as a cheap confirmation the static
+path it pins is intact). The negative case was checked too — breaking one `href` to
+`/favicon-32.png` fails two of the six new tests, so the guard can actually fail.
+
+**Ran the real thing.** Built the SPA, served `dist/` through `vja-api`, and curled every icon:
+`/favicon-32x32.png` + `/favicon-16x16.png` + `/apple-touch-icon.png` + `/android-chrome-192x192.png`
+→ `200 image/png`, `/favicon.ico` → `200 image/x-icon`, `/site.webmanifest` → `200
+application/manifest+json` with the corrected body, `/robots.txt` → `200 text/plain`, and
+`/dashboard` still `200 text/html` (the catch-all is undisturbed). What I could not do is look at
+it: **the visual pass is Hayden's** — whether the mark reads at 16px, and whether the dark
+theme-colour looks right on an iOS home screen.
+
+**Next:** Hayden reviews/commits/PRs `chore/favicon` (branched off `main` at `1ddfbc8`, independent
+of everything else). No migration. Nothing else opened.
+
+---
+
 ## 2026-08-02 — The funnel block, PR 2: a login-free demo board at `/demo` (D-105)
 
 **Housekeeping on the previous entry:** its `**Next:**` is **done on the parts Hayden owns** — the
