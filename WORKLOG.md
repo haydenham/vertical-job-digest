@@ -5,6 +5,95 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-08-02 (last) — Releases get a name: `docs/updates/` and Update 1.1
+
+**Housekeeping first, because the session's stated task was already finished.** The handoff asked for
+US location normalization. That is **D-106**, built earlier the same day: `src/vja/location.py`,
+`location_display` on both row models, committed `77e1bab` on `feat/location-normalization` and
+pushed, full gate green. The handoff was written against a premise its own session had already
+overtaken. Nothing was rebuilt; the branch was left untouched, and **it has since merged as #118**
+(`8c5bba1`), which closes Update 1.1 at eight of eight.
+
+**This branch was cut from `main` at `8a87693` (#117), not from `feat/location-normalization`,** so
+the two PRs stayed independent. The predicted cost came due: #118 merged first, and both branches
+insert a new entry at the top of `WORKLOG.md`, so this one was **rebased onto `8c5bba1`** and the
+single `WORKLOG.md` hunk resolved by hand (this entry above D-106's, newest-on-top preserved). No
+other file conflicted. That is the routine tax on parallel branches in this repo, not a sign either
+branch was wrong — but it is the reason a docs branch that *closes* an update is worth cutting from
+the tip rather than from `main` as it stood when the work started.
+
+### The actual task: a document type this repo did not have
+
+Hayden's process call: now that Rolefeed is live, a group of fixes/features is an **update**, and
+each one gets a document. This is 1.1.
+
+The gap is real and it is structural rather than cosmetic. Four documents already exist and **none of
+them can answer "what changed since launch"**: `WORKLOG.md` is one entry per *session*, so a feature
+spanning three sessions has no single home; `DECISIONS.md` records *why* one call was made and most
+PRs carry no ADR at all (two of 1.1's eight items have none); `docs/INVARIANTS.md` is deliberately
+present-tense and erases history, so a rule replaced last week reads as though it was always that
+way; and a numbered plan-of-record ends when its block lands, knowing nothing about the unrelated
+fixes that shipped beside it.
+
+**`docs/updates/` — a subdirectory, not `docs/21-`.** The numbered series is *specs* in the authority
+order; update docs are a release-history axis and would burn one spec number per release. The
+directory carries its own `README.md` holding the convention: memo tier (INVARIANTS still wins), a
+four-step lifecycle, `MAJOR.MINOR` as a **product** version that nothing in the build reads, the
+required sections, and the index. **A closed update doc is never edited to stay current** — that is
+the point of closing it.
+
+### `docs/updates/1.1.md` — the funnel update
+
+**Boundary set at the launch commit:** everything merged after #110 (D-101, 2026-07-28) through #118.
+Eight items: the digest dashboard link (#111/D-102), the 4-hourly split (#112/D-103), the pre-launch
+sweep (#113), the matching-banner copy (#114), vertical switching (#115/D-104), the `/demo` board
+(#116/D-105), the favicon (#117), and location normalization (#118/D-106). **The update is closed.**
+
+The theme is not invented after the fact — it is what the launch measured. **5,000 views → 150
+reactions → 15 signups → 10 uploads**, so ~99.9% of the interest never saw a job. Three strands in
+priority order: open the funnel, make what a stranger sees read well, make it fresher and cheaper.
+
+Three things the doc carries that live nowhere else in one place: the **measured before/after**
+(D-103's spend $5.52 → $1.64 and reopens 136 → 105; D-106's 12,010 rows surveyed, 377 distinct
+strings changed, exactly 3 known collisions), a map of **which INVARIANTS sections the update
+rewrote**, and the **known-and-not-fixed ledger** — dead apply links now going public, the digest
+`new`-window hole, D-106's two measured location residuals, `.cell-location` having no truncation,
+and `alerts.sh` being unable to express an edit. Plus the open human items: the location merge, the
+visual passes, Cloudflare orange-cloud, the deployed `robots.txt`, OAuth publishing, the GCP budget
+alert, and the **August billing check, now due** (instance-seconds 280-460/day → 45,811 since
+`--no-cpu-throttling`, on a ~$25-30/month projection that has never been tested against a real bill).
+
+### `README.md` was two months and six phases stale
+
+It claimed **"building Phase 3 (bare digest)"**, described two verticals with aviation "not yet
+seeded", listed Anthropic SDK + launchd + SQLite as the stack, and had a repo layout with no
+`src/`, no `frontend/`, no `deploy/`. Anyone arriving from a LinkedIn post read a half-built
+side project.
+
+Rewritten to what is true: **live at role-feed.com, public beta**, four verticals, `/demo` linked
+so a reader can click straight through, what a user actually gets in four numbered steps, the
+fourteen supported ATS platforms named, the real production shape (one image → one service + two
+Jobs on two schedules), the real gates with their real counts, and a per-vertical coverage table.
+
+**Every number in it was computed, not remembered:** 167 seed rows / 115 fetchable, per vertical, by
+running the seed CSV against `fetchers.registry.SUPPORTED_ATS_TYPES` rather than trusting the
+counts scattered through `CLAUDE.md` (which cites a stale aviation 15-16 against a true 17).
+
+`CLAUDE.md` gained the convention in *Documentation discipline* and a doc-map entry.
+
+**Verification.** Docs-only — no `src/`, no `frontend/`, no config, no migration, so no gate applies
+and none was claimed as run. What was checked: the fetchable counts against the live registry, every
+PR number and merge date against `git log --merges --first-parent`, the eight items against their
+ADRs, and the PR permalinks against the real remote (`vertical-job-digest`, not the directory name).
+
+**Next:** Hayden force-pushes the rebased `docs/update-1.1` (the rebase is local only) and merges it.
+**1.2 opens at the next merge after that.** One item moved into 1.1's open-human list on the way past:
+#118 is in production via CD with no migration, but D-106 has only ever been seen against the dev
+corpus — worth confirming `location_display` actually renders on the live dashboard and `/demo`.
+Nothing else opened.
+
+---
+
 ## 2026-08-02 (later still) — Locations read the same way everywhere (D-106)
 
 **Housekeeping on the previous entry:** its `**Next:**` is **done** — `chore/favicon` is merged as

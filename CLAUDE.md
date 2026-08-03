@@ -319,6 +319,13 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
 - **When an ADR changes a live cross-cutting rule, update `docs/INVARIANTS.md` in the same
   session** — replace the affected line, don't append. ADRs are the log; INVARIANTS is the
   current head. They drifting apart is the failure mode this guards against.
+- **Every group of shipped work gets an update doc in `docs/updates/`** (since 1.1, 2026-08-02). An
+  *update* = the fixes/features that went to production together, versioned `MAJOR.MINOR` (a product
+  version, nothing in the build reads it; `1.0` = the 2026-07-28 public launch). It holds the grouping,
+  the measured before/after, and the known-and-not-fixed ledger — the three things WORKLOG (per session),
+  DECISIONS (per decision) and INVARIANTS (present tense only) structurally cannot hold. **Memo tier**:
+  live rules still go to INVARIANTS, decisions still go to DECISIONS, and a closed update doc is never
+  edited to stay current. Rules in `docs/updates/README.md`.
 - **Specs live in `docs/`**, numbered. Build-spec docs (`04+`) are the source of truth for the
   schema/interfaces and override the prose sketches in the 01–03 memos where they differ.
 - **Seed/config is documented next to the data** (`data/seed/README.md`, `config/verticals/*.yaml`).
@@ -345,6 +352,7 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   the login-free `/demo` board. Read with the WORKLOG top entry to continue.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing and the rejected-features record. **F2 Phase A ✅ (D-095) and F1a ✅ (D-103) are built; the churn diagnosis is answered in-place at the top** (artifacts, Workday-concentrated — P4.3 was the wrong tool, and "Workday page-membership drift" replaced it as F4's prerequisite).
 - `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090/D-093): extraction retained Haiku; the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live evals remain manual evidence, provider billing is authoritative, and no generic benchmark/paid CI gate/`no`-output follow-on exists.
+- `docs/updates/` — one doc per shipped **update** (a group of fixes/features released together) + a `README.md` holding the convention and the index. **`1.1.md`** = the funnel update (#111 → D-106): vertical switching, the `/demo` board, the 4-hourly split, favicon, location normalization — with the measured before/after and the carried-forward ledger. Read it to answer "what changed since launch" without replaying WORKLOG.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.
 
