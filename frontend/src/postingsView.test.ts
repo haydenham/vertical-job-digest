@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { PostingRow } from "./api";
-import { DEFAULT_SORT, activityIso, filterPostings, sortPostings } from "./postingsView";
+import {
+  DEFAULT_SORT,
+  activityIso,
+  displayLocation,
+  filterPostings,
+  sortPostings,
+} from "./postingsView";
 
 function row(over: Partial<PostingRow> = {}): PostingRow {
   return {
@@ -16,6 +22,7 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     comp_max: null,
     comp_raw: null,
     comp_display: null,
+    location_display: null,
     verdict: "yes",
     score: 72,
     fits: ["power markets"],
@@ -85,5 +92,38 @@ describe("filterPostings", () => {
     expect(filterPostings(rows, "")).toHaveLength(3);
     expect(filterPostings(rows, "   ")).toHaveLength(3);
     expect(filterPostings(rows, "boeing").map((p) => p.posting_id)).toEqual([3]);
+  });
+});
+
+describe("displayLocation", () => {
+  it("prefers the server's normalized form and falls back to the raw string", () => {
+    expect(
+      displayLocation(row({ location: "USA - Seal Beach, CA", location_display: "Seal Beach, California" })),
+    ).toBe("Seal Beach, California");
+    expect(displayLocation(row({ location: "Olathe, Kansas", location_display: null }))).toBe(
+      "Olathe, Kansas",
+    );
+    expect(displayLocation(row({ location: null, location_display: null }))).toBeNull();
+  });
+
+  it("sorts on what the user reads, not on the country prefix the board wrote", () => {
+    const seal = row({
+      posting_id: 1,
+      location: "USA - Seal Beach, CA",
+      location_display: "Seal Beach, California",
+    });
+    const austin = row({ posting_id: 2, location: "Austin, TX", location_display: "Austin, Texas" });
+    expect(
+      sortPostings([seal, austin], { key: "location", dir: "asc" }).map((p) => p.posting_id),
+    ).toEqual([2, 1]);
+  });
+
+  it("filters on both spellings, so a state name finds a row the board abbreviated", () => {
+    const rows = [
+      row({ posting_id: 1, location: "USA - Seal Beach, CA", location_display: "Seal Beach, California" }),
+      row({ posting_id: 2, location: "Remote", location_display: null }),
+    ];
+    expect(filterPostings(rows, "california").map((p) => p.posting_id)).toEqual([1]);
+    expect(filterPostings(rows, "usa -").map((p) => p.posting_id)).toEqual([1]);
   });
 });

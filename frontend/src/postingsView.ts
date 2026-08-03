@@ -6,6 +6,13 @@ export function activityIso(p: DisplayPosting): string {
   return p.source_updated_at ?? p.first_seen_at;
 }
 
+// What the user actually reads in the location column (D-106): the server's normalized form when
+// it has one, else the raw ATS string. Sorting and filtering key on this too, or "USA - Seal Beach,
+// CA" sorts under U and a search for "California" misses it.
+export function displayLocation(p: DisplayPosting): string | null {
+  return p.location_display ?? p.location;
+}
+
 export type SortKey = "company" | "title" | "location" | "activity" | "score";
 export type SortDir = "asc" | "desc";
 
@@ -33,7 +40,7 @@ function sortValue(p: DisplayPosting, key: SortKey): string | number | null {
     case "title":
       return p.title?.toLowerCase() ?? null;
     case "location":
-      return p.location?.toLowerCase() ?? null;
+      return displayLocation(p)?.toLowerCase() ?? null;
     case "activity":
       return activityIso(p);
     case "score":
@@ -59,10 +66,12 @@ export function sortPostings<T extends DisplayPosting>(postings: T[], sort: Sort
 }
 
 // Case-insensitive substring match over company/title/location; blank query keeps everything.
+// Both spellings of the location are searched — the displayed one so "California" finds "USA -
+// Seal Beach, CA", and the raw one so a query aimed at what the board wrote still lands.
 export function filterPostings<T extends DisplayPosting>(postings: T[], query: string): T[] {
   const q = query.trim().toLowerCase();
   if (!q) return postings;
   return postings.filter((p) =>
-    [p.company, p.title, p.location].some((f) => f?.toLowerCase().includes(q)),
+    [p.company, p.title, p.location, p.location_display].some((f) => f?.toLowerCase().includes(q)),
   );
 }

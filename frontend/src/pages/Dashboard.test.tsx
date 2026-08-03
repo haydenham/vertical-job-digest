@@ -54,6 +54,7 @@ function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
         comp_max: null,
         comp_raw: null,
         comp_display: null,
+        location_display: null,
         verdict: "yes",
         score: 72,
         fits: [],

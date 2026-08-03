@@ -376,6 +376,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   format. The API serves the raw columns plus the computed `comp_display`, so the judgment is
   server-side; the SPA renders `comp_display`, else `comp_raw` verbatim, else "Not listed", and
   never formats the integers itself. **Salary is panel-only** — no row column. (D-095, D-087, D-008)
+- **Location is normalized for display only; the stored value never changes.** `vja.location.
+  us_location_display` (bottom layer, zero LLM) expands a US state code to its full name and strips
+  the country affix and trailing ZIP, per `"; "`-delimited segment, collapsing exactly duplicated
+  segments; it returns `None` when there is nothing to improve and the caller then renders the raw
+  string. Served as `location_display` on `PostingRow` **and** `PublicPostingRow`, read by the table
+  cell, the panel, and the table's sort/filter key; the digest body reads it while the digest **audit
+  blob keeps the raw string**. `postings.location` stays L1-authoritative (D-043) and `in_scope`,
+  `content_hash` and the match prompt are all untouched. **Expansion, never contraction** — and an
+  ambiguous trailing code expands only on an explicit US mention, a code that is not also an ISO
+  country code, or a preceding city that is not a known foreign one; `DC` never expands. `vja.location`
+  duplicates `prefilter`'s state table (same-layer siblings cannot import each other) and a test pins
+  the two copies equal. (D-106, D-095, D-043)
 - **The dashboard never triggers a match** (read-only, D-005), so its window has zero LLM cost —
   the 5-day cap governs only the signup backfill, decoupled from the dashboard window. (D-041, D-039)
 - **Recency windows key on the ATS posted/updated date:** `COALESCE(source_updated_at,

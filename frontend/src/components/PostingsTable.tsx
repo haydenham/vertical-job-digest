@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { DisplayPosting } from "../api";
-import { NATURAL_DIR, activityIso, type SortKey, type SortState } from "../postingsView";
+import { NATURAL_DIR, activityIso, displayLocation, type SortKey, type SortState } from "../postingsView";
 import { MatchCell } from "./Verdict";
 
 // Activity date shown as a short UTC-ish date (see postingsView.activityIso — D-024/D-030).
@@ -61,7 +61,7 @@ function Row({
         )}
         {p.rationale && <span className="cell-snippet">{p.rationale}</span>}
       </span>
-      <span className="cell-location">{p.location ?? "—"}</span>
+      <span className="cell-location">{displayLocation(p) ?? "—"}</span>
       <span className="cell-date">{activityDate(p)}</span>
       {locked ? <LockedMatchCell /> : <MatchCell verdict={p.verdict ?? null} score={p.score ?? null} />}
       {/* Persistent affordance that the row opens a detail panel (D-087). Decorative only — the

@@ -5,6 +5,75 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-08-02 (later still) — Locations read the same way everywhere (D-106)
+
+**Housekeeping on the previous entry:** its `**Next:**` is **done** — `chore/favicon` is merged as
+**#117** (`8a87693`) and the tree was clean at the start of this session. Its visual pass (does the
+mark read at 16px, does the dark theme-colour look right on an iOS home screen) is still Hayden's and
+still open. Unchanged and still Hayden's: confirming Cloudflare is **proxying (orange-cloud)** before
+trusting the `s-maxage` half of the public cache header, `curl`ing the deployed `/robots.txt`,
+publishing the Google OAuth app off Testing, the GCP budget alert, the digest `new`-window hole, dead
+apply links now going public, and the **August billing check** (now due).
+
+### The problem was measured before it was fixed
+
+`postings.location` renders whatever the board wrote. A survey of the dev corpus (12,010 rows) found
+the same place written four ways — `Olathe, Kansas` beside `Kinston, NC`, plus `USA - Seal Beach, CA`,
+`Atlanta, GA, United States`, `US, Dayton, OH`, `West Palm Beach, FL, US, 33407`. Sorting the location
+column put every Workday `USA - …` row under **U**; filtering for a state found half the rows.
+
+**Display-only** (`vja.location` → a `location_display` computed field), which is `vja.comp` →
+`comp_display` again: the stored value stays L1-authoritative (D-043) and ships beside it, so there is
+**no migration, no Neon run, no backfill** over 12k rows. `content_hash` was never exposed either way
+(`pipeline._hash` keys on the fetcher's `RawPosting`), but the class of risk is now moot.
+
+**Expansion, not contraction** — Hayden's call, and the safer direction: contracting names to codes has
+to decide whether `Georgia` is a state or a country. The reverse collision was *measured* rather than
+guessed: in 12,010 rows exactly **three** would be mangled by naive expansion (`Gurugram, IN`,
+`Buenos Aires, AR`, `Bogota, CO`), because most countries these employers post from carry codes that
+are not US states at all (`UK`, `JP`, `MX`, `SG`, `QC`) and never reach the check. That sized the guard:
+an explicit US mention settles it, a non-ISO code cannot be a country, else the city must not be a known
+foreign one. `DC` never expands.
+
+Also stripped: the country affix and a trailing ZIP (same pass, most of the visible ugliness).
+Deliberately **not** title-cased — `OAKBROOK TERRACE` stays shouty rather than risk `McLean`/`NASA Ames`.
+Multi-site rows (Rippling's `"; "` merge, Workday's multi-site text; real rows run to fourteen segments)
+normalize per segment and rejoin, with exactly duplicated segments collapsed.
+
+**Out of scope on purpose:** the match prompt. `match.py` puts `Location:` in the prompt and a prompt
+change needs the eval suite plus signoff (D-020/D-090/D-093); the model already reads both forms.
+`prefilter`/`in_scope` untouched — this changes rendering, not which postings exist.
+
+### Verification
+
+Full gate green: **pytest 888** (830 + 58 new: 54 in `test_location.py`, plus 2 digest and 2 API),
+ruff/format/mypy clean,
+**`lint-imports` KEPT** — the new module sits in the bottom layer beside `comp`/`text`. Frontend
+**vitest 210 → 216**, eslint + `tsc -b --noEmit` clean.
+
+**Ran it against the real corpus, not just fixtures.** Normalized every distinct location in
+`data/vja.db` and read the diff by hand: 377 distinct strings change, 2,304 postings touched, and the
+148 changes that carry *no* US mention were checked one by one — every one correct, and the three known
+collisions are absent from the diff. Then served the built SPA through `vja-api` over the dev DB:
+`/`·`/dashboard`·`/demo` all 200, and `/api/public/postings` carries `location_display` on 43 of 170
+grid rows and 81 of 144 aviation rows. Rendered a digest from real DB rows — the body reads
+`(Dayton, Ohio)` where the ATS said `US, Dayton, OH`, the audit blob still records the raw string, and
+`Bogota, CO` stayed `Bogota, CO` in a live render.
+
+What I could not do is look at it: **the visual pass is Hayden's** — full state names make the column
+wider, and `.cell-location` has no truncation. Multi-site rows were already long, so this adds length to
+an existing category rather than a new one, but whether the table still reads well is a human call.
+
+**Two residuals, measured and left** (both pinned by tests so a future change is deliberate): boards
+writing `Country - State - City` lose the country but keep their dash order (80 postings corpus-wide, 1
+in-scope and open), and an unlisted foreign city paired with its own country code still reads as a US
+state — the same coarse-gate residual `prefilter` documents for "Munich, DE".
+
+**Next:** Hayden reviews/commits/PRs `feat/location-normalization` (branched off `main` at `8a87693`,
+independent of everything else). **No migration.** Nothing else opened.
+
+---
+
 ## 2026-08-02 (later) — Rolefeed has a favicon
 
 **Housekeeping on the previous entry:** its `**Next:**` is **done** — both funnel PRs are merged

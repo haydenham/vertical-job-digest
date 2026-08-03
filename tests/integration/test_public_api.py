@@ -65,6 +65,7 @@ def _posting(
     in_scope: bool = True,
     status: str = "open",
     description: str | None = None,
+    location: str | None = None,
     comp_min: int | None = None,
     comp_max: int | None = None,
     comp_raw: str | None = None,
@@ -84,6 +85,7 @@ def _posting(
                 extracted_at=first_seen,
                 in_scope=in_scope,
                 description=description,
+                location=location,
                 comp_min=comp_min,
                 comp_max=comp_max,
                 comp_raw=comp_raw,
@@ -246,6 +248,23 @@ def test_salary_judgment_stays_server_side(migrated_engine: Engine) -> None:
 
     assert rows["paid"]["comp_display"] == "$150,000 – $180,000"
     assert rows["hourly"]["comp_display"] is None  # not annual → suppressed, never fabricated
+
+
+def test_location_display_reaches_the_public_board(migrated_engine: Engine) -> None:
+    """The normalization is posting data, not résumé-derived, so a stranger reads the same tidy
+    location a signed-in user does (D-106/D-105)."""
+    emp = _employer(migrated_engine)
+    _posting(migrated_engine, emp, "messy", location="Atlanta, GA, United States")
+    _posting(migrated_engine, emp, "clean", location="Dallas, Texas")
+
+    body = (
+        _client(migrated_engine).get("/api/public/postings", params={"vertical": _VERTICAL}).json()
+    )
+    rows = {p["title"]: p for p in body["postings"]}
+
+    assert rows["messy"]["location"] == "Atlanta, GA, United States"
+    assert rows["messy"]["location_display"] == "Atlanta, Georgia"
+    assert rows["clean"]["location_display"] is None
 
 
 def test_public_detail_returns_the_body_and_404s_across_verticals(migrated_engine: Engine) -> None:

@@ -22,6 +22,11 @@ export interface BasePostingRow {
   company: string;
   title: string | null;
   location: string | null;
+  // The server's normalized rendering of `location` (D-106) — full state name, country affix and
+  // ZIP stripped, "; "-joined multi-site rows preserved. Null when the raw string is already in
+  // that form or cannot be improved, in which case show `location` verbatim. Never normalize here:
+  // `src/vja/location.py` owns the judgment, exactly like `comp_display`.
+  location_display: string | null;
   apply_url: string | null;
   first_seen_at: string;
   source_updated_at: string | null;
