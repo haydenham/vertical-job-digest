@@ -74,7 +74,7 @@ describe("App routing + guards", () => {
     mockUseAuth.mockReturnValue(auth({ user: alice, profile: gridProfile }));
     const first = renderAt("/dashboard");
     expect(
-      await screen.findByRole("dialog", { name: /your rolefeed, updated nightly/i }),
+      await screen.findByRole("dialog", { name: /your rolefeed, updated every 4 hours/i }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Skip" }));
@@ -94,7 +94,7 @@ describe("App routing + guards", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Open welcome tour" }));
     expect(
-      screen.getByRole("dialog", { name: /your rolefeed, updated nightly/i }),
+      screen.getByRole("dialog", { name: /your rolefeed, updated every 4 hours/i }),
     ).toBeInTheDocument();
   });
 

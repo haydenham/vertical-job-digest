@@ -352,6 +352,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   the login-free `/demo` board. Read with the WORKLOG top entry to continue.
 - `docs/18-post-beta-features.md` — the post-beta feature roadmap (D-087): intraday freshness + instant alerts, salary display (own extraction → H1B/DOL enrichment), recurring-gaps report, lifespan/urgency intel — with sequencing and the rejected-features record. **F2 Phase A ✅ (D-095) and F1a ✅ (D-103) are built; the churn diagnosis is answered in-place at the top** (artifacts, Workday-concentrated — P4.3 was the wrong tool, and "Workday page-membership drift" replaced it as F4's prerequisite).
 - `docs/19-llm-optimization-plan.md` — the pre-beta/Robotics LLM cost program (D-090/D-093): extraction retained Haiku; the human-reviewed eight-case matching decision selected GPT-5.6 Luna low over Sonnet medium. Live evals remain manual evidence, provider billing is authoritative, and no generic benchmark/paid CI gate/`no`-output follow-on exists.
+- `docs/21-update-1.2-plan.md` — the Update 1.2 plan of record: three independent PRs (paste-résumé input → a
+  hard 3-week posting age floor → actionable match advice), each with scope, DoD, out-of-scope, and risk, plus
+  the sequencing argument (2 before 3 so the cost increase lands on the smaller candidate set). Read with the
+  WORKLOG top entry to continue.
 - `docs/updates/` — one doc per shipped **update** (a group of fixes/features released together) + a `README.md` holding the convention and the index. **`1.1.md`** = the funnel update (#111 → D-106): vertical switching, the `/demo` board, the 4-hourly split, favicon, location normalization — with the measured before/after and the carried-forward ledger. Read it to answer "what changed since launch" without replaying WORKLOG.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.

@@ -101,7 +101,7 @@ export function Dashboard({ vertical }: { vertical: string }) {
       )}
 
       <div className="table-guide">
-        Click a row for salary, match rationale, and apply link · read-only · updates nightly
+        Click a row for salary, match rationale, and apply link · read-only · updates every 4 hours
       </div>
 
       {error ? (

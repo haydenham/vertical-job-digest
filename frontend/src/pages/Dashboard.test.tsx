@@ -94,7 +94,7 @@ describe("Dashboard", () => {
 
     // Names what the panel holds — the affordance half of the salary work (D-087).
     const guide = screen.getByText(
-      /click a row for salary, match rationale, and apply link · read-only · updates nightly/i,
+      /click a row for salary, match rationale, and apply link · read-only · updates every 4 hours/i,
     );
     const table = container.querySelector(".table");
     expect(table).not.toBeNull();
