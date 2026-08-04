@@ -150,7 +150,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   configured model route, provider exception class, and integer HTTP status; provider response text,
   headers, prompts, and API keys never remain in the raised exception or chained traceback. (D-090)
 - **Resume input abstracts to `resume_text`;** non-text formats are a signup-time adapter,
-  not pipeline concern. (D-033)
+  not pipeline concern. `vja.resume` owns both entry points — `extract_resume_text` (bytes, the file
+  upload) and `clean_resume_text` (an already-decoded string, the paste path) — sharing one tail
+  (strip → reject empty → `_MAX_CHARS`), so the two inputs cannot drift and no caller
+  re-implements the caps. (D-033, D-107)
 
 ## Diff & data model
 
@@ -305,14 +308,19 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   entirely without a profile (nothing to switch; the server 409s that case). (D-104, D-100, D-094)
 - **Résumé upload is the SPA's largest write surface** (`/onboarding` picks vertical + uploads; `/upload` re-uploads
   with the vertical **locked** to theirs — both soft-gated by login → `/login`; the POST is hard-gated by
-  `require_user`). **The 202 is the commit point (D-082):** after it, nothing may present as an upload failure —
+  `require_user`). **The résumé arrives as a file *or* as pasted text, and `POST /api/profiles` takes exactly
+  one of `file` / `resume_text`** — neither is a 422 and so is both (a caller sending both has a bug; silently
+  preferring one would hide it). The two are an *input* choice only: the SPA's mode toggle feeds one submit
+  handler, one error surface and one commit point, and every guard below keys on the extracted text, so pasting
+  what was uploaded is the same no-op as re-uploading it (D-107). **The 202 is the commit point (D-082):** after it,
+  nothing may present as an upload failure —
   the SPA's `/api/me` re-probe is silent (no global loading flip) with bounded retries, then navigates to
   `/dashboard` (last resort: a calm "uploaded — open your dashboard" state). Guard responses (401/413/422/429/404
   + **409 second-vertical**) surface a typed `ApiError`; transport failures get friendly copy and the POST carries
   a 30s abort timeout. **Reupload abuse guard:** identical extracted content keeps the same `202` response but does
   not refresh progress or schedule a backfill; the first upload remains allowed; changed content is limited to one
   accepted reupload per user per rolling 24 hours, atomically persisted on `users.last_resume_reupload_at`, with
-  `429` + integer-seconds `Retry-After` while blocked. (D-058, D-057, D-065, D-082, D-085)
+  `429` + integer-seconds `Retry-After` while blocked. (D-058, D-057, D-065, D-082, D-085, D-107)
 - **Backfill progress is a real server signal (D-082 — supersedes D-057's "no status endpoint" clause).** For a
   work-producing upload, the endpoint stamps `profiles.backfill_started_at` *before* scheduling
   `run_backfill` (so the immediate

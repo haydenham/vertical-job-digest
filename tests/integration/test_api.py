@@ -27,6 +27,7 @@ from vja.db.profiles import (
 )
 from vja.db.schema import employers, postings, profiles, users
 from vja.db.users import User, upsert_user_by_google
+from vja.resume import _MAX_CHARS as _MAX_RESUME_CHARS
 
 _NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
 _VERTICAL = "grid_power_software"
@@ -453,6 +454,181 @@ def test_upload_oversize_413(migrated_engine: Engine, monkeypatch: pytest.Monkey
     )
     assert resp.status_code == 413
     assert calls == []
+
+
+# --- pasted résumé text (Update 1.2, PR 1) -----------------------------------------------------
+# The endpoint takes exactly one of `file` / `resume_text`. Everything after the D-033 adapter is
+# shared code, so these tests exist to prove the paste path reaches it *and* that no guard was
+# weakened on the way past: identical-content no-op, rolling reupload clock, daily ceiling, and
+# the one-vertical 409 all key on the extracted text and must behave identically.
+
+_PASTED = "Jane Engineer. Python, grid software."
+
+
+def test_paste_creates_profile_and_triggers_backfill(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    resp = client.post(
+        "/api/profiles", data={"vertical": _VERTICAL, "resume_text": f"  {_PASTED}  "}
+    )
+    assert resp.status_code == 202
+
+    prof = get_profile(migrated_engine, resp.json()["profile_id"])
+    assert prof is not None
+    assert prof.resume_text == _PASTED  # stripped by the adapter, stored verbatim otherwise
+    assert prof.user_email == user.email
+    assert len(calls) == 1
+
+
+def test_paste_and_file_together_is_422(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A client sending both has a bug; silently picking one would hide it."""
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post(
+        "/api/profiles",
+        data={"vertical": _VERTICAL, "resume_text": _PASTED},
+        files=_TEXT_FILE,
+    )
+    assert resp.status_code == 422
+    assert "not both" in resp.json()["detail"]
+    assert calls == []
+
+
+def test_neither_file_nor_text_is_422(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL})
+    assert resp.status_code == 422
+    assert calls == []
+
+
+@pytest.mark.parametrize("pasted", ["", "   \n\t "])
+def test_paste_without_usable_text_is_422(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch, pasted: str
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL, "resume_text": pasted})
+    assert resp.status_code == 422
+    assert calls == []
+
+
+def test_paste_over_the_character_cap_is_422(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post(
+        "/api/profiles",
+        data={"vertical": _VERTICAL, "resume_text": "a" * (_MAX_RESUME_CHARS + 1)},
+    )
+    assert resp.status_code == 422
+    assert "too long" in resp.json()["detail"]
+    assert calls == []
+
+
+def test_paste_of_identical_content_is_the_same_no_op_as_a_file_reupload(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-085 keys on the extracted text, not the transport: pasting what was uploaded changes
+    nothing and schedules nothing."""
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    uploaded = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+    assert uploaded.status_code == 202
+
+    pasted = client.post("/api/profiles", data={"vertical": _VERTICAL, "resume_text": _PASTED})
+    assert pasted.status_code == 202
+    assert pasted.json() == uploaded.json()  # same profile, same resume_version
+    assert len(calls) == 1  # no second backfill
+
+
+def test_paste_is_held_to_the_rolling_reupload_limit(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(migrated_engine)
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    with freeze_time("2026-07-15 12:00:00"):
+        first = client.post("/api/profiles", data={"vertical": _VERTICAL}, files=_TEXT_FILE)
+        assert first.status_code == 202
+        changed = client.post(
+            "/api/profiles", data={"vertical": _VERTICAL, "resume_text": f"{_PASTED} SCADA."}
+        )
+        assert changed.status_code == 202
+
+        blocked = client.post(
+            "/api/profiles", data={"vertical": _VERTICAL, "resume_text": f"{_PASTED} SCADA, EMS."}
+        )
+        assert blocked.status_code == 429
+        assert blocked.headers["Retry-After"] == "86400"
+
+    assert len(calls) == 2
+
+
+def test_paste_refused_over_daily_budget_429(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VJA_DAILY_LLM_BUDGET_USD", "0")
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL, "resume_text": _PASTED})
+    assert resp.status_code == 429
+    assert calls == []
+
+
+def test_paste_into_a_second_vertical_rejected_409(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-104: the résumé form never moves a vertical, whichever input mode it used."""
+    user = _user(migrated_engine)
+    _profile(migrated_engine, email=user.email)  # active grid profile
+    client, calls = _upload_client(migrated_engine, user, monkeypatch)
+
+    resp = client.post(
+        "/api/profiles", data={"vertical": "aviation_software", "resume_text": _PASTED}
+    )
+    assert resp.status_code == 409
+    assert "one vertical per user" in resp.json()["detail"]
+    assert calls == []
+
+
+def test_paste_unknown_vertical_404(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, calls = _upload_client(migrated_engine, _user(migrated_engine), monkeypatch)
+    resp = client.post(
+        "/api/profiles", data={"vertical": "no_such_vertical", "resume_text": _PASTED}
+    )
+    assert resp.status_code == 404
+    assert calls == []
+
+
+def test_paste_requires_auth(migrated_engine: Engine) -> None:
+    resp = _client(migrated_engine).post(
+        "/api/profiles", data={"vertical": _VERTICAL, "resume_text": _PASTED}
+    )
+    assert resp.status_code == 401
+
+
+def test_paste_stamps_started_before_scheduling(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The D-082 commit-point guarantee is transport-independent: the SPA's immediate post-202
+    /api/me probe sees `running` after a paste too."""
+    user = _user(migrated_engine)
+    client, _calls = _upload_client(migrated_engine, user, monkeypatch)
+    resp = client.post("/api/profiles", data={"vertical": _VERTICAL, "resume_text": _PASTED})
+    assert resp.status_code == 202
+
+    started, completed = backfill_stamps(migrated_engine, resp.json()["profile_id"])
+    assert started is not None
+    assert completed is None
+    me = _authed_client(migrated_engine, user.email).get("/api/me")
+    assert me.json()["profile"]["backfill_status"] == "running"
 
 
 # --- /api/me: the SPA's routing source of truth (Phase B, D-064/D-065) ------------------------

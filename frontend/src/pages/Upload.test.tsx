@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, fetchVerticals, uploadResume, type Me } from "../api";
+import { ApiError, fetchVerticals, RESUME_MAX_CHARS, uploadResume, type Me } from "../api";
 import { useAuth, type AuthState } from "../auth/useAuth";
 import { Upload } from "./Upload";
 
@@ -84,7 +84,7 @@ describe("Upload", () => {
     // slugs render as descriptive cards via verticalCopy, the first pre-selected
     const card = await screen.findByRole("radio", { name: /energy & grid/i });
     expect(card).toBeChecked();
-    expect(screen.getByLabelText(/résumé/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("résumé file")).toBeInTheDocument();
     expect(screen.getByText(/drop your résumé here/i)).toBeInTheDocument();
   });
 
@@ -98,7 +98,7 @@ describe("Upload", () => {
     });
     renderUpload();
     await userEvent.click(await screen.findByRole("radio", { name: /aviation technology/i }));
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     expect(mockUpload).toHaveBeenCalledWith("aviation_software", resume);
   });
@@ -137,7 +137,7 @@ describe("Upload", () => {
     });
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
 
     expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
@@ -159,7 +159,7 @@ describe("Upload", () => {
     });
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
 
     // second probe attempt lands at +700ms and routes; no alert ever rendered
@@ -181,7 +181,7 @@ describe("Upload", () => {
     });
     renderUpload();
     await act(() => vi.advanceTimersByTimeAsync(0)); // flush the verticals fetch
-    fireEvent.change(screen.getByLabelText(/résumé/i), { target: { files: [resume] } });
+    fireEvent.change(screen.getByLabelText("résumé file"), { target: { files: [resume] } });
     fireEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
 
     await act(() => vi.advanceTimersByTimeAsync(0)); // POST resolves → finalizing
@@ -199,7 +199,7 @@ describe("Upload", () => {
     mockUpload.mockImplementation(() => new Promise(() => {})); // hangs (bounded by the api timeout)
     renderUpload();
     await act(() => vi.advanceTimersByTimeAsync(0));
-    fireEvent.change(screen.getByLabelText(/résumé/i), { target: { files: [resume] } });
+    fireEvent.change(screen.getByLabelText("résumé file"), { target: { files: [resume] } });
     fireEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
 
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -212,7 +212,7 @@ describe("Upload", () => {
     mockUpload.mockRejectedValue(new DOMException("The operation was aborted.", "AbortError"));
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/upload timed out/i);
   });
@@ -222,7 +222,7 @@ describe("Upload", () => {
     mockUpload.mockRejectedValue(new TypeError("Failed to fetch"));
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/couldn't reach the server/i);
@@ -254,7 +254,7 @@ describe("Upload", () => {
     mockUpload.mockRejectedValue(new ApiError(429, "daily budget exceeded"));
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/daily budget exceeded/i);
   });
@@ -264,10 +264,128 @@ describe("Upload", () => {
     mockUpload.mockRejectedValue(new ApiError(409, "profile already exists in grid_power_software"));
     renderUpload();
     await screen.findByRole("radio", { name: /energy & grid/i });
-    await userEvent.upload(screen.getByLabelText(/résumé/i), resume);
+    await userEvent.upload(screen.getByLabelText("résumé file"), resume);
     await userEvent.click(screen.getByRole("button", { name: /upload résumé/i }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/already set up in another vertical/i);
     expect(alert).toHaveTextContent(/profile already exists/i); // server detail still shown
+  });
+
+  // --- paste mode (Update 1.2, PR 1) ---------------------------------------------------------
+  // A second *input*, not a second flow: the mode picks what gets sent, and everything after the
+  // submit (the D-082 commit point, the probe, the error surface) is the same code either way.
+
+  describe("paste mode", () => {
+    const pasteMode = () => userEvent.click(screen.getByRole("button", { name: /paste text/i }));
+    const box = () => screen.getByLabelText(/résumé text/i);
+    const submit = () => screen.getByRole("button", { name: /use this résumé/i });
+
+    it("starts in file mode and swaps the file input for a textarea when toggled", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      expect(screen.getByLabelText("résumé file")).toBeInTheDocument();
+      expect(screen.queryByLabelText(/résumé text/i)).not.toBeInTheDocument();
+
+      await pasteMode();
+      expect(box()).toBeInTheDocument();
+      // Only one input is ever submitted, so only one is ever mounted (the endpoint 422s on both).
+      expect(screen.queryByLabelText("résumé file")).not.toBeInTheDocument();
+    });
+
+    it("submits the pasted text as a string, trimmed", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      mockUpload.mockResolvedValue({
+        profile_id: 5,
+        vertical: "grid_power_software",
+        resume_version: "v1",
+      });
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      await userEvent.type(box(), "  Jane Engineer  ");
+      await userEvent.click(submit());
+      expect(mockUpload).toHaveBeenCalledWith("grid_power_software", "Jane Engineer");
+    });
+
+    it("keeps submit disabled until the active mode has content", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      expect(submit()).toBeDisabled();
+
+      await userEvent.type(box(), "   "); // whitespace is not a résumé
+      expect(submit()).toBeDisabled();
+
+      await userEvent.type(box(), "Jane Engineer");
+      expect(submit()).toBeEnabled();
+    });
+
+    it("a chosen file does not enable submit while paste mode is active", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await userEvent.upload(screen.getByLabelText("résumé file"), resume);
+      await pasteMode();
+      expect(submit()).toBeDisabled();
+    });
+
+    it("switching modes does not discard what the other mode holds", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      await userEvent.type(box(), "Jane Engineer");
+
+      await userEvent.click(screen.getByRole("button", { name: /upload a file/i }));
+      await pasteMode();
+      expect(box()).toHaveValue("Jane Engineer");
+    });
+
+    it("counts characters and blocks submit over the cap", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      fireEvent.change(box(), { target: { value: "a".repeat(RESUME_MAX_CHARS + 1) } });
+
+      const count = screen.getByText(`${(RESUME_MAX_CHARS + 1).toLocaleString()} / 200,000`);
+      expect(count).toHaveClass("over");
+      expect(submit()).toBeDisabled();
+    });
+
+    it("routes to the dashboard on 202 exactly as the file mode does (D-082)", async () => {
+      const refresh = vi.fn().mockResolvedValue(me());
+      mockUseAuth.mockReturnValue(signedIn({ refresh }));
+      mockUpload.mockResolvedValue({
+        profile_id: 5,
+        vertical: "grid_power_software",
+        resume_version: "v1",
+      });
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      await userEvent.type(box(), "Jane Engineer");
+      await userEvent.click(submit());
+
+      expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+      expect(refresh).toHaveBeenCalledExactlyOnceWith({ silent: true });
+    });
+
+    it("surfaces a rejected paste through the same error surface", async () => {
+      mockUseAuth.mockReturnValue(signedIn());
+      mockUpload.mockRejectedValue(new ApiError(422, "no résumé text"));
+      renderUpload();
+      await screen.findByRole("radio", { name: /energy & grid/i });
+      await pasteMode();
+      await userEvent.type(box(), "Jane Engineer");
+      await userEvent.click(submit());
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(/couldn’t be read as text|couldn't be read as text/i);
+      expect(alert).toHaveTextContent(/no résumé text/i);
+      expect(box()).toHaveValue("Jane Engineer"); // a failed send is a real retry
+    });
   });
 });

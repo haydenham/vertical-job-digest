@@ -129,17 +129,17 @@ export function FeedbackDialog({ page, onClose }: { page: string; onClose: () =>
               </label>
               <textarea
                 id="feedback-message"
-                className="feedback-textarea"
+                className="textarea"
                 rows={6}
                 value={message}
                 disabled={sending}
                 placeholder={PLACEHOLDERS[category]}
                 onChange={(event) => setMessage(event.target.value)}
               />
-              <div className="feedback-meta">
+              <div className="field-meta">
                 <span>Your email and current page are included automatically.</span>
                 {message.length > FEEDBACK_MAX_CHARS * 0.8 && (
-                  <span className={tooLong ? "feedback-count over" : "feedback-count"}>
+                  <span className={tooLong ? "char-count over" : "char-count"}>
                     {message.length} / {FEEDBACK_MAX_CHARS}
                   </span>
                 )}

@@ -97,7 +97,7 @@ from vja.digest.send import SendError, load_config
 from vja.digest.unsubscribe import parse_unsubscribe_token
 from vja.location import us_location_display
 from vja.match import BackfillBudgetExceeded, check_backfill_budget, run_backfill
-from vja.resume import ResumeError, extract_resume_text
+from vja.resume import ResumeError, clean_resume_text, extract_resume_text
 from vja.verticals import ConfigError, available_verticals, load_vertical_config
 
 logger = logging.getLogger(__name__)
@@ -832,22 +832,36 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         user: Annotated[User, Depends(require_user)],
         background: BackgroundTasks,
         vertical: Annotated[str, Form()],
-        file: Annotated[UploadFile, File()],
+        file: Annotated[UploadFile | None, File()] = None,
+        resume_text: Annotated[str | None, Form()] = None,
     ) -> ProfileCreated:
-        """Upload a résumé → create/update this user's profile → kick off the signup backfill.
+        """Upload **or paste** a résumé → create/update this user's profile → kick off the backfill.
 
         The first write path (9.3, D-057). Behind `require_user` (401 without a session). The
-        résumé adapter (D-033) turns the file into `resume_text`; `upload_profile` atomically
-        applies the one-vertical rule, profile versioning, and D-085's rolling reupload guard.
-        Identical content is a 202 no-op with no backfill. Work-producing uploads run D-057's
-        global daily ceiling before committing, then `run_backfill` (the D-039 5-day catch-up)
-        runs in the background. PII discipline: the résumé text is never logged.
+        caller sends **exactly one** of `file` or `resume_text`: neither is a 422 and so are both
+        (a client sending both has a bug, and silently preferring one would hide it). Pasting is
+        the same D-033 seam the file upload already sits on — the adapter's job is to produce
+        `resume_text`, and how the characters arrived stops mattering here.
+
+        The adapter turns either form into text; `upload_profile` then atomically applies the
+        one-vertical rule, profile versioning, and D-085's rolling reupload guard. Those guards key
+        on the *extracted text*, so the paste path inherits every one of them unchanged. Identical
+        content is a 202 no-op with no backfill. Work-producing uploads run D-057's global daily
+        ceiling before committing, then `run_backfill` (the D-039 5-day catch-up) runs in the
+        background. PII discipline: the résumé text is never logged.
         """
-        data = await file.read()
-        if len(data) > _MAX_UPLOAD_BYTES:
-            raise HTTPException(413, f"file too large (max {_MAX_UPLOAD_BYTES} bytes)")
+        if file is not None and resume_text is not None:
+            raise HTTPException(422, "send either a résumé file or résumé text, not both")
         try:
-            resume_text = extract_resume_text(file.filename, data)
+            if file is not None:
+                data = await file.read()
+                if len(data) > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, f"file too large (max {_MAX_UPLOAD_BYTES} bytes)")
+                text = extract_resume_text(file.filename, data)
+            elif resume_text is not None:
+                text = clean_resume_text(resume_text)
+            else:
+                raise HTTPException(422, "send a résumé file or résumé text")
         except ResumeError as exc:
             raise HTTPException(422, str(exc)) from exc
 
@@ -863,7 +877,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 user_id=user.id,
                 user_email=user.email,
                 vertical=vertical,
-                resume_text=resume_text,
+                resume_text=text,
                 domain_vocabulary=cfg.domain_vocabulary,
                 before_backfill=lambda: check_backfill_budget(engine, now=stamp),
                 now=stamp,

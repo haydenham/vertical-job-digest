@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
-import { ApiError, fetchVerticals, uploadResume } from "../api";
+import { ApiError, fetchVerticals, RESUME_MAX_CHARS, uploadResume } from "../api";
 import { useAuth } from "../auth/useAuth";
 import { verticalCopy } from "../verticalCopy";
 
@@ -17,6 +17,10 @@ import { verticalCopy } from "../verticalCopy";
 // after may present as an upload failure — the `/api/me` re-probe is silent (no global `loading`
 // flip, so the form stays mounted) and retries bounded before falling back to a calm
 // "uploaded — open your dashboard" state.
+//
+// Update 1.2 adds a second *input* mode: file or pasted text. It is deliberately only an input
+// choice — one submit handler, one error surface, one commit point — because a résumé in a Google
+// Doc or on a phone otherwise has to be exported to a file before the user can see a single job.
 
 // Friendly leads for the write path's guard statuses (D-057; 409 = second vertical, D-064). The
 // server detail still renders after the lead; unmapped statuses fall back to the detail alone.
@@ -51,6 +55,9 @@ function toFormError(err: unknown): FormError {
 // back — offer a full-page hop to the dashboard (which re-probes auth from scratch).
 type Phase = "idle" | "uploading" | "finalizing" | "stalled";
 
+// Which input the user is filling in. Only one is submitted (the endpoint 422s on both).
+type Mode = "file" | "text";
+
 // Retry pacing for the post-202 profile probe (first attempt immediate).
 const FINALIZE_DELAYS_MS = [0, 700, 1500, 3000];
 
@@ -65,12 +72,20 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
   const navigate = useNavigate();
   const [verticals, setVerticals] = useState<string[]>([]);
   const [picked, setPicked] = useState("");
+  const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<FormError | null>(null);
 
   const isOnboarding = lockedVertical === undefined;
+  const trimmed = pasted.trim();
+  const tooLong = trimmed.length > RESUME_MAX_CHARS;
+  // Exactly one input is submitted, so only the active mode decides whether there is anything
+  // to send. Switching modes never discards what the other one holds.
+  const source: File | string | null =
+    mode === "file" ? file : trimmed !== "" && !tooLong ? trimmed : null;
 
   // Only the onboarding picker needs the list of joinable verticals; update mode is locked.
   useEffect(() => {
@@ -90,11 +105,11 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (file === null || vertical === "" || phase !== "idle") return;
+    if (source === null || vertical === "" || phase !== "idle") return;
     setPhase("uploading");
     setError(null);
     try {
-      await uploadResume(vertical, file);
+      await uploadResume(vertical, source);
     } catch (err: unknown) {
       setError(toFormError(err));
       setPhase("idle");
@@ -129,8 +144,8 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         <h1 className="auth-title">{isOnboarding ? "Set up your feed" : "Update your résumé"}</h1>
         <p className="auth-blurb">
           {isOnboarding
-            ? "Pick your vertical and upload a résumé, and we’ll match new roles to it every 4 hours."
-            : "Upload a new résumé. Recent roles re-match within minutes, and your full refreshed results land after tonight’s run."}
+            ? "Pick your vertical and add your résumé, and we’ll match new roles to it every 4 hours."
+            : "Add your updated résumé. Recent roles re-match within minutes, and your full refreshed results land after the next scheduled run."}
         </p>
 
         {isOnboarding ? (
@@ -163,41 +178,86 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
           </div>
         )}
 
-        <div
-          className={`dropzone${dragActive ? " drag-active" : ""}${file ? " has-file" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault(); // required for the drop event to fire
-            setDragActive(true);
-          }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragActive(false);
-            const dropped = e.dataTransfer.files?.[0];
-            if (dropped) setFile(dropped);
-          }}
-        >
-          <label className="dropzone-label">
-            <span className="label">résumé</span>
-            {file ? (
-              <>
-                <span className="file-name">{file.name}</span>
-                <span className="file-meta">{fileSize(file.size)} · choose a different file</span>
-              </>
-            ) : (
-              <>
-                <span className="dropzone-cta">Drop your résumé here, or click to browse</span>
-                <span className="dropzone-hint">text, markdown, or text PDF</span>
-              </>
-            )}
-            <input
-              type="file"
-              className="visually-hidden"
-              accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
+        <div className="field">
+          <span className="label">résumé</span>
+          <div className="segmented" role="group" aria-label="résumé input">
+            <button
+              type="button"
+              aria-pressed={mode === "file"}
+              disabled={phase !== "idle"}
+              onClick={() => setMode("file")}
+            >
+              Upload a file
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "text"}
+              disabled={phase !== "idle"}
+              onClick={() => setMode("text")}
+            >
+              Paste text
+            </button>
+          </div>
         </div>
+
+        {mode === "text" ? (
+          <div className="field">
+            <label className="visually-hidden" htmlFor="resume-text">
+              résumé text
+            </label>
+            <textarea
+              id="resume-text"
+              className="textarea"
+              rows={12}
+              value={pasted}
+              disabled={phase !== "idle"}
+              placeholder="Paste your résumé here. Plain text is fine, formatting is not needed."
+              onChange={(e) => setPasted(e.target.value)}
+            />
+            <div className="field-meta">
+              <span>Copy it out of a doc, a PDF, or your LinkedIn profile.</span>
+              <span className={tooLong ? "char-count over" : "char-count"}>
+                {trimmed.length.toLocaleString()} / {RESUME_MAX_CHARS.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`dropzone${dragActive ? " drag-active" : ""}${file ? " has-file" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault(); // required for the drop event to fire
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              const dropped = e.dataTransfer.files?.[0];
+              if (dropped) setFile(dropped);
+            }}
+          >
+            <label className="dropzone-label">
+              {file ? (
+                <>
+                  <span className="file-name">{file.name}</span>
+                  <span className="file-meta">{fileSize(file.size)} · choose a different file</span>
+                </>
+              ) : (
+                <>
+                  <span className="dropzone-cta">Drop your résumé here, or click to browse</span>
+                  <span className="dropzone-hint">text, markdown, or text PDF</span>
+                </>
+              )}
+              <input
+                type="file"
+                aria-label="résumé file"
+                className="visually-hidden"
+                accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
+        )}
 
         {error && (
           <div className="notice error form-error" role="alert">
@@ -235,17 +295,19 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         <button
           className="btn btn-primary"
           type="submit"
-          disabled={phase !== "idle" || file === null}
+          disabled={phase !== "idle" || source === null}
         >
           {phase === "uploading"
             ? "Uploading…"
             : phase === "idle"
-              ? "Upload résumé"
+              ? mode === "text"
+                ? "Use this résumé"
+                : "Upload résumé"
               : "Uploaded"}
         </button>
 
         <p className="upload-disclosure">
-          By uploading, you agree your résumé is processed by AI models from Anthropic and OpenAI
+          By continuing, you agree your résumé is processed by AI models from Anthropic and OpenAI
           to generate your matches. See our <Link to="/privacy">privacy notice</Link>.
         </p>
       </form>

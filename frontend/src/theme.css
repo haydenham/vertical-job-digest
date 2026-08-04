@@ -287,6 +287,12 @@ summary:focus-visible {
   background: var(--accent-tint-bg);
   color: var(--accent-tint-text);
 }
+/* Disabled while a form is in flight (feedback send, résumé upload): the choice is frozen,
+   so it must stop reading as clickable. */
+.segmented button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
 
 .checks {
   display: flex;
@@ -1633,6 +1639,53 @@ summary:focus-visible {
   gap: 10px;
 }
 
+/* ---- shared form fields: textarea + character counter ----
+   Written for the feedback dialog (D-100), generalized when the résumé paste box (Update 1.2)
+   needed the same surface. Both are a labelled textarea with a counter under it, so they are
+   one vocabulary rather than two lookalikes. */
+.textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: -0.1px;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  resize: vertical;
+  transition:
+    border-color var(--dur-fast) var(--ease-in-out),
+    background-color var(--dur-fast) var(--ease-in-out);
+}
+.textarea::placeholder {
+  color: var(--text-dim);
+}
+.textarea:hover:not(:disabled) {
+  border-color: var(--border-hover);
+}
+.textarea:disabled {
+  color: var(--text-muted);
+}
+.field-meta {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.char-count {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+/* Over the cap — the same red every other failure state uses. A character counter that has gone
+   past its limit IS an error, and the form's submit is already disabled by the time it turns. */
+.char-count.over {
+  color: var(--danger-text);
+}
+
 /* ---- in-app feedback dialog (D-100) ----
    Same backdrop/dialog scaffold as the tour and the delete confirm, widened for a textarea.
    Deliberately no entrance animation: neither sibling dialog has one, and the asymmetric
@@ -1675,54 +1728,7 @@ summary:focus-visible {
   display: grid;
   gap: 8px;
 }
-.feedback-dialog .segmented button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
 
-/* The file's first textarea. Matches the dropzone/input surface treatment. */
-.feedback-textarea {
-  width: 100%;
-  padding: 10px 12px;
-  font-family: var(--font-ui);
-  font-size: 13.5px;
-  line-height: 1.55;
-  letter-spacing: -0.1px;
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  resize: vertical;
-  transition:
-    border-color var(--dur-fast) var(--ease-in-out),
-    background-color var(--dur-fast) var(--ease-in-out);
-}
-.feedback-textarea::placeholder {
-  color: var(--text-dim);
-}
-.feedback-textarea:hover:not(:disabled) {
-  border-color: var(--border-hover);
-}
-.feedback-textarea:disabled {
-  color: var(--text-muted);
-}
-.feedback-meta {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.feedback-count {
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-/* Over the cap — now the same red every other failure state uses. A character counter that has
-   gone past its limit IS an error, and Send is already disabled by the time it turns. */
-.feedback-count.over {
-  color: var(--danger-text);
-}
 .feedback-actions {
   display: flex;
   justify-content: flex-end;

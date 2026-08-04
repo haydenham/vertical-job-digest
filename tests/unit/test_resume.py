@@ -3,11 +3,19 @@
 Pins the upload-boundary `bytes → resume_text` contract: text/markdown decode, text-PDF
 extraction, and every rejection mode (scanned/empty PDF, non-text bytes, empty, oversize) mapping
 to a `ResumeError`. PDFs are built at test time with correct xref offsets (no fixtures, no dep).
+Update 1.2 adds `clean_resume_text`, the paste path's entry point, pinned against the upload
+path's tail so the two cannot drift.
 """
 
 import pytest
 
-from vja.resume import _MAX_BYTES, _MAX_CHARS, ResumeError, extract_resume_text
+from vja.resume import (
+    _MAX_BYTES,
+    _MAX_CHARS,
+    ResumeError,
+    clean_resume_text,
+    extract_resume_text,
+)
 
 
 def _make_pdf(text: str) -> bytes:
@@ -91,3 +99,40 @@ def test_oversize_bytes_raise() -> None:
 def test_too_long_text_raises() -> None:
     with pytest.raises(ResumeError, match="too long"):
         extract_resume_text("resume.txt", b"a" * (_MAX_CHARS + 1))
+
+
+# --- the paste path (Update 1.2) --------------------------------------------------------------
+# `clean_resume_text` is the already-text sibling. It must share the upload path's tail exactly:
+# same strip, same emptiness rejection, same character cap. Its whole reason for existing is that
+# the API does not get to re-implement those rules.
+
+
+def test_pasted_text_is_stripped_and_returned() -> None:
+    assert clean_resume_text("  Jane Engineer\nPython, Go  ") == "Jane Engineer\nPython, Go"
+
+
+def test_pasted_text_matches_the_uploaded_text_exactly() -> None:
+    """Same characters in, same text out — so `resume_version` and therefore every guard keyed on
+    it (D-085's identical-content no-op, the rolling clock) cannot tell the two paths apart."""
+    body = "  Jane Engineer. Python, grid software.\n"
+    assert clean_resume_text(body) == extract_resume_text("resume.txt", body.encode())
+
+
+def test_pasted_empty_raises() -> None:
+    with pytest.raises(ResumeError, match="no résumé text"):
+        clean_resume_text("")
+
+
+def test_pasted_whitespace_only_raises() -> None:
+    with pytest.raises(ResumeError, match="no résumé text"):
+        clean_resume_text("   \n\t  ")
+
+
+def test_pasted_too_long_raises() -> None:
+    with pytest.raises(ResumeError, match="too long"):
+        clean_resume_text("a" * (_MAX_CHARS + 1))
+
+
+def test_pasted_at_the_cap_is_accepted() -> None:
+    """The boundary is inclusive on both paths."""
+    assert len(clean_resume_text("a" * _MAX_CHARS)) == _MAX_CHARS

@@ -341,14 +341,28 @@ export async function sendFeedback(
 // (a same-vertical retry is an idempotent update server-side, so aborting is always safe).
 export const UPLOAD_TIMEOUT_MS = 30_000;
 
-// `POST /api/profiles` (multipart): upload a résumé → create/update this user's profile → the
-// server kicks off the signup backfill in the background and returns 202. Maps the server's
-// guard responses to a typed `ApiError` (401 no session · 413 too large · 422 unreadable résumé ·
-// 429 daily LLM budget · 404 unknown vertical) carrying the server message for the form to show.
-export async function uploadResume(vertical: string, file: File): Promise<ProfileCreated> {
+// The server's own résumé character cap (`vja.resume._MAX_CHARS`). Duplicated here so the paste
+// box can count against it client-side; the server remains the one that enforces it (422).
+export const RESUME_MAX_CHARS = 200_000;
+
+// `POST /api/profiles` (multipart): send a résumé → create/update this user's profile → the
+// server kicks off the signup backfill in the background and returns 202. `source` is the file
+// the user chose **or** the text they pasted; the endpoint takes exactly one of the two, so this
+// sends exactly one part and everything downstream is the same code path. Maps the server's guard
+// responses to a typed `ApiError` (401 no session · 413 too large · 422 unreadable/empty résumé ·
+// 429 daily LLM budget or reupload limit · 409 second vertical · 404 unknown vertical) carrying
+// the server message for the form to show.
+export async function uploadResume(
+  vertical: string,
+  source: File | string,
+): Promise<ProfileCreated> {
   const form = new FormData();
   form.set("vertical", vertical);
-  form.set("file", file);
+  if (typeof source === "string") {
+    form.set("resume_text", source);
+  } else {
+    form.set("file", source);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
   let resp: Response;

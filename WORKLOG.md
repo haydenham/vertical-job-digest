@@ -5,7 +5,74 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-03 (last) — Update 1.2 planned: three PRs, `docs/21`
+## 2026-08-03 (last) — Update 1.2 PR 1: a résumé can be pasted (`feat/paste-resume`, D-107)
+
+**Housekeeping: the previous entry's `**Next:**` was half-done.** `fix/cadence-copy` merged as
+**#120** (`30e7d44`), which per the lifecycle in `docs/updates/README.md` *opens* Update 1.2 — but
+`docs/updates/1.2.md` was never created at that merge. Created here, with the #120 row and a
+provisional theme, plus the README index row. Also: a stale local `feat/paste-resume` branch existed
+at #114 with zero unique commits (a pure ancestor of `main`); fast-forwarded rather than renamed.
+
+### What was built
+
+`POST /api/profiles` now accepts **either** a `file` **or** a `resume_text` form field. The upload
+wall was the friction: a résumé living in a Google Doc, a LinkedIn profile, or on a phone had to be
+exported to a file before the product would show a single job.
+
+**The whole change is one endpoint branch, one adapter entry point, one frontend control** — no
+schema, no migration, no matching change, no digest change. That is D-033 working exactly as
+designed: the adapter's contract is "produce `resume_text`", and above that line how the characters
+arrived stops mattering.
+
+Three calls, now recorded as **D-107**:
+
+1. **Exactly one input; both is a 422**, with its own message distinct from the neither-case. A
+   client sending both has a bug, and silently preferring one hides it.
+2. **The rules stay in `vja.resume`.** `clean_resume_text` is the already-text sibling of
+   `extract_resume_text`, sharing its tail (strip → reject empty → `_MAX_CHARS`). Validating a
+   pasted string at the endpoint instead would have put the same two rules in two places.
+3. **Frontend mode, not flow.** A two-button `.segmented` control over *one* submit handler, one
+   error surface, one commit point — so D-082's 202-commit-point behaviour cannot diverge between
+   modes. Only the active mode's content enables submit, and switching modes never discards what
+   the other holds.
+
+### The guards were the actual risk, and they turned out safe by construction
+
+Every existing guard keys on the *extracted text* inside `upload_profile`, which sits downstream of
+the adapter: D-085's identical-content no-op, the rolling 24h changed-résumé limit, D-057's daily
+ceiling, D-104's second-vertical 409. So pasting exactly what was uploaded is the same no-op as
+re-uploading it. Verified rather than assumed — each guard is now pinned on the paste path, plus a
+unit test asserting the two entry points return identical text for identical characters, which is
+the property the guards actually rest on.
+
+**One thing worth knowing about the transport:** Starlette caps a non-file multipart part at 1 MiB,
+above the ~800 KiB worst case of `_MAX_CHARS` UTF-8 characters. So an ordinary over-cap paste still
+reaches our friendly 422; only a pathological multibyte one gets the transport's 400. Documented in
+the adapter rather than worked around.
+
+### Incidental cleanups, both deliberate
+
+- **The feedback dialog's textarea styles were generalized**, not duplicated: `.feedback-textarea` /
+  `.feedback-meta` / `.feedback-count` became `.textarea` / `.field-meta` / `.char-count` in their
+  own section, and `.segmented button:disabled` moved off its `.feedback-dialog` scope now that a
+  second form disables the control mid-flight.
+- **The file input gained `aria-label="résumé file"`.** The dropzone's own "résumé" span moved up to
+  the mode group's label, which would have left the input's accessible name depending on the CTA
+  text; ten existing tests queried it by that label and now query the explicit one.
+
+**Verification.** Full gate green: **pytest 907** (+16: 6 unit on the adapter sibling, 10 API on the
+paste path), **vitest 224** (+8 in a `paste mode` describe), ruff/format/mypy clean, `lint-imports`
+kept. Prettier is *not* part of this repo's gate (D-042: eslint + tsc + vitest) and is already
+unclean on `main`, so it was not run; the one indentation change was made by hand. No Postgres run
+locally — no schema or query change to dialect-test.
+
+**Next:** Hayden reviews and merges. Then **PR 2 (`feat/posting-age-cap`)**, whose blocking first
+step is the read-only Neon sizing query that wifi blocked last session; if Neon is still
+unreachable, build **PR 3** instead rather than guessing the threshold (`docs/21` sequencing).
+
+---
+
+## 2026-08-03 — Update 1.2 planned: three PRs, `docs/21`
 
 **Housekeeping: the previous entry's `**Next:**` is done.** The 1.1 docs merged mid-session as
 **#119** (`70a9afd`), so `docs/updates/` is on `main` and Update 1.1 is closed and published. The

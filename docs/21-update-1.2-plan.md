@@ -6,7 +6,8 @@ time. This is a **plan**, not a release record: when the work lands it gets `doc
 here becomes an ADR in `DECISIONS.md`. Live rules go to `docs/INVARIANTS.md` in the same session
 that changes them.*
 
-**Status: PLANNED — nothing built.**
+**Status: PR 1 built (`feat/paste-resume`, D-107). PRs 2 and 3 planned.** The update itself opened at
+#120 and its record is `docs/updates/1.2.md`.
 
 ---
 
