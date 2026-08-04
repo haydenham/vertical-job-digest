@@ -223,7 +223,7 @@ export function Settings() {
         </label>
         <p className="settings-hint">
           {receiving
-            ? "New matches land in your inbox after each nightly run."
+            ? "New matches land in your inbox in one digest each morning."
             : "Digest emails are paused. Matching and your dashboard keep running. Turn the toggle back on to resume, and you'll pick up where the digest left off."}
         </p>
         {digestError && (

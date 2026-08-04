@@ -13,7 +13,7 @@ describe("Login", () => {
   it("renders the auth card: heading + benefit lines", () => {
     render(<Login />);
     expect(screen.getByRole("heading", { name: /sign in to rolefeed/i })).toBeInTheDocument();
-    expect(screen.getByText(/nightly digest of new roles/i)).toBeInTheDocument();
+    expect(screen.getByText(/daily digest of new roles/i)).toBeInTheDocument();
     expect(screen.getByText(/honest match verdicts/i)).toBeInTheDocument();
     expect(screen.getByText(/every apply link verified/i)).toBeInTheDocument();
   });

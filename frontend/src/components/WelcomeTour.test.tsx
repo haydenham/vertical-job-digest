@@ -9,14 +9,14 @@ describe("WelcomeTour", () => {
     const onDismiss = vi.fn();
     render(<WelcomeTour onDismiss={onDismiss} />);
 
-    expect(screen.getByRole("dialog", { name: /your rolefeed, updated nightly/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /your rolefeed, updated every 4 hours/i })).toBeInTheDocument();
     expect(screen.getByText("1 of 4")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Matched for you" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("heading", { name: /your rolefeed, updated nightly/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /your rolefeed, updated every 4 hours/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     await userEvent.click(screen.getByRole("button", { name: "Next" }));

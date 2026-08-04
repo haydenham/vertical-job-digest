@@ -6,7 +6,7 @@ import { loginUrl } from "../api";
 // GOOGLE_CLIENT_* are set. Signing in is required — auth went ON at go-live (D-067), so there is
 // no logged-out browsing to advertise.
 const BENEFITS = [
-  "A nightly digest of new roles in your vertical",
+  "A daily digest of new roles in your vertical",
   "Honest match verdicts against your résumé",
   "Every apply link verified before it reaches you",
 ];

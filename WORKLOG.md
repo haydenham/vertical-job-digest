@@ -5,7 +5,99 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-02 (last) — Releases get a name: `docs/updates/` and Update 1.1
+## 2026-08-03 (last) — Update 1.2 planned: three PRs, `docs/21`
+
+**Housekeeping: the previous entry's `**Next:**` is done.** The 1.1 docs merged mid-session as
+**#119** (`70a9afd`), so `docs/updates/` is on `main` and Update 1.1 is closed and published. The
+planning work below was written just before that merge and rebased onto it.
+
+### What was decided, and what was not
+
+Three items, planned together and built one at a time, written up as `docs/21-update-1.2-plan.md`.
+Nothing was built this session — the task was explicitly "roughly plan all 3 first in docs".
+
+**The theme is the other half of 1.1's problem.** 1.1 opened the funnel (`/demo`, vertical
+switching, a landing page that reads well) because 5,000 launch views produced 10 uploads. 1.2 is
+about the people who *do* walk through: the upload wall (PR 1), ghost jobs (PR 2), and advice that
+argues rather than instructs (PR 3).
+
+Three calls made before writing, each with a rejected alternative worth recording:
+
+1. **The 3-week rule is a display floor, not a status change.** Age-closing loses a fight with the
+   diff: `close_posting` → the ATS still lists the role → `diff` calls it `new` → `sync_employer`
+   routes it to `reopen_posting`, which **resets `first_seen_at`** (D-053). The role would resurface
+   as brand new every four hours and be mailed out again. The floor goes in `dashboard_statement`
+   (so `/demo` inherits it structurally), `postings_needing_match` (the cost win — matching a
+   posting we will never display is pure waste), the digest `new` set, and the public per-vertical
+   counts. `postings.status` is never touched, so lifespan stats stay honest.
+2. **The reworked advice gets its own columns** (`resume_actions`, `application_notes`), not a
+   repurposing of `fits`/`gaps`. Costs a manual Neon migration; buys a schema that says what it
+   holds and a panel that can style the actionable part separately.
+3. **Existing matches are left alone.** Matching is idempotent per
+   `(posting, profile, resume_version)`, so a prompt change never recomputes an old judgment. New
+   rows fill in forward exactly as `postings.description` did (D-095). A corpus-wide re-match is
+   real money for uniformity nobody asked for.
+
+### Two corrections to the plan, both from Hayden pushing back
+
+**The age cap was mis-explained, not mis-designed.** "Age-closing loses to the diff" describes the
+*rejected* option (flipping `status`), not the feature. The chosen design already is the workaround
+— do not display them, do not match against them, never touch the row — and nothing about it is
+compromised. Worth recording because the plan doc read as though the whole item were in doubt.
+
+**The PR 3 risk rating was too high, and the reason given was the wrong one.** The genuine cost is
+tokens: the description is uncached volatile input, ~750 tokens a match. The "bad advice" risk is
+thinner than first written, because D-007's honesty rules already carry that weight and the new
+fields inherit them. Re-rated low-to-medium in `docs/21`, with cost named as the real axis.
+
+### The sizing question the plan cannot answer yet
+
+A survey of the **local** corpus (`data/vja.db`) returned "100% of open in-scope rows are older
+than 21 days", which is an artifact, not a finding: that DB is frozen at `first_seen_at`
+2026-06-30. Discarded. But it surfaced the real hazard — the freshness key is
+`COALESCE(source_updated_at, first_seen_at)` and `source_updated_at` is the **ATS's own posted
+date**. That is why 2023 rows sit at the bottom of the live dashboard, and it is also why a 21-day
+floor is dangerous: a board that stamps the original posted date and never updates it makes a
+genuinely active six-week-old req look identical to a ghost.
+
+So PR 2 gains a **blocking first step**: one read-only Neon query for the real age distribution,
+then pick the constant from it. Attempted this session and stopped — wifi was blocking the
+connection. `docs/21` now says to build PR 3 ahead of PR 2 if that is still true when its turn
+comes; a wrong constant costs more than a wrong order.
+
+### Shipped alongside: the cadence copy sweep (`fix/cadence-copy`)
+
+D-103 made the pipeline 4-hourly and left the digest daily, but never swept the SPA copy. Six
+strings still said "nightly", including the `.table-guide` line under the dashboard heading. Fixed,
+keeping the two cadences distinct: **"updates every 4 hours"** for the pipeline surfaces
+(`Dashboard` guide line, `WelcomeTour` slide 1, `Upload` blurb), **"a digest each morning"** for the
+inbox surfaces (`Settings` hint, `Login` benefit), and slide 4's résumé-refresh line now says "the
+next scheduled run" rather than naming a cadence it does not control. Six test assertions updated
+with them; frontend gate green (216 tests, tsc, eslint). No em dashes added (D-099).
+
+**The one substantive discovery while reading the code:** `_posting_text` does **not** send the
+posting description to the matcher — only title/level/location/remote/work-auth/stack/comp. Advice
+of the form "the posting names Kafka twice and your résumé never says it" is impossible without the
+body. `postings.description` has existed since D-095, so PR 3 includes it (truncated, measured):
+that is the change that makes the advice grounded, and also the change that raises per-match cost.
+It is why PR 2 sequences before PR 3 — the cost increase should land on the already-shrunk
+candidate set, not on one we were about to cut.
+
+**Verification.** Docs-only. No `src/`, no `frontend/`, no config, no migration, so no gate applies
+and none was run. What *was* checked against the code rather than remembered: the reopen path in
+`db/postings.py`, the digest's `first_seen_at > since` window in `digest/assembly.py`, the public
+counts route (`app.py:710` → `open_posting_counts_by_vertical`), the absence of a description in
+`match._posting_text`, that the digest body carries `rationale` but not `fits`/`gaps`, and that
+`PublicPostingRow` structurally omits the match fields (which PR 3 must not undo).
+
+**Next:** merge `fix/cadence-copy` (which **opens Update 1.2** — `docs/updates/1.2.md` gets created
+at that merge, per the lifecycle in `docs/updates/README.md`), then build **PR 1
+(`feat/paste-resume`)**. PR 2 waits on one read-only Neon query. No ADR was written this session:
+the three calls above become ADRs when the PRs that implement them land, not before.
+
+---
+
+## 2026-08-02 — Releases get a name: `docs/updates/` and Update 1.1
 
 **Housekeeping first, because the session's stated task was already finished.** The handoff asked for
 US location normalization. That is **D-106**, built earlier the same day: `src/vja/location.py`,

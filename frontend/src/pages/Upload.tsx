@@ -129,7 +129,7 @@ export function Upload({ lockedVertical }: { lockedVertical?: string } = {}) {
         <h1 className="auth-title">{isOnboarding ? "Set up your feed" : "Update your résumé"}</h1>
         <p className="auth-blurb">
           {isOnboarding
-            ? "Pick your vertical and upload a résumé, and we’ll match new roles to it nightly."
+            ? "Pick your vertical and upload a résumé, and we’ll match new roles to it every 4 hours."
             : "Upload a new résumé. Recent roles re-match within minutes, and your full refreshed results land after tonight’s run."}
         </p>
 

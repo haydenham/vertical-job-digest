@@ -4,11 +4,11 @@ export const TOUR_SEEN_KEY = "rolefeed.tour.seen";
 
 const SLIDES = [
   {
-    title: "Your Rolefeed, updated nightly",
+    title: "Your Rolefeed, updated every 4 hours",
     body:
-      "Rolefeed watches a curated set of employers in your technology vertical. Each night it " +
-      "finds new, updated, and closed roles, verifies every apply link, and sends new matches " +
-      "to your inbox.",
+      "Rolefeed watches a curated set of employers in your technology vertical. Every four hours " +
+      "it finds new, updated, and closed roles and verifies every apply link. New matches go to " +
+      "your inbox in one digest each morning.",
   },
   {
     title: "Matched for you",
@@ -28,7 +28,7 @@ const SLIDES = [
     body:
       "Click any row (the ▸ on the right) to see its salary, rationale, fits, gaps, and apply " +
       "link. When your résumé changes, recent roles re-match within minutes and the full refresh " +
-      "completes with the next nightly run.",
+      "completes with the next scheduled run.",
   },
 ] as const;
 
