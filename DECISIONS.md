@@ -2569,3 +2569,45 @@ risk than reach), and an *unlisted* foreign city paired with its own country cod
 US state, which is the same coarse-gate residual `prefilter` already documents for "Munich, DE".
 Both are pinned by tests so a future change is deliberate.
 References D-095, D-087, D-043, D-105, D-099, D-038, D-030, D-023, D-020, D-090, D-093, D-021.
+
+### D-107 · Product/Onboarding · A résumé may be pasted as text, and the endpoint takes exactly one input · accepted · 2026-08-03
+Update 1.2 PR 1 (`docs/21`). `POST /api/profiles` required a `file` part, so a user whose résumé
+lives in a Google Doc, a LinkedIn profile, or a phone had to find and export a file before the
+product would show them a single job. It now accepts **either** a `file` **or** a `resume_text` form
+field.
+
+**Exactly one, and both is an error (422).** Neither is a 422 too. A client sending both has a bug,
+and silently preferring one would hide it; there is no ambiguity worth resolving in the server's
+favour. Three separate messages so the caller learns which mistake it made.
+
+**This is the D-033 seam doing its job, and the PR is proof of it.** The adapter's contract is
+"produce `resume_text`"; how the characters arrived stops mattering above it. So there is **no
+schema change, no migration, no matching change, no digest change** — the diff is one endpoint
+branch, one new adapter entry point, and one frontend control.
+
+**The rules live in `vja.resume`, not in the API.** `clean_resume_text` is the already-text sibling
+of `extract_resume_text` and shares its tail (strip → reject empty → `_MAX_CHARS`). The alternative,
+validating a pasted string at the endpoint, would have put the same two rules in two places and let
+them drift on the first change. There is no byte ceiling on the paste path: the caller holds a
+decoded `str`, and Starlette caps a non-file multipart part at 1 MiB — above the ~800 KiB worst case
+of `_MAX_CHARS` UTF-8 characters, so an ordinary over-cap paste still reaches our friendly 422 and
+only a pathological multibyte one gets the transport's 400.
+
+**Every existing guard is inherited by construction, and tested rather than assumed.** The D-085
+identical-content no-op, the rolling 24-hour changed-résumé limit, D-057's daily ceiling and D-104's
+second-vertical 409 all key on the *extracted text* inside `upload_profile`, which sits downstream
+of the adapter. Pasting exactly what was uploaded is therefore the same no-op as re-uploading it.
+The paste path is pinned against each guard so this stays true, and a unit test asserts the two
+entry points return identical text for identical characters — the property the guards rest on.
+
+**Frontend: an input mode, not a second flow.** `Upload.tsx` gains a two-button `.segmented` control
+(the existing vocabulary, already used by the feedback picker and the dashboard toggles) over one
+submit handler, one error surface and one commit point, so D-082's "the 202 is the commit point"
+behaviour cannot diverge between modes. Only the active mode's content enables submit; switching
+modes never discards what the other holds. The feedback dialog's textarea styles were generalized
+into a shared `.textarea` / `.field-meta` / `.char-count` vocabulary rather than duplicated.
+
+**Deliberately out of scope:** repairing the broken line wrapping of text pasted out of a PDF viewer
+(the model reads it fine, and a "helpful" reflow would corrupt real résumés to fix a cosmetic
+problem), LinkedIn import, and persisting a draft between visits.
+References D-033, D-057, D-082, D-085, D-104, D-042, D-100, D-021.

@@ -6,9 +6,11 @@ nothing more: it turns an uploaded file into clean text, or rejects it. A **leaf
 `vja` module, so it sits at the bottom of the import layering.
 
 Scope (Phase 9.3, D-057): UTF-8 text/markdown and **text-based PDFs** (`pypdf`). A scanned/image PDF
-has no extractable text layer → rejected (OCR / Claude native-PDF input is a later add). All failure
-modes raise `ResumeError` so the API can map them to a 4xx. **PII discipline (docs/11 §3.1): never
-log the text or the raw bytes.**
+has no extractable text layer → rejected (OCR / Claude native-PDF input is a later add). Update 1.2
+adds the paste path: `clean_resume_text` is the sibling entry point for input that is *already* text
+and needs no decoding, so the emptiness and length rules stay in one place instead of being
+re-implemented at the API. All failure modes raise `ResumeError` so the API can map them to a 4xx.
+**PII discipline (docs/11 §3.1): never log the text or the raw bytes.**
 """
 
 from __future__ import annotations
@@ -53,6 +55,29 @@ def extract_resume_text(filename: str | None, data: bytes) -> str:
             if is_pdf
             else "no extractable text"
         )
+    return _within_char_cap(text)
+
+
+def clean_resume_text(text: str) -> str:
+    """Validate résumé text that arrived *as text* (the paste path), or raise `ResumeError`.
+
+    The sibling of `extract_resume_text` for input needing no decoding. It shares that function's
+    tail — strip, reject empty, enforce `_MAX_CHARS` — so the pasted path cannot drift from the
+    uploaded one; everything downstream (`resume_version`, the D-085 identical-content no-op, the
+    rolling reupload clock) keys on this returned text and is therefore unchanged by construction.
+
+    There is no byte ceiling here: the caller already holds a decoded `str`, and the transport
+    bounds the field long before `_MAX_CHARS` does (Starlette caps a non-file multipart part at
+    1 MiB, above the ~800 KiB worst case of `_MAX_CHARS` UTF-8 characters).
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        raise ResumeError("no résumé text")
+    return _within_char_cap(cleaned)
+
+
+def _within_char_cap(text: str) -> str:
+    """The one length check, shared by both entry points; the boundary itself is accepted."""
     if len(text) > _MAX_CHARS:
         raise ResumeError(f"résumé too long ({len(text)} chars; max {_MAX_CHARS})")
     return text
