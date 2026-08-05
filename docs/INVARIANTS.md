@@ -53,9 +53,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   runs fetch → diff → extract → match **every 4 hours** (`0 1,5,9,13,17,21` America/Chicago);
   `vja-digest` sends **once a morning** (`0 6`), one hour after a completed pass. Without the flag
   `vja-nightly` still composes the whole loop including the send — the flag *is* the split, and
-  dropping it in deploy config would send every user six digests a day. **The digest needed no
-  window change:** `build_digest` resolves `since` to `last_sent_at` for that recipient, not to a
-  fixed 24 hours. `vja-nightly` keeps its name despite the cadence (renaming a live Cloud Run Job,
+  dropping it in deploy config would send every user six digests a day. **The split did force a
+  digest window change** (D-108, correcting D-103's original "no window change" claim): `since` still
+  resolves to `last_sent_at` rather than a fixed 24 hours, but two Jobs on two schedules mean a
+  posting's eligibility is no longer settled when the window closes — see the `new`-set rule under
+  *Digest & delivery*. `vja-nightly` keeps its name despite the cadence (renaming a live Cloud Run Job,
   its Scheduler trigger, and its alert policies buys nothing). `vja-run`/`vja-extract`/`vja-match`
   remain debugging entry points. The scheduler is a swappable trigger, not code. (D-103, D-031)
 - **A pipeline run is skipped if a `running` row younger than `RUN_STALE_AFTER` (4h) exists**, and the
@@ -187,6 +189,20 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 - **Verification before digest:** every apply link must resolve before a posting ships.
   One fake posting costs more trust than ten real ones earn. (D-008)
+- **A posting is `new` when it was first seen since the last send *or* the pipeline matched it since
+  the last send** — `first_seen_at > since OR (matches.created_at > since AND trigger = nightly)`
+  (`digest/assembly.py::_unreported_clause`). The `first_seen_at` half alone silently lost any posting
+  whose match landed after the digest covering its `first_seen_at`, because `last_sent_at` only moves
+  forward: the window filtered the posting while the INNER JOIN required the match, two different
+  clocks. **Both halves are required.** Without the match half, the D-103 Job split loses a posting
+  first seen at 05:30 and matched at 06:20 (also `VJA_PIPELINE_MAX_MATCHES` deferrals and per-posting
+  match failures). Without the `first_seen_at` half, a **reopened** posting stops shipping — it resets
+  `first_seen_at` to re-enter the `new` set (D-053) but reuses its old match row. **The `trigger=nightly`
+  gate is not optional:** a résumé re-upload or vertical switch writes `backfill` matches with a fresh
+  `created_at` over postings of any age, which without the gate mails a hundred-row digest of
+  already-read roles. **Still open:** a D-008 quarantine drops a posting permanently once a send that
+  ships anything else advances `sent_at`; closing it needs a durable sent-ledger + migration. (D-108,
+  D-103, D-053, D-028, D-008)
 - **Digest recipient is the matched profile's `user_email`.** `VJA_DIGEST_RECIPIENT` is the
   **ops/alert** recipient (failure alerts), NOT the digest recipient. (D-027, D-037)
 - **Empty digest = skip send:** no email, no `digests` row. (D-028)

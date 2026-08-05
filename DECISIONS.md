@@ -2611,3 +2611,71 @@ into a shared `.textarea` / `.field-meta` / `.char-count` vocabulary rather than
 (the model reads it fine, and a "helpful" reflow would corrupt real résumés to fix a cosmetic
 problem), LinkedIn import, and persisting a draft between visits.
 References D-033, D-057, D-082, D-085, D-104, D-042, D-100, D-021.
+
+### D-108 · Product/Digest · The digest's `new` set windows on match time as well as first-seen time · accepted · 2026-08-04
+Update 1.2, unplanned — a reported bug, not one of `docs/21`'s three PRs. New roles were reaching the
+dashboard and never reaching the inbox. This is the **digest `new`-window hole** that 1.1's
+known-and-not-fixed ledger predicted and recorded as "not observed in production". It has now been
+observed in production, so it gets fixed rather than carried forward again.
+
+**The defect is that the `WHERE` and the `JOIN` were clocked off different things.** `build_digest`
+selected `new` as `postings.first_seen_at > last_sent_at` INNER-JOINed to a relevant match row: the
+window asked "was this posting first seen recently?" when the question it needed answered was "is
+there a judgment here I have not sent?". `last_sent_at` only ever moves forward, so any posting whose
+match arrives *after* the digest that covered its `first_seen_at` is invisible to that digest and to
+every digest after it, permanently, while the dashboard shows it the whole time.
+
+**D-103 widened the hole from a rarity into a daily hazard.** When fetch → match → send were one
+process (D-005) eligibility was settled before the window closed. They are now two Jobs on two
+schedules: the pipeline runs `0 1,5,9,13,17,21` CT with a 3h task timeout, and `vja-digest` sends at
+`0 6`. A posting first seen at 05:30 and matched at 06:20 is lost by construction. The 1.1 ledger
+named two routes in (a per-posting match failure, pre-existing since Phase 5; `VJA_PIPELINE_MAX_MATCHES`
+deferral, new in D-103); this session found the third and worst, which is simply the two Jobs
+overlapping, and needs nothing to fail at all.
+
+**The fix is one predicate and no migration:** `first_seen_at > since` **OR** (`matches.created_at >
+since` **AND** `matches.trigger = nightly`). Both columns already existed.
+
+**The `trigger=nightly` gate is load-bearing, and the naive OR without it is a bug.** A résumé
+re-upload or a vertical switch (D-104/D-085) writes `trigger=backfill` rows with a fresh `created_at`
+over postings of *any* age, up to `VJA_BACKFILL_MAX_POSTINGS`. Admitting those would mail a user a
+hundred-row digest of roles they had already read, as the direct consequence of updating their
+résumé. Only the pipeline's own matches describe work the recipient has not been told about.
+
+**The `first_seen_at` half is kept, not replaced, and is not redundant.** A reopened posting resets
+`first_seen_at` to re-enter the `new` set (D-053) but reuses its existing match row, so its
+`created_at` is old — only the first half surfaces it. Replacing rather than OR-ing would have
+silently stopped mailing reopened roles. `db/matches.py` also states outright that nightly matching
+is date-uncapped *because* the digest's `first_seen_at` window keeps old roles out of the inbox; that
+remains true and is what bounds the blast radius of the new half.
+
+**Quarantine is the one route left open, it is out of scope here, and production says it is the
+*larger* hole.** A D-008 verification failure drops a posting from `new` while a send that ships
+anything else advances `sent_at` past it — its `created_at` is behind the new window exactly as
+`first_seen_at` was. Closing that needs a durable per-recipient record of what shipped
+(`digests.contents` holds the audit blob but is JSON), which is a migration and its own decision. An
+all-quarantine morning is already safe: D-028 writes no `digests` row, so the window does not advance.
+
+**Measured on Neon, 2026-08-04**, decomposing every open relevant-matched posting never mailed to its
+recipient (775 pairs, for recipients with at least one send; zero rows left unexplained):
+**659 quarantined · 93 not yet due · 23 this window bug.** The fix above addresses the smallest
+bucket. The 659 are **202 distinct still-open postings, 194 of them Greenhouse across 27 employers**,
+and five sampled at random all return HTTP 200 to `verify_apply_url` today. They cluster into bursts —
+524 quarantines inside four minutes on 2026-07-31, 142 on 2026-08-03, against 0-7 on ordinary days —
+which is the shape of a rate limit, not of dead links: `build_digest` runs per recipient and re-verifies
+the same URL once per profile, so one morning fires tens of duplicate HEADs at `boards.greenhouse.io`.
+`verify_apply_url` maps any `httpx.HTTPError` to False (fail-closed, correct per D-008), and the
+forward-only window then makes that transient answer permanent. **This is a live product defect and a
+politeness violation (D-018 conventions), and it needs its own PR:** dedupe verification per posting per
+send, and make a transient failure retryable rather than final. D-108 does not fix it.
+
+**Three existing tests failed on the fix and none of them was wrong about behaviour.** All three
+stamped `created_at=datetime.now(UTC)` against hardcoded 2026-06 cutoffs, so postings deliberately
+placed *before* the window carried matches *after* it. The fixtures were dated deliberately and **no
+assertion was changed** — in the send test the old posting is shipped by the baseline send, so its
+match provably predates that send. A fixture that could not occur in production was pinning the
+behaviour of one that can.
+
+**Not fixed forward:** roles already lost are still lost — 23 to this bug, 659 to quarantine. A
+backfill is only worth building after the quarantine fix, or it would re-lose the same rows.
+References D-103, D-053, D-028, D-008, D-104, D-085, D-057, D-037, D-027, D-005, D-021, D-018.

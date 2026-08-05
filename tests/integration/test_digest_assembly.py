@@ -87,6 +87,8 @@ def _match(
     *,
     verdict: str = "yes",
     score: int = 70,
+    trigger: str = "nightly",
+    created_at: datetime | None = None,
 ) -> None:
     with begin(engine) as conn:
         save_match(
@@ -96,8 +98,8 @@ def _match(
             profile.resume_version,
             {"verdict": verdict, "score": score, "fits": "[]", "gaps": "[]", "rationale": "ok"},
             model="claude-sonnet-4-6",
-            trigger="nightly",
-            now=datetime.now(UTC),
+            trigger=trigger,
+            now=created_at or datetime.now(UTC),
         )
 
 
@@ -188,8 +190,10 @@ def test_window_includes_only_changes_after_since(migrated_engine: Engine) -> No
     _posting(
         migrated_engine, emp, "new-closed", first_seen=before, status="closed", closed_at=after
     )
-    _match(migrated_engine, old_open, prof)
-    _match(migrated_engine, new_open, prof)
+    # Match times are explicit: each posting was matched by the run that first saw it, so this
+    # pins the plain window and not the D-103 late-match case (below).
+    _match(migrated_engine, old_open, prof, created_at=before)
+    _match(migrated_engine, new_open, prof, created_at=after)
 
     contents = build_digest(
         migrated_engine, "grid_power_software", profile=prof, since=cutoff, verify=_PASS
@@ -206,13 +210,56 @@ def test_since_auto_resolves_from_last_sent_digest(migrated_engine: Engine) -> N
     _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=cutoff)
     old = _posting(migrated_engine, emp, "old", first_seen=cutoff - timedelta(days=1))
     fresh = _posting(migrated_engine, emp, "fresh", first_seen=cutoff + timedelta(days=1))
-    _match(migrated_engine, old, prof)
-    _match(migrated_engine, fresh, prof)
+    _match(migrated_engine, old, prof, created_at=cutoff - timedelta(days=1))
+    _match(migrated_engine, fresh, prof, created_at=cutoff + timedelta(days=1))
 
     contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
 
     assert contents.since == cutoff
     assert {p.external_id for p in contents.new} == {"fresh"}
+
+
+def test_match_landing_after_the_send_is_not_lost(migrated_engine: Engine) -> None:
+    """A pipeline match written *after* the digest that covered its `first_seen_at` still ships.
+
+    The D-103 regression: the pipeline (every 4h) and the digest (06:00) are separate Jobs, so a
+    posting can be first seen at 05:30, be matched at 06:20, and find that the 06:00 digest already
+    advanced `last_sent_at` past its `first_seen_at`. Windowing on `first_seen_at` alone drops it
+    from every future digest while the dashboard shows it — the reported bug.
+    """
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    first_seen = datetime(2026, 6, 16, 5, 30, tzinfo=UTC)
+    sent = datetime(2026, 6, 16, 6, 0, tzinfo=UTC)
+    matched = datetime(2026, 6, 16, 6, 20, tzinfo=UTC)
+
+    late = _posting(migrated_engine, emp, "late-match", first_seen=first_seen)
+    _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=sent)
+    _match(migrated_engine, late, prof, created_at=matched, trigger="nightly")
+
+    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+
+    assert contents.since == sent
+    assert {p.external_id for p in contents.new} == {"late-match"}
+
+
+def test_backfill_matches_do_not_resurface_old_postings(migrated_engine: Engine) -> None:
+    """A recent *backfill* match over an old posting stays out — the re-upload flood guard.
+
+    A resume re-upload or vertical switch re-matches up to `VJA_BACKFILL_MAX_POSTINGS` postings
+    with a fresh `created_at` regardless of age. Only `trigger=nightly` earns the match-time window;
+    otherwise one re-upload mails the user a digest of roles they have already seen.
+    """
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    sent = datetime(2026, 6, 16, 6, 0, tzinfo=UTC)
+    old = _posting(migrated_engine, emp, "old", first_seen=sent - timedelta(days=30))
+    _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=sent)
+    _match(migrated_engine, old, prof, created_at=sent + timedelta(hours=1), trigger="backfill")
+
+    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+
+    assert contents.new == []
 
 
 def test_dead_links_are_quarantined(migrated_engine: Engine) -> None:
