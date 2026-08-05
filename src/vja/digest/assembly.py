@@ -12,6 +12,11 @@ vertical-global (no rationale).
 Window: `since` defaults to the last successfully-sent digest **for this recipient** in the
 vertical (`last_sent_at`). When there is none (the first digest), `since is None` → every
 currently-relevant open posting is `new` (the baseline) and `closed` is empty.
+
+A posting is `new` when it was first seen since that send **or** the pipeline matched it since
+that send (`_unreported_clause`). The second half exists because the pipeline and the digest are
+separate Jobs on separate schedules (D-103), so a posting's eligibility is not settled when the
+window closes; without it, a match landing after the morning send is never mailed at all.
 """
 
 from __future__ import annotations
@@ -22,12 +27,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, cast
 
-from sqlalchemy import Engine, RowMapping, Select, func, select
+from sqlalchemy import ColumnElement, Engine, RowMapping, Select, and_, func, or_, select
 
 from vja.db.profiles import Profile
 from vja.db.schema import digests, employers, matches, postings
 from vja.digest.verification import default_client, verify_apply_url
-from vja.models import RELEVANT_VERDICTS, DigestStatus, PostingStatus
+from vja.models import RELEVANT_VERDICTS, DigestStatus, MatchTrigger, PostingStatus
 
 
 @dataclass(frozen=True)
@@ -116,6 +121,34 @@ def _new_select(profile: Profile) -> Select[Any]:
     )
 
 
+def _unreported_clause(since: datetime) -> ColumnElement[bool]:
+    """ "Never reported to this recipient": first seen since the last send, *or* matched since it.
+
+    The `first_seen_at` half alone was the D-103 defect. The pipeline (every 4h) and the digest
+    (06:00) are separate Jobs, so eligibility is not settled when the window closes: a posting
+    first seen at 05:30 whose match lands at 06:20, or one deferred by `VJA_PIPELINE_MAX_MATCHES`
+    to the next run, has its `first_seen_at` behind `last_sent_at` by the time it *has* a match.
+    It then never ships, while the dashboard shows it — because the window filtered on the posting
+    and the INNER JOIN required the match, two different clocks.
+
+    The match half is restricted to `trigger=nightly` deliberately. A resume re-upload or vertical
+    switch writes `trigger=backfill` rows with a fresh `created_at` over postings of any age
+    (D-104/D-085), and admitting those would mail the user a digest of roles they have already
+    seen. Only the pipeline's own matches describe work the recipient has not been told about.
+
+    The `first_seen_at` half stays load-bearing and is not redundant: a reopened posting resets
+    `first_seen_at` to re-enter the `new` set (D-053) but reuses its existing match row, so its
+    `created_at` is old and only this half surfaces it.
+    """
+    return or_(
+        postings.c.first_seen_at > since,
+        and_(
+            matches.c.created_at > since,
+            matches.c.trigger == MatchTrigger.NIGHTLY.value,
+        ),
+    )
+
+
 def _loads(value: Any) -> list[str] | None:
     """Parse a `matches` JSON-text list column (`fits`/`gaps`) back into a list."""
     if not value:
@@ -168,7 +201,7 @@ def build_digest(
         postings.c.status == PostingStatus.OPEN.value,
     )
     if resolved_since is not None:
-        new_stmt = new_stmt.where(postings.c.first_seen_at > resolved_since)
+        new_stmt = new_stmt.where(_unreported_clause(resolved_since))
     new_stmt = new_stmt.order_by(matches.c.score.desc())
     new_candidates = _fetch(engine, new_stmt, with_match=True)
 

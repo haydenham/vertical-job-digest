@@ -94,7 +94,14 @@ def _profile(
     return next(p for p in active_profiles(engine, vertical) if p.user_email == email)
 
 
-def _match(engine: Engine, posting_id: int, profile: Profile, *, score: int = 70) -> None:
+def _match(
+    engine: Engine,
+    posting_id: int,
+    profile: Profile,
+    *,
+    score: int = 70,
+    created_at: datetime | None = None,
+) -> None:
     with begin(engine) as conn:
         save_match(
             conn,
@@ -104,7 +111,7 @@ def _match(engine: Engine, posting_id: int, profile: Profile, *, score: int = 70
             {"verdict": "yes", "score": score, "fits": "[]", "gaps": "[]", "rationale": "ok"},
             model="claude-sonnet-4-6",
             trigger="nightly",
-            now=datetime.now(UTC),
+            now=created_at or datetime.now(UTC),
         )
 
 
@@ -211,7 +218,9 @@ def test_successful_send_advances_the_window(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     t1 = datetime(2026, 6, 16, tzinfo=UTC)
     old = _posting(migrated_engine, emp, "old", first_seen=t1 - timedelta(days=1))
-    _match(migrated_engine, old, prof)
+    # Matched by the run that first saw it: a posting the baseline send ships was necessarily
+    # matched before that send, so its match time cannot re-open the window afterwards.
+    _match(migrated_engine, old, prof, created_at=t1 - timedelta(days=1))
 
     # First send (baseline) ships "old" and stamps sent_at = t1.
     first = send_digest(
@@ -221,7 +230,7 @@ def test_successful_send_advances_the_window(migrated_engine: Engine) -> None:
 
     # A posting that appears after the send must be the only "new" in the next build.
     fresh = _posting(migrated_engine, emp, "fresh", first_seen=t1 + timedelta(days=1))
-    _match(migrated_engine, fresh, prof)
+    _match(migrated_engine, fresh, prof, created_at=t1 + timedelta(days=1))
     contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
     assert contents.since == t1
     assert {p.external_id for p in contents.new} == {"fresh"}

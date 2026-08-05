@@ -5,7 +5,107 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-03 (last) — Update 1.2 PR 1: a résumé can be pasted (`feat/paste-resume`, D-107)
+## 2026-08-04 (last) — Update 1.2, unplanned fix: the digest stopped losing late-matched roles (`fix/digest-missed-matches`, D-108)
+
+**Housekeeping: the previous entry's `**Next:**` is done.** `feat/paste-resume` merged as **#121**
+(`3749baf`), so Update 1.2 item 2 is landed and `docs/updates/1.2.md` now carries its row. PR 2
+(`feat/posting-age-cap`) is still blocked on the same read-only Neon sizing query.
+
+### The reported bug was already in our own ledger
+
+New roles were appearing on the dashboard and never in the digest. This is the **digest
+`new`-window hole** that Update 1.1 wrote into its known-and-not-fixed list and marked *"not
+observed in production"*. It has now been observed in production. That is the useful fact of the
+session: the diagnosis was right, the severity estimate was wrong, and a carried-forward item came
+back as a user-visible bug.
+
+### What was actually wrong
+
+`build_digest` selected `new` as `first_seen_at > last_sent_at` INNER-JOINed to a relevant match.
+**The `WHERE` and the `JOIN` were clocked off different things** — the window asked "was this
+posting first seen recently?" when the question it needed was "is there a judgment here I have not
+sent?". `last_sent_at` only moves forward, so a posting matched *after* the digest covering its
+`first_seen_at` is invisible to that digest and every one after it, permanently, while the
+dashboard shows it throughout.
+
+1.1 named two routes in (a per-posting match failure, pre-existing since Phase 5;
+`VJA_PIPELINE_MAX_MATCHES` deferral, new in D-103). **There is a third and it is the worst**: the
+D-103 Job split alone. The pipeline runs `0 1,5,9,13,17,21` CT with a 3h timeout and `vja-digest`
+sends at `0 6`, so a posting first seen at 05:30 and matched at 06:20 is lost by construction, with
+nothing failing at all. Under D-005's single process this could not happen.
+
+### The fix, and the part that came from being pushed on it
+
+One predicate, no migration (both columns already existed):
+`first_seen_at > since OR (matches.created_at > since AND trigger = nightly)`.
+
+The `trigger=nightly` gate exists because Hayden asked why `created_at` would be better, and the
+honest answer was that a naive OR is itself a bug: a résumé re-upload or vertical switch writes
+`backfill` matches with a fresh `created_at` over postings of any age, so updating your résumé
+would have mailed you a hundred roles you had already read. Two other things survived the same
+question and are recorded in D-108: **the `first_seen_at` half must stay** (a reopened posting
+resets it to re-enter the `new` set per D-053 but reuses its old match row, so only that half
+surfaces it), and **quarantine is untouched** and needs a sent-ledger plus a migration.
+
+### Three existing tests failed and none of them was wrong about behaviour
+
+All three (`test_digest_assembly.py:177,202`, `test_digest_send.py::test_successful_send_advances_the_window`)
+stamped `created_at=datetime.now(UTC)` against hardcoded 2026-06 cutoffs, so postings deliberately
+placed *before* the window carried matches *after* it. They were pinning a fixture that cannot occur
+in production — in the send test the old posting is shipped by the baseline send, so its match
+provably predates that send. Fixed by dating the fixtures deliberately, **with no assertion
+changed**. Two of the three were predicted from reading before the fix was applied; the third was
+not.
+
+**Verification.** Regression test written first (D-021) and confirmed red — `assert set() ==
+{'late-match'}` — before any `src/` change. Full gate green: **pytest 909** (+2: the late-match
+regression and a backfill-flood guard that passes before *and* after, which is the point),
+ruff/format/mypy clean, `lint-imports` kept. No local Postgres run; the predicate is dialect-neutral
+`or_`/`and_` and CI covers both dialects. No frontend change.
+
+### Then Neon opened up, and the measurement changed the priorities
+
+Read-only prod queries, at last. **First lesson, before any result: `get_engine()` in a bare script
+silently used local SQLite** — the CLIs load `.env`, a script does not — so the first run reported
+local numbers as prod. Every later query went through a helper that asserts `neon.tech` in the URL
+before it will connect.
+
+Decomposing every open relevant-matched posting never mailed to its recipient (775 pairs, recipients
+with ≥1 send, **zero rows left unexplained**):
+
+| cause | pairs |
+|---|---|
+| **Quarantined** (D-008 verification failure) | **659** |
+| Not yet due (no send since first seen) | 93 |
+| **This window bug** | **23** |
+
+Plus 699 pairs across five recipients who have never received any digest (one paused, four pending a
+first send) — not losses.
+
+**So D-108 fixes the smallest bucket, and the honest headline is that quarantine is 28× larger.** The
+659 are 202 distinct still-open postings, **194 of them Greenhouse across 27 employers**; five sampled
+at random all return HTTP 200 to `verify_apply_url` right now. They cluster into bursts — 524
+quarantines inside four minutes on 07-31, 142 on 08-03, against 0-7 on ordinary days. That is a rate
+limit, not dead links: `build_digest` runs per recipient and re-verifies the same URL once per profile,
+so one morning fires tens of duplicate HEADs at `boards.greenhouse.io`. Fail-closed verification is
+correct (D-008); the forward-only window is what makes a transient 429 permanent. **Live product defect
+plus a politeness violation, and it needs its own PR** — dedupe verification per posting per send, make
+transient failures retryable. Recorded in D-108 and the 1.2 ledger.
+
+**PR 2's blocking number, also answered.** Open + in-scope = 897, keyed on
+`COALESCE(source_updated_at, first_seen_at)`, with `source_updated_at` present on 877 of 897 (98%), so
+the "board stamps the original date forever" hazard is real but not dominant. Buckets: ≤7d **285** ·
+8-14d **188** · 15-21d **75** · 22-30d **80** · 31-60d **172** · 61-180d **72** · >180d **25**. A
+21-day floor cuts **349 of 897 (39%)** of the in-scope open universe, leaving 548.
+
+**Next:** Hayden reviews and merges D-108. Then the **quarantine PR ahead of `docs/21`'s PR 2 and
+PR 3** on this evidence — it is the larger user-visible loss, and any backfill of already-lost roles
+must come after it or it re-loses the same rows. PR 2 now has its constant to argue from: 21 days is a
+real 39% cut, which is a product call, not a rounding decision.
+
+---
+
+## 2026-08-03 — Update 1.2 PR 1: a résumé can be pasted (`feat/paste-resume`, D-107)
 
 **Housekeeping: the previous entry's `**Next:**` was half-done.** `fix/cadence-copy` merged as
 **#120** (`30e7d44`), which per the lifecycle in `docs/updates/README.md` *opens* Update 1.2 — but
