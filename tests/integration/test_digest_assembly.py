@@ -18,6 +18,9 @@ from vja.digest.assembly import build_digest, last_sent_at
 
 _PASS = lambda _url: True  # noqa: E731  (tiny test stub; a def would be noisier)
 _EMAIL = "me@example.com"
+# Later than every fixture date below (2026-06-10..17) and inside the D-109 age floor, so the
+# floor is live in these tests without being what they are about.
+_NOW = datetime(2026, 6, 18, tzinfo=UTC)
 
 
 def _employer(engine: Engine, *, vertical: str = "grid_power_software", name: str = "Co") -> int:
@@ -133,7 +136,9 @@ def test_baseline_first_digest_is_all_relevant_open(migrated_engine: Engine) -> 
     _match(migrated_engine, a, prof)
     _match(migrated_engine, b, prof)
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert contents.since is None
     assert {p.external_id for p in contents.new} == {"a", "b"}  # the matched open ones
@@ -153,7 +158,9 @@ def test_unmatched_and_no_verdict_postings_drop_out(migrated_engine: Engine) -> 
     _match(migrated_engine, matched, prof, verdict="yes", score=70)
     _match(migrated_engine, rejected, prof, verdict="no", score=10)
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     # Only the relevant match shows: `no` and unmatched postings are not inbox-worthy (D-037).
     assert {p.external_id for p in contents.new} == {"matched"}
@@ -170,7 +177,9 @@ def test_new_roles_sorted_by_score_desc(migrated_engine: Engine) -> None:
     _match(migrated_engine, high, prof, verdict="strong_yes", score=95)
     _match(migrated_engine, mid, prof, verdict="yes", score=70)
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert [p.external_id for p in contents.new] == ["high", "mid", "low"]
     assert [p.verdict for p in contents.new] == ["strong_yes", "yes", "maybe"]
@@ -196,7 +205,7 @@ def test_window_includes_only_changes_after_since(migrated_engine: Engine) -> No
     _match(migrated_engine, new_open, prof, created_at=after)
 
     contents = build_digest(
-        migrated_engine, "grid_power_software", profile=prof, since=cutoff, verify=_PASS
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, since=cutoff, verify=_PASS
     )
 
     assert {p.external_id for p in contents.new} == {"new-open"}
@@ -213,7 +222,9 @@ def test_since_auto_resolves_from_last_sent_digest(migrated_engine: Engine) -> N
     _match(migrated_engine, old, prof, created_at=cutoff - timedelta(days=1))
     _match(migrated_engine, fresh, prof, created_at=cutoff + timedelta(days=1))
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert contents.since == cutoff
     assert {p.external_id for p in contents.new} == {"fresh"}
@@ -237,7 +248,9 @@ def test_match_landing_after_the_send_is_not_lost(migrated_engine: Engine) -> No
     _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=sent)
     _match(migrated_engine, late, prof, created_at=matched, trigger="nightly")
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert contents.since == sent
     assert {p.external_id for p in contents.new} == {"late-match"}
@@ -257,7 +270,9 @@ def test_backfill_matches_do_not_resurface_old_postings(migrated_engine: Engine)
     _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=sent)
     _match(migrated_engine, old, prof, created_at=sent + timedelta(hours=1), trigger="backfill")
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert contents.new == []
 
@@ -275,6 +290,7 @@ def test_dead_links_are_quarantined(migrated_engine: Engine) -> None:
         migrated_engine,
         "grid_power_software",
         profile=prof,
+        now=_NOW,
         verify=lambda url: url != "https://dead/2",
     )
 
@@ -291,7 +307,9 @@ def test_other_verticals_are_excluded(migrated_engine: Engine) -> None:
     _posting(migrated_engine, avia, "a1", first_seen=now)
     _match(migrated_engine, g1, prof)
 
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
 
     assert {p.external_id for p in contents.new} == {"g1"}
 
@@ -313,3 +331,53 @@ def test_last_sent_at_is_per_recipient(migrated_engine: Engine) -> None:
     # A different recipient has no sent digest yet — its window is independent (D-027).
     assert last_sent_at(migrated_engine, "grid_power_software", "other@example.com") is None
     assert last_sent_at(migrated_engine, "nonexistent", _EMAIL) is None
+
+
+# --- the age floor (D-109) --------------------------------------------------------------------
+
+
+def test_a_posting_past_the_age_floor_is_never_mailed(migrated_engine: Engine) -> None:
+    """The digest and the dashboard must agree. Without this the digest would mail a role the
+    dashboard refuses to show, which is worse than either behaviour on its own.
+
+    The window normally hides old roles anyway; the case that needs the floor is a *wide* window —
+    here a first digest (`since is None`), which is also what a paused-then-resumed user gets when
+    they come back (D-094).
+    """
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    fresh = _posting(migrated_engine, emp, "fresh", first_seen=_NOW - timedelta(days=2))
+    stale = _posting(migrated_engine, emp, "stale", first_seen=_NOW - timedelta(days=90))
+    _match(migrated_engine, fresh, prof)
+    _match(migrated_engine, stale, prof)
+
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
+
+    assert contents.since is None  # the widest window there is
+    assert {p.external_id for p in contents.new} == {"fresh"}
+
+
+def test_the_age_floor_does_not_suppress_a_closure(migrated_engine: Engine) -> None:
+    """Closures are exempt. A role that genuinely vanished is worth reporting however old it was —
+    the floor exists to stop us *advertising* stale roles, not to hide that one ended.
+    """
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    since = _NOW - timedelta(days=1)
+    _digest(migrated_engine, vertical="grid_power_software", status="sent", sent_at=since)
+    _posting(
+        migrated_engine,
+        emp,
+        "long_lived",
+        first_seen=_NOW - timedelta(days=200),
+        status="closed",
+        closed_at=_NOW,
+    )
+
+    contents = build_digest(
+        migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=_PASS
+    )
+
+    assert {p.external_id for p in contents.closed} == {"long_lived"}

@@ -2676,6 +2676,102 @@ assertion was changed** — in the send test the old posting is shipped by the b
 match provably predates that send. A fixture that could not occur in production was pinning the
 behaviour of one that can.
 
-**Not fixed forward:** roles already lost are still lost — 23 to this bug, 659 to quarantine. A
-backfill is only worth building after the quarantine fix, or it would re-lose the same rows.
+**No backfill of already-lost roles — decided, not deferred.** 23 pairs lost to this bug and 659 to
+quarantine stay lost. Hayden's call, and it follows from what the product is for: a role a day or two
+old is the one worth delivering, and reconstructing weeks-old history is effort spent against the
+wrong end of the value curve. This also removes the only argument for sequencing the quarantine fix
+first.
+
+**Which loss actually matters, measured.** Age at the moment of quarantine is **14 under two days ·
+506 at 2-7 days · 172 older** — the 2-7 day mass reflects sparse sends (several recipients have 4-5
+sends total, so their windows span days). So on the "fresh roles are what count" ranking the fresh loss
+is **23 here vs 14 to quarantine**, and this ADR is the one that protects it. Quarantine remains 30× the
+raw volume and a live defect, but it is not the more urgent of the two.
+
+**Deploy shape:** no migration (both columns predate this), so CD's code-only path is sufficient.
+`EXPLAIN ANALYZE` against prod for a real profile is **6.07 ms**, driven by
+`uq_matches_posting_profile_version` with the OR as a filter over an already-narrow set — the
+unindexed `matches.created_at` never drives the scan, so no new index is warranted. Blast radius at
+the first send after deploy: **3 extra rows for one recipient**.
 References D-103, D-053, D-028, D-008, D-104, D-085, D-057, D-037, D-027, D-005, D-021, D-018.
+
+### D-109 · Product/Dashboard · A posting older than three weeks stops being shown, without changing its status · accepted · 2026-08-05
+
+**Decision.** A posting whose freshness date `COALESCE(source_updated_at, first_seen_at)` is older
+than `VJA_MAX_POSTING_AGE_DAYS` (default **21**) is excluded from the dashboard, from `/demo`, from
+the digest's `new` set, and from the match candidate set. One helper owns the rule
+(`db.postings.age_floor_clause`, expressed as one more `activity_window_clause`), and `now` is
+passed explicitly into every statement that applies it rather than read off the wall clock.
+
+**Why.** Boards that never delist show a role as open for months; the dashboard's oldest rows dated
+to 2023. Applying to one wastes the user's afternoon and costs us their trust, which is the same
+argument D-008 makes about dead links.
+
+**A display floor, not a status change — and that is the whole design.** The row keeps
+`status='open'`, is never deleted, and the lifespan statistics accumulated since Phase 1 stay
+honest. Age-*closing* fights the diff and loses: `close_posting` sets `status='closed'`, the ATS
+still lists the job on the next 4-hourly run, `diff` reports it as `new`, and `sync_employer`
+routes it to `reopen_posting`, which resets `first_seen_at` and re-enters it in the digest's `new`
+set (D-053). The role would resurface as brand new every four hours and be mailed again. The diff
+is the product (D-009); a policy that makes the diff lie about what changed is the wrong tool.
+
+**Keyed on the activity date, deliberately.** Sharing the recency windows' freshness expression
+means a board that genuinely re-dates a role keeps it alive, and only a board that has stopped
+touching a role lets it age out. The cost of that choice is visible: a role SIG or Headlands
+re-stamps returns to the top of the dashboard, which is a *presentation* problem noted separately
+in `docs/21`, not a reason to key the floor on `first_seen_at`.
+
+**21 days came from the distribution, not from the phrase.** Neon, 2026-08-04: 897 open in-scope
+rows, `source_updated_at` present on 877 of 897 (98%) — so the "board stamps the original date
+forever" hazard is real but not dominant. Bands: ≤7d **285** · 8-14d **188** · 15-21d **75** ·
+22-30d **80** · 31-60d **172** · 61-180d **72** · >180d **25**. A 21-day floor cuts **349 of 897
+(39%)**, leaving 548; the alternatives on the table were 30d (269 cut) and 60d (97). Hayden chose
+21 with the 39% in front of him: the 31-180d bands are 244 rows of exactly the tail the complaint
+was about. `VJA_MAX_POSTING_AGE_DAYS` is read at call time, so revising it is a variable change.
+
+**The cut is uneven per vertical, and the aggregate hid that.** Re-measured 2026-08-06, in-scope
+open rows hidden by a 21-day floor: **aviation 91/148 (61%)** · grid 77/195 (39%) · trading 121/338
+(36%) · robotics 69/211 (33%) — 358/892 (40%) overall. The 39% aggregate the constant was chosen
+against is the middle of a 33-61% spread, and aviation is the outlier: its boards (Boeing on
+Workday especially) carry old posted dates on reqs that stay listed. Recorded here because a single
+global `VJA_MAX_POSTING_AGE_DAYS` is the knob we have; per-vertical floors would be a config
+change, and are deliberately not built.
+
+**A reopened posting may now be hidden, and this is accepted.** `reopen_posting` resets
+`first_seen_at` but writes `source_updated_at` only when the fetcher supplies one, never nulling a
+good one — so a reopen with a stale board date is floored out although D-053 puts it back in the
+`new` set. The board saying it has not touched the role in three weeks is the better freshness
+signal, and the D-085/D-088 churn diagnosis found reopens are largely Workday page-membership
+artifacts rather than real close/reopen events, so resurfacing them on our own churn is the worse
+failure. In the two long-tracked verticals this is ~11 rows each; in robotics and trading the
+"hidden despite fresh `first_seen_at`" count equals the whole hidden set, because those verticals
+were onboarded weeks ago and every row's `first_seen_at` is recent by construction.
+
+**The match candidate set is included, and it is the first place LLM spend falls by *not* asking.**
+Matching a posting that can never be displayed or mailed buys nothing. The nightly path is
+otherwise date-uncapped by design (D-039), so this qualifies that rule rather than replacing it;
+it is a no-op on the backfill path, whose 5-day `since` is already stricter.
+
+**`now` is a required argument, not a default.** Every fixture in the test suite is dated months
+behind the wall clock, so a floor reading `datetime.now(UTC)` internally would have emptied
+`test_dashboard_query`, `test_api`, `test_public_api`, `test_matching_run` and `test_digest_*`
+silently. Requiring it makes a caller that forgets a type error instead of an empty page, and it is
+what lets the boundary (exactly 21 days in, 21 days + 1 second out) be pinned at all. The two API
+test modules were re-anchored to the real clock rather than frozen: `freezegun` replaces `date`
+globally, and pydantic v1's lazily-imported `ConstrainedDate` subclasses it, so freezing a whole
+module raises a metaclass conflict the moment LiteLLM is first imported under the frozen clock.
+
+**Closures are exempt.** A role that genuinely vanished is worth reporting however old it was; the
+floor exists to stop us advertising stale roles, not to hide that one ended (D-056).
+
+**Not done:** no "expired" badge or tombstone — a role that quietly stops appearing is the same
+experience as one that closed. No re-verification of old apply links; the floor incidentally
+reduces that exposure because dead links skew old, but it is not the fix and must not be described
+as one. No employer-health signal from ageing patterns (D-087 F4, parked).
+
+**No migration**, so CD's code-only path suffices. Dialect coverage for the new predicate is CI's
+Postgres job; it is dialect-neutral `func.coalesce` with a bound datetime, the same shape
+`activity_window_clause` already runs on both.
+
+References D-030, D-024, D-038, D-039, D-041, D-043, D-045, D-053, D-009, D-008, D-005, D-057,
+D-087, D-094, D-103, D-105, D-106, D-108.

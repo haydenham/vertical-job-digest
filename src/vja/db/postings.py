@@ -9,8 +9,9 @@ deleted — vanished ones are marked `closed` (D-009).
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import ColumnElement, Engine, Select, and_, case, func, select
@@ -19,6 +20,21 @@ from sqlalchemy.engine import Connection
 from vja.db.schema import employers, matches, postings
 from vja.models import RELEVANT_VERDICTS, AtsType, Employer, PostingStatus, RawPosting
 from vja.text import html_to_text
+
+_DEFAULT_MAX_POSTING_AGE_DAYS = 21
+
+
+def max_posting_age_days() -> int:
+    """How old a posting may be and still be shown (`VJA_MAX_POSTING_AGE_DAYS`, read at call time).
+
+    Three weeks by default, chosen from the production distribution rather than from the phrase
+    "three weeks": on 2026-08-04 the in-scope open universe was 897 rows and a 21-day floor cut
+    349 of them (39%), with the bands running ≤7d 285 · 8-14d 188 · 15-21d 75 · 22-30d 80 ·
+    31-60d 172 · 61-180d 72 · >180d 25. Env-overridable because the right answer may differ per
+    vertical, and a wrong constant should cost a variable change rather than a deploy.
+    """
+    raw = os.environ.get("VJA_MAX_POSTING_AGE_DAYS")
+    return int(raw) if raw else _DEFAULT_MAX_POSTING_AGE_DAYS
 
 
 def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
@@ -31,6 +47,25 @@ def activity_window_clause(cutoff: datetime) -> ColumnElement[bool]:
     within the window" rule (D-030).
     """
     return func.coalesce(postings.c.source_updated_at, postings.c.first_seen_at) >= cutoff
+
+
+def age_floor_clause(now: datetime) -> ColumnElement[bool]:
+    """The display floor: this posting's freshness date is inside `max_posting_age_days()`.
+
+    A **display** rule, deliberately not a status change. The row keeps `status='open'`, is never
+    deleted, and the lifespan statistics stay honest — age-closing would fight the diff and lose:
+    `close_posting` would set `status='closed'`, the ATS would still list the job on the next
+    4-hourly run, `diff` would report it as `new`, and `sync_employer` would route it to
+    `reopen_posting`, which resets `first_seen_at` and re-enters it in the digest's `new` set
+    (D-053). The role would resurface as brand new every four hours. The diff is the product
+    (D-009); a policy that makes the diff lie about what changed is the wrong tool.
+
+    Keyed on the same `COALESCE(source_updated_at, first_seen_at)` freshness expression as the
+    recency windows, so a board that genuinely re-dates a role keeps it alive — which is the
+    correct answer, and the reason the floor is expressed as one more activity window rather than
+    as its own predicate.
+    """
+    return activity_window_clause(now - timedelta(days=max_posting_age_days()))
 
 
 def open_index(conn: Connection, employer_id: int) -> dict[str, str]:
@@ -484,6 +519,7 @@ def dashboard_statement(
     profile_id: int | None,
     resume_version: str | None,
     *,
+    now: datetime,
     cutoff: datetime | None,
     by_first_seen: bool = False,
     cleaned: bool = False,
@@ -496,6 +532,10 @@ def dashboard_statement(
     wrong a caller is — by which résumé-derived commentary about a named beta user can reach a
     public response. `test_public_api` compiles this statement and asserts `matches` is absent
     from the SQL text; that assertion is the first of the demo board's two structural layers.
+
+    `now` is required rather than defaulted to the wall clock because it feeds the age floor, and
+    the floor must be the *same* one on the authenticated and public paths: sharing this statement
+    is what makes `/demo` inherit the floor structurally instead of by remembering to re-apply it.
     """
     if profile_id is None and not cleaned:
         # The *Matched* view means "this résumé's relevant verdicts". Without a profile there is no
@@ -541,6 +581,7 @@ def dashboard_statement(
             employers.c.vertical == vertical,
             postings.c.status == PostingStatus.OPEN.value,
             postings.c.in_scope.is_(True),
+            age_floor_clause(now),
         )
         .order_by(freshness.desc())
     )
@@ -562,6 +603,7 @@ def open_postings_with_match_quality(
     profile_id: int | None,
     resume_version: str | None,
     *,
+    now: datetime,
     cutoff: datetime | None,
     by_first_seen: bool = False,
     cleaned: bool = False,
@@ -583,13 +625,16 @@ def open_postings_with_match_quality(
     field `None`, computed by a statement that never mentions `matches`. It requires `cleaned=True`
     — there is no résumé for a *Matched* view to be about.
 
-    Floor is always the durable in-scope set (`in_scope IS TRUE`, D-043) — out-of-scope and
-    out-of-US/level roles never appear. Newest-activity-first (D-010).
+    Two floors always apply, independent of both axes: the durable in-scope set (`in_scope IS
+    TRUE`, D-043) — out-of-scope and out-of-US/level roles never appear — and the age floor
+    (`age_floor_clause(now)`), so a role the board never delisted stops being shown once its
+    freshness date passes `max_posting_age_days()`. Newest-activity-first (D-010).
     """
     stmt = dashboard_statement(
         vertical,
         profile_id,
         resume_version,
+        now=now,
         cutoff=cutoff,
         by_first_seen=by_first_seen,
         cleaned=cleaned,
@@ -620,12 +665,17 @@ def open_postings_with_match_quality(
     ]
 
 
-def open_posting_counts_by_vertical(engine: Engine) -> dict[str, int]:
-    """`{vertical: in-scope open posting count}` — the public board's toggle source (D-105).
+def open_posting_counts_by_vertical(engine: Engine, *, now: datetime) -> dict[str, int]:
+    """`{vertical: shown in-scope open posting count}` — the public board's toggle source (D-105).
 
     Deliberately *not* `available_verticals()`: that is the onboarding picker's config-driven list,
     which must stay joinable at zero rows (the B-4 fix). The demo toggle needs the opposite — a
     vertical with nothing in it would open onto an empty table and read as a broken product.
+
+    Carries the same age floor as `dashboard_statement`, and that is not decoration: the count is
+    a promise about the table the visitor is one click from seeing, so a toggle advertising more
+    rows than it opens onto is a bug. (The floor also means a vertical whose whole universe has
+    aged out drops off the toggle rather than offering an empty table.)
     """
     stmt = (
         # Positional unpacking below rather than `row.count`: `count` is a method on SQLAlchemy's
@@ -635,6 +685,7 @@ def open_posting_counts_by_vertical(engine: Engine) -> dict[str, int]:
         .where(
             postings.c.status == PostingStatus.OPEN.value,
             postings.c.in_scope.is_(True),
+            age_floor_clause(now),
         )
         .group_by(employers.c.vertical)
     )

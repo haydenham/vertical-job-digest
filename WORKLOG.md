@@ -5,7 +5,121 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-04 (last) — Update 1.2, unplanned fix: the digest stopped losing late-matched roles (`fix/digest-missed-matches`, D-108)
+## 2026-08-05 (last) — Update 1.2 PR 2: a posting older than 3 weeks stops being shown (`feat/posting-age-cap`, D-109) + the digest loss re-diagnosed
+
+**Housekeeping: the previous entry's `**Next:**` is done.** D-108 merged as **#122** (`77e65a2`) and
+is live. The two corrections that entry added (no-backfill-by-decision, quarantine-is-not-a-
+queue-jumper) were written after the branch was pushed and were still uncommitted on `main`; they
+ride along on this branch. `docs/updates/1.2.md` also still listed item 3 as `pending` — now #122.
+
+### First: D-108 was verified in production, and the answer changed the day's plan
+
+Hayden reported the digest still missing roles. It is not D-108 regressing. The deployed job image
+is `77e65a2` (the #122 merge) and this morning's 11:00 UTC send ran on it. Decomposing against
+Neon, read-only:
+
+- **Fresh roles (first seen ≤5 days): 320 pairs, 291 mailed, 16 quarantined, 13 to never-sent
+  recipients, zero unexplained.** D-108 holds.
+- **All ages: 2,909 mailed · 784 quarantined · 197 never-sent recipients · 19 unexplained** — and
+  all 19 were matched in July against an August `last_send`, i.e. the pre-D-108 residue this update
+  already decided stays lost. About **one in five** matched roles never arrives.
+
+**The worked case Hayden actually saw** (`haydenham10` / trading: 16 on the dashboard, 4 in the
+digest) decomposes as **3 shipped · 3 quarantined this morning · 4 quarantined on 08-03 and
+permanently lost · 6 correctly omitted**. So 7 of 16 were the defect and 6 were correct behaviour
+presented badly — SIG and Headlands re-stamped those six on 08-04, and the table orders on
+`COALESCE(source_updated_at, first_seen_at)`, so already-mailed roles returned to the top looking
+new. Worth stating plainly because the first read of this was "everything is working to plan": it
+was not, for 7 of them.
+
+**Quarantine is a false positive, measured not assumed.** Today's send quarantined 125 pairs behind
+113 distinct URLs, 90 of them `*.greenhouse.io`. Re-checked 12 by hand, 1.5s apart: **11 × 200, 1 ×
+404** (Aurora — D-008 working correctly). `build_digest` runs per recipient and re-verifies every
+URL with a fresh client, no dedupe, no delay, no retry: ~685 HEADs at two hosts inside a six-minute
+job. `verify_apply_url` returns a bare bool, so 404, 429, 503 and a timeout are one answer, and the
+forward-only window makes it permanent. The status code is logged nowhere, so throttling is inferred
+from burst shape plus the clean re-checks — **recording it is part of the fix**, and the first thing
+the fix makes measurable.
+
+**Written up as PR 4 in `docs/21`** (scope, DoD, risk) rather than built: Hayden's call was to
+finish what was started. One useful finding while scoping it — **it needs no migration**: the
+`digests.contents` blob already stores `external_id` *and* `company`, and `UNIQUE(vertical, name)`
+on employers plus `UNIQUE(employer_id, external_id)` on postings make `(vertical, company,
+external_id)` resolve to exactly one posting.
+
+### Then: PR 2 built
+
+`COALESCE(source_updated_at, first_seen_at)` older than `VJA_MAX_POSTING_AGE_DAYS` (default 21) is
+excluded from the dashboard, `/demo`, the digest's `new` set, and the match candidate set. One
+helper (`db.postings.age_floor_clause`, expressed as one more `activity_window_clause`); the row
+itself is never touched. **Not** a status change: age-closing would fight the diff, since the ATS
+still lists the job and `reopen_posting` resets `first_seen_at`, re-mailing it as new every four
+hours (D-053).
+
+**21 came from the distribution, with the cost in front of us.** 897 open in-scope rows,
+`source_updated_at` present on 98%; bands ≤7d 285 · 8-14d 188 · 15-21d 75 · 22-30d 80 · 31-60d 172 ·
+61-180d 72 · >180d 25. A 21-day floor cuts **349 of 897 (39%)**; 30d would cut 269 and 60d 97.
+Hayden chose 21 against those alternatives.
+
+### The part that was not in the plan: `now` had to become a required argument
+
+The plan said "four `WHERE` clauses". It is, but the floor is the first predicate here that depends
+on the *current* time, and every integration fixture is dated 2026-06/07 — months behind the wall
+clock. A floor reading `datetime.now(UTC)` internally would have silently emptied
+`test_dashboard_query`, `test_api`, `test_public_api`, `test_matching_run` and both digest modules.
+So `now` is a **required** keyword on `dashboard_statement`, `open_postings_with_match_quality`,
+`postings_needing_match` and `open_posting_counts_by_vertical`: forgetting it is a type error, not
+an empty page, and it is what makes the boundary pinnable at all.
+
+**A dead end worth recording:** freezing the two API test modules with `freezegun` looked like the
+tidy answer and is not usable — freezegun replaces `date` globally, pydantic v1's lazily-imported
+`ConstrainedDate` subclasses it, and the first LiteLLM import under a frozen clock raises a
+metaclass conflict. Those two modules were re-anchored to the real clock instead (`_NOW =
+datetime.now(UTC)`, offsets relative), which is also the more honest fixture: they describe postings
+that exist *now*.
+
+**One existing assertion changed, and it was the behaviour change made visible:**
+`test_all_open_returns_matched_newest_first` lost its `old` row (activity 50 days back). "All open"
+now means all open inside the floor. Everything else was additive.
+
+**Verification.** Full gate green: **pytest 919** (+10), ruff/format/mypy clean, `lint-imports`
+kept. New tests cover the boundary (exactly 21 days in, +1 second out), that the floor reads the
+activity date so a re-dated role survives, the env override, that a floored posting is never sent to
+the model (asserted on client call count, not just stored rows — a rows-only test would pass if we
+called the model and discarded the answer), that the digest and dashboard agree, that closures are
+exempt, and that `/demo` and its vertical counts carry the same floor. **No local Postgres or Docker
+here, so the dialect half is CI's `postgres` job**; the predicate is dialect-neutral
+`func.coalesce` with a bound datetime, the same shape `activity_window_clause` already runs on both.
+No migration, no frontend change.
+
+### Two findings from a self-review after the gate went green
+
+**The 39% cut is an average over a 33-61% spread, and aviation is the outlier.** Re-measured
+2026-08-06: **aviation 91/148 (61%)** · grid 77/195 (39%) · trading 121/338 (36%) · robotics 69/211
+(33%), 358/892 (40%) overall. The constant was chosen against the aggregate, which hid this.
+Aviation's boards — Boeing on Workday above all — carry old posted dates on reqs that stay listed,
+so the floor bites hardest exactly where re-dating is rarest. The knob is global, so this is a
+product call rather than a bug, but it should be a *made* call: 61% is most of that dashboard.
+
+**A reopened posting can now be hidden, which qualifies D-053.** `reopen_posting` resets
+`first_seen_at` but writes `source_updated_at` only when the fetcher supplies one and never nulls a
+good one, so a reopen with a stale board date is floored out despite re-entering the `new` set.
+Accepted, not fixed — the board's own "untouched for three weeks" is the better signal, and the
+D-085/D-088 churn diagnosis found reopens are largely Workday page-membership artifacts. Recorded
+in D-109 and the INVARIANTS D-053 line, which previously said a reopen "surfaces as new again"
+without qualification and was therefore about to be stale.
+
+**Next:** Hayden reviews, commits and merges D-109 (branch `feat/posting-age-cap`), having decided
+whether 61% is acceptable for aviation. Expect the dashboard to lose ~40% of its rows the moment it
+deploys — that is the intended effect, and it is the number to sanity-check against before assuming
+something broke. `VJA_MAX_POSTING_AGE_DAYS` is
+the dial if 21 turns out to be wrong; it is unset in prod, so the code default of 21 applies.
+Then **`docs/21` PR 4** (the quarantine fix, now the largest live loss), then PR 3 (actionable match
+advice, the only one needing a manual Neon migration).
+
+---
+
+## 2026-08-04 — Update 1.2, unplanned fix: the digest stopped losing late-matched roles (`fix/digest-missed-matches`, D-108)
 
 **Housekeeping: the previous entry's `**Next:**` is done.** `feat/paste-resume` merged as **#121**
 (`3749baf`), so Update 1.2 item 2 is landed and `docs/updates/1.2.md` now carries its row. PR 2
@@ -98,10 +212,33 @@ the "board stamps the original date forever" hazard is real but not dominant. Bu
 8-14d **188** · 15-21d **75** · 22-30d **80** · 31-60d **172** · 61-180d **72** · >180d **25**. A
 21-day floor cuts **349 of 897 (39%)** of the in-scope open universe, leaving 548.
 
-**Next:** Hayden reviews and merges D-108. Then the **quarantine PR ahead of `docs/21`'s PR 2 and
-PR 3** on this evidence — it is the larger user-visible loss, and any backfill of already-lost roles
-must come after it or it re-loses the same rows. PR 2 now has its constant to argue from: 21 days is a
-real 39% cut, which is a product call, not a rounding decision.
+### Two corrections to the above, both from checking one more thing before calling it shippable
+
+**Quarantine does *not* mostly cost fresh roles, and the first draft of this entry implied it did.**
+Age at the moment of quarantine: **14 under two days old · 506 at 2-7 days · 172 older**. The 2-7 day
+mass is a consequence of sparse sends — several recipients have only 4-5 sends total, so their windows
+span days. Hayden's priority is explicit: **roles a day or two old are the ones that matter, and
+backfilling lost history is not worth worrying about.** Against that ranking the fresh-role loss is
+**23 (this window bug) vs 14 (quarantine)**, so D-108 is the fix that protects what counts, and the
+"quarantine before everything else" call two paragraphs up is withdrawn. Quarantine is still 30× the
+raw volume and still a live defect worth its own PR; it is not a queue-jumper.
+
+**No backfill of lost roles, by decision, not by sequencing.** Recorded here so it stops being
+re-litigated: the 23 + 659 already-lost pairs stay lost. Fresh delivery is the product.
+
+**Deploy readiness, measured rather than asserted.** No migration (both columns predate the change),
+so CD's code-only path suffices. `EXPLAIN ANALYZE` of the new predicate against prod for a real
+profile: **6.07 ms**, driven by `uq_matches_posting_profile_version` with the OR evaluated as a filter
+over an already-narrow set — the unindexed `matches.created_at` never drives the scan, so no new index.
+Blast radius at the next send: **3 extra rows for 1 recipient** (`hahamilton20`, robotics). Nothing is
+observable until `vja-digest` fires at 06:00 CT on the new image.
+
+**Next:** Hayden commits, PRs and merges D-108 (branch `fix/digest-missed-matches`, 7 files: 3
+code/test, 4 docs). Watch the next morning's send — `hahamilton20`/robotics should gain a few roles and
+every other recipient should be unchanged; more than a handful of affected recipients would mean the
+`trigger=nightly` gate is not doing what this entry claims. Then `docs/21` PR 2 or PR 3 in the planned
+order, with the quarantine PR queued behind them. PR 2 now has its constant to argue from: 21 days is a
+real **39% cut** of the in-scope open universe, which is a product call, not a rounding decision.
 
 ---
 

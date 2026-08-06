@@ -26,7 +26,9 @@ from vja.db.postings import dashboard_statement, open_posting_counts_by_vertical
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import employers, postings
 
-_NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
+# Real clock, for the same reason as `test_api.py`: the public endpoints apply the D-109 age
+# floor against their own `datetime.now(UTC)`.
+_NOW = datetime.now(UTC)
 _VERTICAL = "grid_power_software"
 _OTHER_VERTICAL = "aviation_software"
 
@@ -161,17 +163,17 @@ def test_anonymous_statement_never_references_the_matches_table() -> None:
     query cannot even *read* them, so the protection survives someone later adding fields to the
     model.
     """
-    sql = str(dashboard_statement(_VERTICAL, None, None, cutoff=None, cleaned=True))
+    sql = str(dashboard_statement(_VERTICAL, None, None, now=_NOW, cutoff=None, cleaned=True))
     assert "matches" not in sql
 
-    authed = str(dashboard_statement(_VERTICAL, 1, "v1", cutoff=None, cleaned=True))
+    authed = str(dashboard_statement(_VERTICAL, 1, "v1", now=_NOW, cutoff=None, cleaned=True))
     assert "matches" in authed  # the control: the join is real on the authenticated path
 
 
 def test_matched_view_without_a_profile_is_a_programming_error() -> None:
     """ "Matched" means "against this résumé". Without one the request is malformed, not empty."""
     with pytest.raises(ValueError, match="requires a profile_id"):
-        dashboard_statement(_VERTICAL, None, None, cutoff=None, cleaned=False)
+        dashboard_statement(_VERTICAL, None, None, now=_NOW, cutoff=None, cleaned=False)
 
 
 def test_public_endpoints_are_open_while_the_private_one_still_401s(
@@ -214,7 +216,7 @@ def test_public_postings_is_the_whole_in_scope_open_set(migrated_engine: Engine)
 def test_window_maps_the_same_way_as_the_authenticated_dashboard(migrated_engine: Engine) -> None:
     emp = _employer(migrated_engine)
     _posting(migrated_engine, emp, "today", first_seen=_NOW)
-    _posting(migrated_engine, emp, "old", first_seen=_NOW - timedelta(days=30))
+    _posting(migrated_engine, emp, "old", first_seen=_NOW - timedelta(days=10))
     client = _client(migrated_engine)
 
     all_open = client.get("/api/public/postings", params={"vertical": _VERTICAL}).json()
@@ -326,7 +328,7 @@ def test_counts_exclude_closed_and_out_of_scope(migrated_engine: Engine) -> None
     _posting(migrated_engine, emp, "closed", status="closed")
     _posting(migrated_engine, emp, "not in scope", in_scope=False)
 
-    assert open_posting_counts_by_vertical(migrated_engine) == {_VERTICAL: 1}
+    assert open_posting_counts_by_vertical(migrated_engine, now=_NOW) == {_VERTICAL: 1}
 
 
 # ---- caching, the abuse guard ----------------------------------------------------------------
@@ -370,3 +372,38 @@ def test_repeat_requests_are_served_from_cache_per_vertical_and_window(
         "/api/public/postings", params={"vertical": _VERTICAL, "window": "two_weeks"}
     )
     assert other.json()["count"] == 2
+
+
+# ---- the age floor reaches the public board too (D-109) ----------------------------------------
+
+
+def test_the_age_floor_applies_to_the_demo_board(migrated_engine: Engine) -> None:
+    """`/demo` shares `dashboard_statement`, so it inherits the floor structurally rather than by
+    anyone remembering to re-apply it — the same property D-105's split exists for.
+
+    A stale role reaching a logged-out visitor is the worse version of the problem: they have no
+    account, no history, and no reason to give the product a second look after one dead lead.
+    """
+    emp = _employer(migrated_engine)
+    _posting(migrated_engine, emp, "fresh", first_seen=_NOW - timedelta(days=2))
+    _posting(migrated_engine, emp, "ghost", first_seen=_NOW - timedelta(days=90))
+
+    body = (
+        _client(migrated_engine).get("/api/public/postings", params={"vertical": _VERTICAL}).json()
+    )
+    assert [p["title"] for p in body["postings"]] == ["fresh"]
+    assert body["count"] == 1
+
+
+def test_the_public_vertical_counts_match_the_table_they_open(migrated_engine: Engine) -> None:
+    """The toggle's count is a promise about the table one click away, so it carries the same
+    floor. A toggle advertising more rows than it opens onto is a bug (D-105)."""
+    emp = _employer(migrated_engine)
+    _posting(migrated_engine, emp, "fresh", first_seen=_NOW - timedelta(days=1))
+    _posting(migrated_engine, emp, "ghost", first_seen=_NOW - timedelta(days=200))
+    client = _client(migrated_engine)
+
+    counts = {row["vertical"]: row["count"] for row in client.get("/api/public/verticals").json()}
+    listing = client.get("/api/public/postings", params={"vertical": _VERTICAL}).json()
+
+    assert counts[_VERTICAL] == listing["count"] == 1

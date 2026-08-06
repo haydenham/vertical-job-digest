@@ -17,6 +17,10 @@ A posting is `new` when it was first seen since that send **or** the pipeline ma
 that send (`_unreported_clause`). The second half exists because the pipeline and the digest are
 separate Jobs on separate schedules (D-103), so a posting's eligibility is not settled when the
 window closes; without it, a match landing after the morning send is never mailed at all.
+
+Over all of that sits the age floor (`age_floor_clause`): a posting whose freshness date is past
+`max_posting_age_days()` is never mailed, whatever the window says. Closures are exempt — a role
+that genuinely vanished is worth reporting however old it was.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from typing import Any, Final, cast
 
 from sqlalchemy import ColumnElement, Engine, RowMapping, Select, and_, func, or_, select
 
+from vja.db.postings import age_floor_clause
 from vja.db.profiles import Profile
 from vja.db.schema import digests, employers, matches, postings
 from vja.digest.verification import default_client, verify_apply_url
@@ -199,6 +204,12 @@ def build_digest(
     new_stmt = _new_select(profile).where(
         employers.c.vertical == vertical,
         postings.c.status == PostingStatus.OPEN.value,
+        # The same display floor the dashboard applies, and it has to be here too or the two
+        # surfaces disagree: the digest would mail a role the dashboard refuses to show. In the
+        # common case `resolved_since` already excludes three-week-old roles, but a user who
+        # paused and resumed (D-094) accumulates an arbitrarily wide window, and a reopened
+        # posting (D-053) re-enters the `new` set with whatever freshness date the board gives it.
+        age_floor_clause(generated_at),
     )
     if resolved_since is not None:
         new_stmt = new_stmt.where(_unreported_clause(resolved_since))

@@ -6,11 +6,16 @@ whole in-scope universe incl. `None`-match rows; rejected `no` never shown in ei
 **recency axis** (the `COALESCE(source_updated_at, first_seen_at)` activity basis with its
 `first_seen_at` fallback, the first_seen-only "new today" basis, all-open) — with newest-first
 ordering, vertical scoping, and open-only filtering.
+
+Since D-109 there is a second unconditional floor beside `in_scope`: the **age floor**, which the
+recency axis cannot switch off. `now` is passed explicitly (never read off the wall clock) so the
+floor is evaluated against the same instant these fixtures are dated from.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Engine
+import pytest
+from sqlalchemy import Engine, select
 
 from vja.db.engine import begin
 from vja.db.matches import save_match
@@ -110,6 +115,9 @@ def _titles(rows: list[object]) -> list[str]:
 
 
 def _query(engine: Engine, profile: Profile, **kwargs: object) -> list[object]:
+    # `now` defaults to the module clock so the D-109 age floor is evaluated against the same
+    # instant the fixtures are dated from; a test that cares about the floor passes its own.
+    kwargs.setdefault("now", _NOW)
     return open_postings_with_match_quality(  # type: ignore[return-value]
         engine,
         _VERTICAL,
@@ -213,7 +221,9 @@ def test_all_open_returns_matched_newest_first(migrated_engine: Engine) -> None:
     rows = _query(migrated_engine, prof, cutoff=None)
     # Closed + other-vertical excluded; ordered by COALESCE(source_updated, first_seen) desc.
     assert set(_titles(rows)[:2]) == {"today_fs", "today_su"}  # both peak at _NOW (tie unspecified)
-    assert _titles(rows)[2:] == ["fallback_recent", "week_su", "twoweek_only", "old"]
+    # `old` (activity 2026-05-02, 50 days back) is gone: since D-109 "all open" means all open
+    # *inside the age floor*. The recency axis can be switched off; the floor cannot.
+    assert _titles(rows)[2:] == ["fallback_recent", "week_su", "twoweek_only"]
 
 
 def test_week_window_uses_activity_date_with_fallback(migrated_engine: Engine) -> None:
@@ -275,3 +285,88 @@ def test_compensation_columns_are_carried_through_untouched(migrated_engine: Eng
     # Not filtered here — the API's guard is what suppresses its range.
     assert hourly_row.comp_min == 103_579  # type: ignore[attr-defined]
     assert (bare_row.comp_min, bare_row.comp_raw) == (None, None)  # type: ignore[attr-defined]
+
+
+# --- the age floor (D-109) ------------------------------------------------------------------
+#
+# A *display* floor, not a status change: the rows below stay `status='open'` throughout and are
+# never touched. Age-closing them would fight the diff — the ATS still lists the job, so the next
+# 4-hourly run reopens it and resets `first_seen_at`, resurfacing it as brand new every four hours
+# (D-053/D-009).
+
+
+def test_age_floor_hides_a_stale_posting_from_both_views(migrated_engine: Engine) -> None:
+    """The complaint that motivated D-109: a board that never delists shows a 2023 role forever."""
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    for title, activity in (("fresh", _NOW), ("ghost", datetime(2023, 4, 1, tzinfo=UTC))):
+        pid = _posting(migrated_engine, emp, title, first_seen=activity, source_updated=activity)
+        _match(migrated_engine, pid, prof, verdict="yes", score=70)
+
+    assert _titles(_query(migrated_engine, prof, cutoff=None)) == ["fresh"]
+    assert _titles(_query(migrated_engine, prof, cutoff=None, cleaned=True)) == ["fresh"]
+
+    # Still open in the DB — the lifespan statistics stay honest.
+    with migrated_engine.connect() as conn:
+        rows = conn.execute(select(postings.c.title, postings.c.status)).all()
+    statuses: dict[str, str] = {str(title): str(status) for title, status in rows}
+    assert statuses == {"fresh": "open", "ghost": "open"}
+
+
+def test_age_floor_boundary_is_inclusive_at_exactly_the_cutoff(migrated_engine: Engine) -> None:
+    """Exactly `VJA_MAX_POSTING_AGE_DAYS` old is in; one second older is out.
+
+    Pinned because the floor is a `>=` on a coalesced date and an off-by-one here is invisible in
+    production — nobody notices the day a role should have dropped.
+    """
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    for title, activity in (
+        ("exactly_21d", _NOW - timedelta(days=21)),
+        ("21d_and_a_second", _NOW - timedelta(days=21, seconds=1)),
+    ):
+        pid = _posting(migrated_engine, emp, title, first_seen=activity, source_updated=activity)
+        _match(migrated_engine, pid, prof, verdict="yes", score=70)
+
+    assert _titles(_query(migrated_engine, prof, cutoff=None)) == ["exactly_21d"]
+
+
+def test_age_floor_uses_the_activity_date_so_a_re_dated_role_survives(
+    migrated_engine: Engine,
+) -> None:
+    """A board that genuinely re-dates a long-lived req keeps it alive — the correct answer, and
+    the reason the floor keys on `COALESCE(source_updated_at, first_seen_at)` rather than on
+    `first_seen_at`. We have tracked it for a year; the employer says it moved yesterday."""
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    pid = _posting(
+        migrated_engine,
+        emp,
+        "long_lived_but_re_dated",
+        first_seen=datetime(2025, 6, 21, tzinfo=UTC),
+        source_updated=_NOW - timedelta(days=1),
+    )
+    _match(migrated_engine, pid, prof, verdict="yes", score=70)
+
+    assert _titles(_query(migrated_engine, prof, cutoff=None)) == ["long_lived_but_re_dated"]
+
+
+def test_age_floor_is_env_configurable(
+    migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`VJA_MAX_POSTING_AGE_DAYS` is read at call time, so a slow-moving vertical is a variable
+    change rather than a deploy."""
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    pid = _posting(
+        migrated_engine,
+        emp,
+        "thirty_days_old",
+        first_seen=_NOW - timedelta(days=30),
+        source_updated=_NOW - timedelta(days=30),
+    )
+    _match(migrated_engine, pid, prof, verdict="yes", score=70)
+
+    assert _titles(_query(migrated_engine, prof, cutoff=None)) == []
+    monkeypatch.setenv("VJA_MAX_POSTING_AGE_DAYS", "60")
+    assert _titles(_query(migrated_engine, prof, cutoff=None)) == ["thirty_days_old"]

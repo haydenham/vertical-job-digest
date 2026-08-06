@@ -707,7 +707,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         """
         response.headers["Cache-Control"] = _PUBLIC_CACHE_CONTROL
         counts = _public_verticals_cache.get_or_compute(
-            "all", lambda: open_posting_counts_by_vertical(engine)
+            "all", lambda: open_posting_counts_by_vertical(engine, now=datetime.now(UTC))
         )
         configured = set(available_verticals())
         return [
@@ -736,12 +736,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         response.headers["Cache-Control"] = _PUBLIC_CACHE_CONTROL
 
         def load() -> list[PublicPostingRow]:
-            cutoff, by_first_seen = _window_cutoff(window, datetime.now(UTC))
+            now = datetime.now(UTC)
+            cutoff, by_first_seen = _window_cutoff(window, now)
             rows = open_postings_with_match_quality(
                 engine,
                 vertical,
                 None,
                 None,
+                now=now,
                 cutoff=cutoff,
                 by_first_seen=by_first_seen,
                 cleaned=True,
@@ -787,12 +789,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         profile_id: Annotated[int | None, Query()] = None,
     ) -> PostingsResponse:
         profile = _resolve_profile(engine, vertical, profile_id, user)
-        cutoff, by_first_seen = _window_cutoff(window, datetime.now(UTC))
+        now = datetime.now(UTC)
+        cutoff, by_first_seen = _window_cutoff(window, now)
         rows = open_postings_with_match_quality(
             engine,
             vertical,
             profile.id,
             profile.resume_version,
+            now=now,
             cutoff=cutoff,
             by_first_seen=by_first_seen,
             cleaned=view is View.CLEANED,
