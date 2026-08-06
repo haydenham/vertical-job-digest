@@ -297,6 +297,23 @@ is safe.
 three: it is the residual D-108 named and 1.1 carried before it, promoted to its own PR once
 production evidence showed it is the larger live loss.
 
+> **Built 2026-08-06 as D-110, and this section's scope changed twice on the way.** Two corrections
+> to what is written below, both from re-measuring rather than re-reading:
+>
+> 1. **There is a third failure class the write-up did not have: `BLOCKED`.** Coinbase, Akuna and
+>    Tower Research return **403 to HEAD *and* GET, with our User-Agent and with none** — a WAF, not
+>    a rate limit. No amount of retry or throttling would ever have fixed them; they are quarantined
+>    every single day and always would have been. They now ship, on the reasoning that Layer 1
+>    already evidences the posting (the ATS listed it within 4 hours) and a 403 describes our
+>    access, not the job.
+> 2. **Item 4 (re-admission) is dropped by decision, not deferred.** Hayden's call: those roles are
+>    days old and re-mailing them is waste — fresh delivery is the product. The 564 stuck pairs stay
+>    lost. This also keeps the change away from `_unreported_clause`, which is where the risk was.
+>
+> Items 1-3 shipped as described, plus a **300s retry budget** that was not in this plan: 462 URLs ×
+> 7s of backoff would push the job past its 1h task timeout, and a timed-out digest sends nothing at
+> all. See D-110.
+
 ### The evidence, not the theory
 
 Measured against Neon on 2026-08-05, the morning after D-108 shipped (image `77e65a2`):

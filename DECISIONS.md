@@ -2775,3 +2775,76 @@ Postgres job; it is dialect-neutral `func.coalesce` with a bound datetime, the s
 
 References D-030, D-024, D-038, D-039, D-041, D-043, D-045, D-053, D-009, D-008, D-005, D-057,
 D-087, D-094, D-103, D-105, D-106, D-108.
+
+---
+
+### D-110 · Digest/Delivery · A link check we could not complete is not a dead job · accepted · 2026-08-06
+
+**Decision.** Apply-link verification returns one of four outcomes instead of a `bool`, and **only
+a definitive `404`/`410` quarantines a posting**. A `401`/`403` (a WAF refusing us) ships; a
+`429`/`5xx`/timeout/transport error is retried twice with widening backoff and then ships. All
+verification for a Job runs through one `ApplyLinkVerifier`: one check per URL however many
+recipients matched it, a 250ms minimum gap per host, and a 300s ceiling on total retry time. Every
+non-`ALIVE` outcome is logged **with its status code**, which nothing recorded before.
+
+**Why.** Measured against Neon on 2026-08-06: of 2,703 open in-scope relevant (posting, recipient)
+pairs inside the age floor, 1,999 mailed and **564 were quarantined** — about one in five matched
+roles never reaching the person it was matched for. D-108 and D-109 are holding (6 unexplained
+pairs, all pre-D-108 July residue), so quarantine was the whole of the live loss.
+
+**Most of it was never dead.** Re-checking 23 quarantined URLs by hand, spaced, with the app's own
+client: **16 × 200** (all Greenhouse and Taleo), **4 × 403** (Coinbase, Akuna, Tower Research), **2
+× 404** (Veryon — D-008 working correctly). Three different facts, collapsed by `verify_apply_url`
+into one `False`, and made permanent by a forward-only send window: `last_sent_at` only moves, so
+one failed check removes a role from *every* future digest while the dashboard, which never
+verifies anything, keeps showing it. That asymmetry is what users were reporting.
+
+**A 403 is a statement about us, not about the job.** The three blocked hosts return 403 to HEAD
+*and* GET, with our User-Agent and with none — a WAF, not a rate limit, and no retry policy will
+ever clear it. The pages load in a browser, which is where the user will click. Decisive:
+**Layer 1 already evidences the posting exists** — the ATS API listed it within the last four hours
+or the diff would have closed it (D-009). D-008 is a *second* opinion on a link, so an inconclusive
+second opinion should not override the first. Quarantining these deleted whole employers from every
+digest, permanently, and the list grows as more employers add WAFs.
+
+**Shipping an unverifiable link is earned by the retries, which is why the two paths differ.**
+`ApplyLinkVerifier` ships an `UNKNOWN` after three attempts across seven seconds; the single-shot
+`verify_apply_url` (assembly's fallback for a one-off `build_digest`) still fails it, because
+without retries "when in doubt, don't ship" stands. A `BLOCKED` ships on both paths.
+
+**The burst was self-inflicted, and it is the likeliest cause of the Greenhouse failures.**
+`send_main` looped (vertical × profile) with a fresh client per recipient and no dedupe or spacing:
+**2,727 requests for 462 distinct URLs (5.9x)**, 1,251 of them at two Greenhouse hosts, inside a
+six-minute job. Quarantine spikes landed exactly on the big baseline digests that verify a whole
+candidate set in one sequence (08-05 `erik.paulson.work` new=160 → **quar=106**; 07-31 → 540 in one
+job); quiet days with no new signup quarantined zero. Job-scoped caching cuts this to 462 requests
+(83%) and Greenhouse to 232, then spaces them.
+
+**Kept honest: no 429 was ever observed.** The status code was recorded nowhere, so throttling is
+inferred from burst shape plus clean re-checks. The fix does not depend on that inference —
+retry-on-inconclusive is cause-agnostic — and the logging lands in the same change, so the next
+morning's residue will name its own cause for the first time.
+
+**The retry budget exists so retries cannot cost the send.** 462 URLs × 7s of backoff would push a
+six-minute job past the digest Job's 1h task timeout, and a timed-out digest sends *nothing* —
+strictly worse than the bug. Past 300s an inconclusive check ships immediately, which is where it
+was heading anyway.
+
+**Explicitly not done: retrospective recovery.** `docs/21`'s PR 4 proposed re-admitting previously
+quarantined postings by reading `digests.contents`. Hayden's call is that those roles are now days
+old and re-mailing them is waste — fresh delivery is the product. The 564 stuck pairs stay lost;
+this changes the future only. It also keeps the change away from `_unreported_clause`, the exact
+predicate D-108 just fixed.
+
+**Observability came along because it had to.** A send with 0 new, 0 closed and N quarantined
+returns `skipped` and writes **no `digests` row at all** (D-028), so an all-quarantine morning left
+no durable evidence anywhere. `vja-digest` also had no `logging.basicConfig` — the only CLI in the
+repo without one — so the new log lines would have gone nowhere in production.
+
+**Verification.** Both regression tests were written first and confirmed red (403 quarantined, 500
+quarantined). Full gate green: pytest **933** (+14), ruff/format/mypy clean, `lint-imports` kept.
+The D-008 control (404/410 still quarantines, and is never retried) is pinned at both the unit and
+the integration level, the latter through the real verifier rather than a `Callable` stub. No
+migration, no SQL change, no frontend change.
+
+References D-008, D-009, D-028, D-037, D-053, D-103, D-105, D-108, D-109.

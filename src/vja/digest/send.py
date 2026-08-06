@@ -20,6 +20,7 @@ Config comes from the environment (a local `.env` is loaded for the cron runtime
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -39,6 +40,9 @@ from vja.db.users import get_user_by_email
 from vja.digest.assembly import build_digest
 from vja.digest.render import RenderedEmail, contents_to_dict, dashboard_url, render_digest
 from vja.digest.unsubscribe import make_unsubscribe_token, unsubscribe_url
+from vja.digest.verification import ApplyLinkVerifier
+
+logger = logging.getLogger("vja.digest.send")
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 _SANDBOX_SENDER = "onboarding@resend.dev"
@@ -285,6 +289,10 @@ def send_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--vertical", default=None, help="limit to one vertical (default: all)")
     args = parser.parse_args(argv)
 
+    # Every other CLI in the repo configures logging and this one never did, so the verification
+    # log lines below (the only record of what a link check actually found) would go nowhere.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
     engine = get_engine()
     verticals = [args.vertical] if args.vertical else distinct_active_verticals(engine)
     if not verticals:
@@ -293,17 +301,22 @@ def send_main(argv: list[str] | None = None) -> int:
 
     config = load_config()
     results: list[DigestSendResult] = []
-    for vertical in verticals:
-        for profile in active_profiles(engine, vertical):
-            result = send_digest(engine, vertical, profile, config=config)
-            results.append(result)
-            suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
-            print(
-                f"[{result.vertical}→{result.recipient}] {result.status}: new={result.new} "
-                f"closed={result.closed} quarantined={result.quarantined}{suffix}"
-            )
-            if result.status == "failed":
-                print(f"  ! {result.error}", file=sys.stderr)
+    # One verifier for the whole Job (D-110): each apply URL is checked once no matter how many
+    # recipients matched it, and each host is held to a polite interval. Per-recipient clients
+    # made ~2,700 requests for ~460 distinct URLs, concentrated at two Greenhouse hosts.
+    with ApplyLinkVerifier() as verify:
+        for vertical in verticals:
+            for profile in active_profiles(engine, vertical):
+                result = send_digest(engine, vertical, profile, config=config, verify=verify)
+                results.append(result)
+                suffix = f" (digest {result.digest_id})" if result.digest_id is not None else ""
+                print(
+                    f"[{result.vertical}→{result.recipient}] {result.status}: new={result.new} "
+                    f"closed={result.closed} quarantined={result.quarantined}{suffix}"
+                )
+                if result.status == "failed":
+                    print(f"  ! {result.error}", file=sys.stderr)
+        logger.info("%s", verify.summary())
 
     # D-103: as its own scheduled Job this is the only process that sees a failed send, so it
     # raises the D-037 alarm itself rather than relying on the nightly composer that used to.

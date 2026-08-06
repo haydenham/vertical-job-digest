@@ -39,6 +39,7 @@ from vja.digest.send import (
     send_digest,
     send_failure_alert,
 )
+from vja.digest.verification import ApplyLinkVerifier
 from vja.extract import run_extraction
 from vja.fetchers.base import Fetcher
 from vja.fetchers.registry import get_fetcher
@@ -154,6 +155,12 @@ def run_nightly(
         run.postings_closed,
     )
 
+    # One verifier for the whole run when the caller didn't supply one (D-110): each apply URL is
+    # checked once across every recipient, hosts are spaced, and an inconclusive check is retried
+    # rather than costing the role. Only built when this half actually sends.
+    link_verifier = ApplyLinkVerifier() if verify is None and send_digests else None
+    verify = verify or link_verifier
+
     digests: list[DigestSendResult] = []
     extraction_calls = match_calls = 0
     llm_cost: float | None = 0.0
@@ -204,6 +211,10 @@ def run_nightly(
                 result.closed,
                 result.quarantined,
             )
+
+    if link_verifier is not None:
+        logger.info("%s", link_verifier.summary())
+        link_verifier.close()
 
     with begin(engine) as conn:
         update_llm_metrics(
