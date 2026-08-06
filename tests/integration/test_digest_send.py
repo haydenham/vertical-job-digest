@@ -231,7 +231,15 @@ def test_successful_send_advances_the_window(migrated_engine: Engine) -> None:
     # A posting that appears after the send must be the only "new" in the next build.
     fresh = _posting(migrated_engine, emp, "fresh", first_seen=t1 + timedelta(days=1))
     _match(migrated_engine, fresh, prof, created_at=t1 + timedelta(days=1))
-    contents = build_digest(migrated_engine, "grid_power_software", profile=prof, verify=_PASS)
+    contents = build_digest(
+        # `now` is the second send's clock, two days after `t1` — explicit rather than the wall
+        # clock so the D-109 age floor is measured from the era these fixtures live in.
+        migrated_engine,
+        "grid_power_software",
+        profile=prof,
+        now=t1 + timedelta(days=2),
+        verify=_PASS,
+    )
     assert contents.since == t1
     assert {p.external_id for p in contents.new} == {"fresh"}
 

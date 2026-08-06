@@ -331,10 +331,10 @@ def test_postings_needing_match_since_filters_to_window(migrated_engine: Engine)
     cutoff = _NOW - timedelta(days=5)
 
     uncapped = postings_needing_match(
-        migrated_engine, _VERTICAL, profile.id, profile.resume_version
+        migrated_engine, _VERTICAL, profile.id, profile.resume_version, now=_NOW
     )
     windowed = postings_needing_match(
-        migrated_engine, _VERTICAL, profile.id, profile.resume_version, since=cutoff
+        migrated_engine, _VERTICAL, profile.id, profile.resume_version, now=_NOW, since=cutoff
     )
 
     assert {c.title for c in uncapped} == {

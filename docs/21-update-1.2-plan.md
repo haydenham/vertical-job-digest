@@ -1,17 +1,20 @@
 # Update 1.2 — plan of record
 
-*Written 2026-08-03, the day after Update 1.1 closed. Three PRs, planned together and built one at a
-time. This is a **plan**, not a release record: when the work lands it gets `docs/updates/1.2.md`
+*Written 2026-08-03, the day after Update 1.1 closed. Three PRs, planned together and built one at
+a time; a fourth was added on 2026-08-05 from production evidence. This is a **plan**, not a
+release record: when the work lands it gets `docs/updates/1.2.md`
 (the grouping, the measured before/after, the carried-forward ledger), and any re-litigable call
 here becomes an ADR in `DECISIONS.md`. Live rules go to `docs/INVARIANTS.md` in the same session
 that changes them.*
 
-**Status: PR 1 built (`feat/paste-resume`, D-107). PRs 2 and 3 planned.** The update itself opened at
-#120 and its record is `docs/updates/1.2.md`.
+**Status: PR 1 merged (#121, D-107). PR 2 built (`feat/posting-age-cap`, D-109). PR 3 planned. PR 4
+added 2026-08-05 and planned, not built** — it was not in the original three; it is the quarantine
+defect, diagnosed with production evidence on 2026-08-05 and written up below. The update itself
+opened at #120 and its record is `docs/updates/1.2.md`.
 
 ---
 
-## Why these three
+## Why these
 
 Update 1.1 was the **funnel** update: 5,000 launch views produced 10 résumé uploads, so almost
 nobody reached a job. It opened the door — `/demo`, self-serve vertical switching, a landing page
@@ -27,7 +30,9 @@ item removes a reason a real user gives up.
 | 3 | Advice the user can act on | The write-up currently argues *whether* you fit. A job seeker already suspects whether they fit — what they cannot get anywhere else is *what to change before applying*. |
 
 They are independent: any one can ship without the others, and they touch three different layers
-(API + SPA form / query floor / LLM prompt + schema). That is why three PRs rather than one.
+(API + SPA form / query floor / LLM prompt + schema). That is why separate PRs rather than one.
+**PR 4 below was not part of this reasoning** — it was added mid-update from production evidence,
+and it is a defect rather than a friction.
 
 **Plus one item that is not a PR-sized feature: a cadence copy sweep.** D-103 split the pipeline to
 every 4 hours and left the digest daily, but the SPA copy was never swept — six strings still said
@@ -107,10 +112,13 @@ brand new every four hours, and the digest would mail it out again. The diff is 
 
 ### Scope
 
-- **One home for the rule.** A `vja.dates` helper (bottom layer, zero LLM, the `activity_window_clause`
-  neighbourhood) owns the cutoff so no caller open-codes `21`. The bound is `COALESCE(source_updated_at,
-  first_seen_at) >= now - MAX_POSTING_AGE_DAYS` — the same freshness expression the recency windows
-  already use, so a board that genuinely re-dates a role keeps it alive, which is the correct answer.
+- **One home for the rule.** A helper owns the cutoff so no caller open-codes `21`. The bound is
+  `COALESCE(source_updated_at, first_seen_at) >= now - MAX_POSTING_AGE_DAYS` — the same freshness
+  expression the recency windows already use, so a board that genuinely re-dates a role keeps it
+  alive, which is the correct answer. *(**Built as `db.postings.age_floor_clause`, not in
+  `vja.dates` as this plan first said**: the clause needs the `postings` table, so it belongs in the
+  db layer next to `activity_window_clause`, and it is literally expressed as one more call to it.
+  `vja.dates` normalizes ATS date *strings* and knows nothing about tables.)*
 - **Applied in four places:**
   1. `dashboard_statement` — both the matched and cleaned views, and therefore `/demo` too (it
      shares the statement, which is the point of D-105's structural split).
@@ -283,6 +291,96 @@ is safe.
 
 ---
 
+## PR 4 — A throttled apply-link check must not read as a dead link
+
+**Branch:** `fix/digest-quarantine` · **Added 2026-08-05, after the fact.** Not one of the planned
+three: it is the residual D-108 named and 1.1 carried before it, promoted to its own PR once
+production evidence showed it is the larger live loss.
+
+### The evidence, not the theory
+
+Measured against Neon on 2026-08-05, the morning after D-108 shipped (image `77e65a2`):
+
+- **D-108 is holding.** Of 320 relevant (posting, recipient) pairs first seen in the last 5 days,
+  291 mailed, 16 quarantined, 13 to recipients with no send yet, and **zero unexplained**.
+- **Quarantine is now the whole of the loss.** Across every open in-scope relevant pair regardless
+  of age: 2,909 mailed · **784 quarantined** · 197 to never-sent recipients · 19 unexplained (all
+  matched in July against an August `last_send` — the pre-D-108 residue that 1.2 decided stays
+  lost). Roughly **one in five** relevant roles never reaches the recipient it was matched for.
+- **Most of it is a false positive.** Today's send quarantined 125 pairs behind 113 distinct URLs,
+  **90 of them `*.greenhouse.io`**. Re-checking 12 of those URLs by hand, one at a time, 1.5s
+  apart: **11 returned 200 and 1 returned 404**. The 404 (Aurora Energy Research) is D-008 working
+  exactly as intended. The other 11 were never dead.
+
+The worked case that prompted this: `haydenham10@gmail.com` / trading saw 16 roles at the top of
+the dashboard and 4 in the digest. The 16 decompose as **3 shipped · 3 quarantined this morning ·
+4 quarantined on 08-03 and permanently lost · 6 correctly omitted** (mailed on 08-03; they returned
+to the top of the table only because SIG and Headlands re-stamped their ATS date on 08-04, and the
+table orders on `COALESCE(source_updated_at, first_seen_at)`). So **7 of 16 were the defect** and 6
+were correct behaviour with misleading presentation.
+
+### The mechanism
+
+`build_digest` runs once per (vertical, profile) and `_apply_verification_gate` re-verifies every
+candidate URL with a fresh `httpx.Client` — no dedupe across recipients, no delay, no retry. Today
+that was ~685 HEAD requests concentrated on two Greenhouse hosts inside a six-minute job.
+`verify_apply_url` returns a bare `bool`, so **404, 429, 503 and a timeout are the same answer**,
+and any of them fails closed. A forward-only send window (`last_sent_at` only moves) then makes one
+transient answer permanent: the posting fails both halves of the D-108 predicate the next morning.
+
+Fail-closed verification is correct and is not in question (D-008). What is wrong is that "we could
+not tell" is being recorded as "it is dead", and that the cost of being wrong once is the role.
+
+**Caveat kept deliberately:** the status code is not logged anywhere, so "throttled" is inference
+from the burst shape plus the clean re-checks, not from an observed 429. Recording it is part of
+the fix, and the first thing the fix makes measurable.
+
+### Scope
+
+1. **Verify once per URL per digest job, not once per recipient.** A verification cache threaded
+   through the job; ~685 requests become ~400 on today's volume. Also fixes the duplicated work
+   that makes the burst as sharp as it is.
+2. **Throttle per host, and share one client.** Small per-host spacing plus connection pooling.
+   This is also a standing repo rule currently being violated ("politeness is policy: rate limits,
+   sane user agent, respect robots.txt" — getting IP-banned is a self-inflicted coverage hole).
+3. **Three-way result instead of a bool.** *alive* → ship; *dead* (404/410) → quarantine exactly as
+   today; *unknown* (429/5xx/transport) → retry with backoff, and log the status. An unknown must
+   not consume the posting's only chance.
+4. **Make quarantine survivable.** Read the recent `digests.contents` blobs for the recipient and
+   re-admit any still-open posting quarantined recently. **No migration is required:** the blob
+   already stores `external_id` *and* `company`, and `UNIQUE(vertical, name)` on `employers` plus
+   `UNIQUE(employer_id, external_id)` on `postings` make `(vertical, company, external_id)` resolve
+   to exactly one posting.
+
+Items 1-3 stop new losses; item 4 recovers roles that already lost the coin flip, and is the only
+one that would have saved the four Headlands/Jane Street roles above.
+
+### Deliberately out of scope
+
+- **Weakening D-008.** A posting whose link is genuinely dead still must not ship. The Aurora 404
+  is the control case and must keep being quarantined.
+- **Backfilling the 784 already-lost pairs.** 1.2 already decided this (`fresh delivery is the
+  product`); item 4 changes the future, not the past.
+- **Verifying links for the dashboard or `/demo`.** Dead public apply links remain a named,
+  unfixed item carried from 1.1.
+
+### Definition of Done
+
+Green full gate; a regression test written first and confirmed red, pinning that an *unknown*
+result does not permanently drop a posting while a *dead* one still does; a test that item 4 cannot
+resurface something already mailed and that its lookback is bounded; the per-host throttle pinned
+without real network calls; an ADR; INVARIANTS' *Digest & delivery* verification line updated in
+the same session. No migration, so CD's code-only path suffices (as D-108's did).
+
+### Risk
+
+**Medium, and it is item 4 alone.** Items 1-3 are narrow and self-contained. Item 4 changes what
+`new` means in the digest, which is exactly the surface D-108 just fixed and exactly where a naive
+predicate mails people roles they have already read — the same trap the `trigger=nightly` gate was
+added for. It needs the bound and the already-mailed guard, and its test comes before its code.
+
+---
+
 ## Sequencing
 
 **1 → 2 → 3.** Build in that order and merge each before starting the next.
@@ -295,19 +393,29 @@ is safe.
 - **PR 3 last**, and it is the only one needing a manual Neon migration and a manual quality
   signoff. It should not be blocking anything else.
 
-**PR 2 is gated on network access to Neon** for the sizing query. If that is unavailable when its
-turn comes, build PR 3 first rather than guessing a threshold — the order exists to optimize cost,
-not to enforce a dependency, and a wrong constant is more expensive than a wrong sequence.
+**PR 2's Neon gate is closed** — the sizing query ran on 2026-08-04 and 21 days is now an argued
+constant rather than a guess (see *Open questions*).
 
-Each PR branches from `main` at its own start. Note the standing tax: all three touch `WORKLOG.md`,
-so a branch cut early and merged late will conflict on exactly that one hunk. Resolve by hand,
-newest-on-top.
+**PR 4 slots after PR 2, ahead of PR 3** (decided 2026-08-05). The case for jumping it to the front
+was real — it is a live defect losing about one in five matched roles, where PR 2 is an improvement
+— but PR 2 was already part-built when the evidence landed, and finishing it costs less than
+carrying two open branches. PR 3 goes last regardless: it is the only one needing a manual Neon
+migration and a manual quality signoff.
+
+Each PR branches from `main` at its own start. Note the standing tax: all of them touch
+`WORKLOG.md`, so a branch cut early and merged late will conflict on exactly that one hunk. Resolve
+by hand, newest-on-top.
 
 ## Open questions
 
-- **Is 21 days right?** Open, and deliberately so — it is a guess until the Neon sizing query runs.
-  `VJA_MAX_POSTING_AGE_DAYS` makes it cheap to change afterwards, but the *initial* value should
-  come from the distribution, not from the number in this document's title.
+- **Is 21 days right?** ~~Open~~ **Answered 2026-08-04, and 21 days chosen.** The Neon sizing query
+  returned 897 open in-scope rows keyed on `COALESCE(source_updated_at, first_seen_at)`, with
+  `source_updated_at` present on 877 of 897 (98%) — so the "board stamps the original date forever"
+  hazard is real but not dominant. Bands: ≤7d **285** · 8-14d **188** · 15-21d **75** · 22-30d
+  **80** · 31-60d **172** · 61-180d **72** · >180d **25**. A 21-day floor cuts **349 of 897 (39%)**,
+  leaving 548. Hayden's call, taken against the alternatives on the table (30d = 269 cut, 60d = 97):
+  39% is a large cut and it is the intended one, since the 31-60d and 61-180d bands are 244 rows of
+  exactly the tail the complaint was about. `VJA_MAX_POSTING_AGE_DAYS` keeps it cheap to revise.
 - **How much does the description cost per match, really?** Measured in PR 3, not estimated here.
 - **Should the age cap eventually inform employer health?** A company whose postings routinely age
   past 21 days without re-dating may simply not delist. That is lifespan/urgency intel (D-087 F4),
@@ -315,7 +423,15 @@ newest-on-top.
 
 ## Not in this update
 
-Not because they are unimportant — because they are not these three. Carried from 1.1's ledger:
+Not because they are unimportant — because they are not these four. Carried from 1.1's ledger:
 the Cloudflare orange-cloud check, the deployed `robots.txt`, Google OAuth publishing status, the
-GCP budget alert, the August billing check, the digest `new`-window hole, dead apply links on
-`/demo`, `.cell-location` truncation, and `alerts.sh` being unable to express an edit.
+GCP budget alert, the August billing check, dead apply links on `/demo`, `.cell-location`
+truncation, and `alerts.sh` being unable to express an edit. *(The digest `new`-window hole left
+this list: it was observed in production and fixed as D-108.)*
+
+One more, surfaced by the 2026-08-05 investigation and deliberately not scoped here: **the
+dashboard's newest-first ordering keys on the ATS date, while the digest ships on our detection
+date**, so a role a board re-stamps returns to the top of the table looking new when it was mailed
+a week ago. Six of the sixteen roles in the worked case above were this, and it reads as a bug to
+the user. It is a presentation question (a "we found this on" column, a distinct sort, or a
+re-dated marker), it needs a design call rather than a fix, and PR 4's scope is the real loss.

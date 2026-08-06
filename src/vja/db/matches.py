@@ -17,7 +17,7 @@ from sqlalchemy import Engine, delete, exists, func, select
 from sqlalchemy.engine import Connection
 
 from vja.db.engine import begin
-from vja.db.postings import activity_window_clause
+from vja.db.postings import activity_window_clause, age_floor_clause
 from vja.db.schema import employers, matches, postings
 from vja.models import MatchTrigger
 
@@ -44,6 +44,7 @@ def postings_needing_match(
     profile_id: int,
     resume_version: str,
     *,
+    now: datetime,
     since: datetime | None = None,
 ) -> list[MatchCandidate]:
     """Open, extracted postings for `vertical` with no match yet for (profile, resume_version).
@@ -52,8 +53,14 @@ def postings_needing_match(
     this resume version, so a re-run only matches the new/unmatched remainder (D-005 cost).
 
     `since` bounds the set to the recency window (`activity_window_clause`) for the signup
-    backfill's 5-day cap (D-024/D-039); the default `None` is the nightly path — every unmatched
-    posting, date-uncapped (the digest's `first_seen_at` window keeps old roles out of the inbox).
+    backfill's 5-day cap (D-024/D-039); the default `None` is the nightly path, which is
+    date-uncapped *within* the age floor below.
+
+    **The age floor (`age_floor_clause(now)`) applies on every path, and it is the one gate here
+    that saves money rather than spending it.** A posting past `max_posting_age_days()` cannot be
+    displayed on the dashboard or mailed in a digest, so paying the strong model to reason about
+    it buys nothing — this is the first place in the project where LLM spend falls by declining to
+    ask the question. It is a no-op on the backfill path, whose 5-day `since` is already stricter.
 
     Ordered freshest-first so that callers which *count*-cap the result truncate a defined set.
     """
@@ -85,6 +92,7 @@ def postings_needing_match(
             postings.c.status == "open",
             postings.c.extracted_at.is_not(None),
             ~exists(already_matched),
+            age_floor_clause(now),
         )
     )
     if since is not None:

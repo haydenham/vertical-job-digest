@@ -6,7 +6,7 @@ non-US, other-vertical, and already-matched postings are skipped; the run is ide
 posting's failure is isolated; cost is summed; multiple active profiles are each matched.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
@@ -91,6 +91,8 @@ def _posting(
     level: str = "new_grad",
     location: str = "Houston, TX",
     extracted: bool = True,
+    first_seen: datetime | None = None,
+    source_updated: datetime | None = None,
 ) -> None:
     with begin(engine) as conn:
         conn.execute(
@@ -104,7 +106,8 @@ def _posting(
                 location=location if extracted else None,
                 stack=["Python"] if extracted else None,
                 status="open",
-                first_seen_at=_NOW,
+                first_seen_at=first_seen or _NOW,
+                source_updated_at=source_updated,
                 last_seen_at=_NOW,
                 extracted_at=_NOW if extracted else None,
                 extraction_model="claude-haiku-4-5" if extracted else None,
@@ -286,3 +289,67 @@ def test_capped_run_matches_the_freshest_postings_first(
         }
     # `newest` (06-30) and `swe` (06-19) beat `middle` (06-12) and `oldest` (06-10).
     assert matched_ids == {"swe", "newest"}
+
+
+# --- the age floor on the candidate set (D-109) -----------------------------------------------
+
+
+def test_a_posting_past_the_age_floor_is_never_matched(migrated_engine: Engine) -> None:
+    """The cost half of D-109, and the first place in this project where LLM spend falls because
+    we decline to ask a question.
+
+    The nightly path is deliberately date-*uncapped* (`since=None`, D-039), so before the floor a
+    posting the dashboard could never display and the digest could never mail was still paying for
+    the strong model. Asserted on the number of client calls, not only on the stored rows: a test
+    that counted `matches` alone would pass even if we called the model and threw the answer away.
+    """
+    _seed(migrated_engine)
+    gridco = _employer(migrated_engine, vertical=_VERTICAL, name="GridStale")
+    # Identical to `swe` in every way the gates look at — in-scope title, early-career, US,
+    # extracted, unmatched. The only difference is the activity date.
+    _posting(
+        migrated_engine,
+        gridco,
+        "stale",
+        "Software Engineer",
+        first_seen=_NOW - timedelta(days=90),
+        source_updated=_NOW - timedelta(days=90),
+    )
+
+    client = _FakeClient()
+    summary = _run(migrated_engine, client)
+
+    assert (summary.total, summary.matched) == (1, 1)  # `swe` only
+    assert client.calls == 1  # `stale` never reached the model
+    with migrated_engine.connect() as conn:
+        matched = {
+            row[0]
+            for row in conn.execute(
+                select(postings.c.external_id).join(matches, matches.c.posting_id == postings.c.id)
+            ).all()
+        }
+    assert matched == {"swe"}
+
+
+def test_the_age_floor_reads_the_activity_date_not_our_detection_date(
+    migrated_engine: Engine,
+) -> None:
+    """A req we have tracked for a year but the board re-dated yesterday is still worth matching.
+
+    This is the deliberate escape hatch in the floor: `COALESCE(source_updated_at, first_seen_at)`
+    means an employer who keeps a posting current keeps it alive, and only a board that has stopped
+    touching a role lets it age out.
+    """
+    _seed(migrated_engine)
+    gridco = _employer(migrated_engine, vertical=_VERTICAL, name="GridRedated")
+    _posting(
+        migrated_engine,
+        gridco,
+        "re_dated",
+        "Software Engineer",
+        first_seen=_NOW - timedelta(days=365),
+        source_updated=_NOW - timedelta(days=1),
+    )
+
+    summary = _run(migrated_engine)
+    assert (summary.total, summary.matched) == (2, 2)  # `swe` + `re_dated`

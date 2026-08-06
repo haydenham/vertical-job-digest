@@ -282,7 +282,8 @@ def _match_profile(
 
     The shared core of nightly matching (`since=None`, `trigger=NIGHTLY`) and the signup backfill
     (`since=now−5d`, `trigger=BACKFILL`). `since` bounds the candidate set to the recency window;
-    Stage A (`in_scope`) + Stage B (`passes_prefilter`) drop the obvious non-matches for free.
+    `now` additionally applies the age floor, which drops postings we could not display even if
+    we matched them. Stage A (`in_scope`) + Stage B (`passes_prefilter`) drop the rest for free.
     `max_postings` caps the surviving set (the backfill cost guard, D-057) — `None` for the
     uncapped nightly path. Per-posting isolation: one posting's failure (API error, bad parse) is
     logged and skipped, never aborting the batch.
@@ -293,7 +294,7 @@ def _match_profile(
     candidates = [
         c
         for c in postings_needing_match(
-            engine, vertical, profile.id, profile.resume_version, since=since
+            engine, vertical, profile.id, profile.resume_version, now=now, since=since
         )
         if in_scope(c.title, config.scope) and passes_prefilter(c.level, c.location, prefilter)
     ]

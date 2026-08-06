@@ -5,7 +5,7 @@ param → query mapping (`window`, `view`), the `(vertical, profile_id)` profile
 explicit / 404 / 409), the response envelope, and health.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,7 +29,10 @@ from vja.db.schema import employers, postings, profiles, users
 from vja.db.users import User, upsert_user_by_google
 from vja.resume import _MAX_CHARS as _MAX_RESUME_CHARS
 
-_NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
+# The real clock, not a fixed date: the endpoints apply the D-109 age floor against their own
+# `datetime.now(UTC)`, so fixtures pinned to a 2026-06 literal would read as months old and
+# every listing would come back empty. Offsets below are relative to this.
+_NOW = datetime.now(UTC)
 _VERTICAL = "grid_power_software"
 
 
@@ -257,7 +260,7 @@ def test_new_today_window_param(migrated_engine: Engine) -> None:
     prof = _profile(migrated_engine)
     emp = _employer(migrated_engine)
     today = _posting(migrated_engine, emp, "today", first_seen=_NOW)
-    old = _posting(migrated_engine, emp, "old", first_seen=datetime(2026, 6, 1, tzinfo=UTC))
+    old = _posting(migrated_engine, emp, "old", first_seen=_NOW - timedelta(days=5))
     _match(migrated_engine, today, prof)
     _match(migrated_engine, old, prof)
 

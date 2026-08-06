@@ -166,8 +166,15 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **A closed posting that reappears is reopened in place, never re-inserted** — `sync_employer`
   routes a `diff.new` id that matches `closed_index` to `reopen_posting` (UPDATE the surviving row,
   not `INSERT` — which would violate `UNIQUE(employer_id, external_id)`). The reopen resets
-  `first_seen_at`, so the role **re-enters the `new` set** (surfaces as new again); it re-extracts
-  only if the body's `content_hash` moved. (D-053, D-009)
+  `first_seen_at`, so the role **re-enters the `new` set**; it re-extracts only if the body's
+  `content_hash` moved. **It does not necessarily surface again, and that is the D-109
+  interaction:** `reopen_posting` writes `source_updated_at` only when the fetcher supplies one and
+  never nulls a previously-good date, while the age floor keys on `COALESCE(source_updated_at,
+  first_seen_at)` — so a reopen whose board date is stale is floored out despite the fresh
+  `first_seen_at`. Accepted rather than fixed: the board saying it has not touched the role in
+  three weeks is the better freshness signal, and the D-085/D-088 churn diagnosis found reopens are
+  largely Workday page-membership **artifacts** rather than genuine close/reopen events, so
+  resurfacing them on our own churn is the worse failure. (D-109, D-053, D-009, D-085)
 - **DB access = SQLAlchemy Core + Alembic.** SQLite now → Postgres at first hosted deploy
   (`alembic upgrade`, URL swap). The Postgres path is **CI-verified on both dialects** — the default
   suite re-runs on a `postgres:16` service via `VJA_TEST_DATABASE_URL`, so the cutover is a proven URL
@@ -196,7 +203,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   forward: the window filtered the posting while the INNER JOIN required the match, two different
   clocks. **Both halves are required.** Without the match half, the D-103 Job split loses a posting
   first seen at 05:30 and matched at 06:20 (also `VJA_PIPELINE_MAX_MATCHES` deferrals and per-posting
-  match failures). Without the `first_seen_at` half, a **reopened** posting stops shipping — it resets
+  match failures). **The age floor (D-109) sits over both halves:** a posting past
+  `VJA_MAX_POSTING_AGE_DAYS` is never mailed whatever the window says, so the digest cannot ship a
+  role the dashboard refuses to show — the case that needs it is a *wide* window (a first digest, or
+  a paused-then-resumed user, D-094). Closures are exempt. Without the `first_seen_at` half, a
+  **reopened** posting stops shipping — it resets
   `first_seen_at` to re-enter the `new` set (D-053) but reuses its old match row. **The `trigger=nightly`
   gate is not optional:** a résumé re-upload or vertical switch writes `backfill` matches with a fresh
   `created_at` over postings of any age, which without the gate mails a hundred-row digest of
@@ -372,7 +383,8 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   (no `view` axis — always the in-scope universe), `/api/public/postings/{id}?vertical=`, and
   `/api/public/verticals` → `[{vertical, count}]`, which unlike `/api/verticals` **omits verticals
   with zero open rows** (the picker must stay joinable at zero; a toggle must not open onto an empty
-  table). **Caching is the abuse guard** — there is no rate limiting anywhere in the app: a
+  table) and carries the **same age floor as the table it opens** (D-109) — a count that promises
+  more rows than the listing returns is a bug. **Caching is the abuse guard** — there is no rate limiting anywhere in the app: a
   per-process TTL cache on `(vertical, window)` plus `Cache-Control: public, max-age=300,
   s-maxage=900`; the `s-maxage` half needs Cloudflare **proxied (orange-cloud)**, not DNS-only.
   `vertical` is validated against the configured list on every public endpoint. Response ships whole
@@ -382,6 +394,22 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `postings.in_scope IS TRUE` (the durable Stage-A+B marker, stamped at extraction from
   `passes_prefilter`), so out-of-scope *and* out-of-US/level roles never surface. "Full open set"
   means the *in-scope* open set. (D-041, D-043)
+- **A posting older than `VJA_MAX_POSTING_AGE_DAYS` (default 21) is not shown anywhere, and the row
+  is never touched.** `db.postings.age_floor_clause(now)` — one more `activity_window_clause`, so it
+  keys on the same `COALESCE(source_updated_at, first_seen_at)` the recency windows use — is applied
+  in four places: `dashboard_statement` (both views, which gets `/demo` **structurally**, the point
+  of D-105's split), `postings_needing_match`, the digest's `new` set, and
+  `open_posting_counts_by_vertical` (the toggle's count is a promise about the table it opens).
+  **A display floor, never a status change:** `status` stays `open` and lifespan stats stay honest,
+  because age-*closing* would fight the diff — the ATS still lists the job, so the next 4-hourly run
+  reopens it, resets `first_seen_at` and re-mails it as brand new every four hours (D-053/D-009).
+  Keying on the activity date is deliberate: a board that re-dates a role keeps it alive. The
+  recency axis can be switched off (`window=all`); **the floor cannot**. Closures are exempt.
+  **`now` is a required argument on every statement that applies it**, never the wall clock — a
+  caller that forgets gets a type error rather than an empty page, and it is what makes the boundary
+  (exactly 21 days in, 21 days + 1 second out) pinnable. 21 came from the production distribution
+  (897 open in-scope rows; a 21-day floor cuts 349, i.e. 39%), not from the phrase "three weeks".
+  (D-109, D-030, D-024, D-053, D-105)
 - **Dashboard = single Matched/Cleaned view.** `view` ∈ {`matched` (default — this résumé's relevant
   verdicts only, the AI recommendation subset), `cleaned` (the whole in-scope US-software universe —
   **every** verdict incl. `no` and not-yet-assessed; the objective job list, same set for any
@@ -416,14 +444,20 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   the 5-day cap governs only the signup backfill, decoupled from the dashboard window. (D-041, D-039)
 - **Recency windows key on the ATS posted/updated date:** `COALESCE(source_updated_at,
   first_seen_at) >= cutoff`. Toggles: *new today* / *within 1wk* / *within 2wk* / *all
-  open*. (D-030, D-024, D-038, D-039)
+  open* — where *all open* means all open **inside the age floor** (D-109). (D-030, D-024, D-038,
+  D-039)
 - **"New today" uses `first_seen_at` (midnight UTC)** so it equals the digest, not the ATS
   date. (D-030, D-039)
 - **Signup backfill caps at 5 days, `trigger=backfill`, idempotent** — and at
   `VJA_BACKFILL_MAX_POSTINGS` candidates (D-057, the cost guard). *(Supersedes D-024's original
-  2-week cap.)* The pipeline match is **date-uncapped**, but optionally **count**-capped per profile
-  per run by `VJA_PIPELINE_MAX_MATCHES` (D-103; 400 in prod, unset in code); the dashboard's 14-day
-  toggle is decoupled from the backfill window. (D-039, D-057, D-103, amending D-024)
+  2-week cap.)* The pipeline match carries **no recency window of its own** (no `since`), but is
+  floored by the age cap like every other surface — so "date-uncapped" now means *uncapped within
+  `VJA_MAX_POSTING_AGE_DAYS`*, not unbounded (D-109, qualifying D-039). Matching a posting that can
+  never be displayed or mailed is pure waste, which makes this the first place LLM spend falls by
+  declining to ask the question; it is a no-op on the backfill path, already stricter at 5 days. The
+  pipeline match is also optionally **count**-capped per profile per run by
+  `VJA_PIPELINE_MAX_MATCHES` (D-103; 400 in prod, unset in code); the dashboard's 14-day toggle is
+  decoupled from the backfill window. (D-109, D-039, D-057, D-103, amending D-024)
 - **`postings_needing_match` is ordered freshest-first (`first_seen_at DESC, id DESC`).** Every caller
   that count-caps the result truncates this list, so without a deterministic order it was slicing a
   set the database could return any way it liked — which postings got matched, and which were silently
