@@ -5,7 +5,94 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-05 (last) — Update 1.2 PR 2: a posting older than 3 weeks stops being shown (`feat/posting-age-cap`, D-109) + the digest loss re-diagnosed
+## 2026-08-06 (last) — Update 1.2 PR 4: a link check we could not complete stops reading as a dead job (`fix/digest-quarantine`, D-110)
+
+**Housekeeping: the previous entry's `**Next:**` is done.** D-109 merged as **#123** and is live;
+`docs/updates/1.2.md` now carries its row. One casualty of the branch switch worth knowing about:
+the two uncommitted edits from that session (the correction that the age floor's LLM saving is
+**$0 on the existing corpus** — all 358 hidden rows already carried a match — and is forward-looking
+per new `(profile, resume_version)` only) were discarded and never reached `main`. The finding
+stands and should be re-applied to D-109's ADR and the `postings_needing_match` docstring; it does
+not change any behavior.
+
+### The question that framed the session: why is it on the dashboard but not in the email?
+
+Worth writing down plainly, because it is the whole shape of the bug. **The dashboard never checks
+the apply link. The digest does.** The dashboard is a pure DB read — open, in scope, inside the
+21-day floor, relevant verdict. The digest applies those *plus* two more gates: "new since your last
+email" (D-108) and "does this link resolve right now" (D-008, a live HTTP request per link at send
+time). A link failing that live check is held out of the email while the dashboard, which never
+asked, keeps showing it. And `last_sent_at` only moves forward, so **one failed check removes the
+role from every future digest.**
+
+### Measured first, and the numbers moved the scope
+
+Read-only against Neon with D-108 and D-109 both live: of 2,703 open in-scope relevant (posting,
+recipient) pairs inside the age floor — 1,999 mailed · **564 quarantined** · 132 never-sent
+recipients · 2 not yet due · **6 unexplained** (all July matches against an August send, the
+pre-D-108 residue this update already decided stays lost). D-108 and D-109 are holding; quarantine
+is the whole of the live loss, about one in five matched roles.
+
+Re-checked 23 currently-quarantined URLs by hand, spaced, with the app's own client:
+
+- **16 × 200** — Greenhouse and Taleo. Never dead.
+- **4 × 403** — Coinbase, Akuna, Tower Research. **This class was not in `docs/21`'s write-up.** I
+  probed HEAD *and* GET, with our User-Agent and with none: 403 on all four combinations. A WAF, not
+  a rate limit, so no retry or throttle would ever have fixed them — they were being quarantined
+  every single day, permanently, and the list grows with every employer that adds a WAF.
+- **2 × 404** — Veryon on Paylocity. Genuinely dead, D-008 working correctly.
+
+Three distinct facts, collapsed into one `bool`.
+
+The burst is real and sizeable: `send_main` looped (vertical × profile) with a fresh client per
+recipient, so **2,727 requests for 462 distinct URLs (5.9x)**, 1,251 at two Greenhouse hosts. The
+quarantine spikes land exactly on the big baseline digests (08-05 `erik.paulson.work` new=160 →
+**quar=106**; 07-31 → 540 in one job); quiet days with no signup quarantine zero.
+
+### What shipped
+
+Only a definitive **404/410** quarantines. `BLOCKED` (401/403) ships — a 403 describes our access,
+not the job, and **Layer 1 already evidences the posting** (the ATS listed it within 4 hours or the
+diff would have closed it), which makes D-008 a *second* opinion that should not override the first.
+`UNKNOWN` (429/5xx/timeout) is retried twice with widening backoff, then ships. All of it runs
+through one job-scoped `ApplyLinkVerifier`: one check per URL, 250ms per-host spacing, and every
+non-alive outcome logged **with its status code**.
+
+**Two things went in that the plan did not have.** A **300s retry budget** — 462 URLs × 7s would
+push a six-minute job past the digest Job's 1h timeout, and a timed-out digest sends *nothing*,
+strictly worse than the bug. And `logging.basicConfig` in `vja-digest`, the one CLI in the repo
+without it, without which none of the new logging would appear in production at all.
+
+**The two paths deliberately disagree on `UNKNOWN`:** the verifier ships it, the single-shot
+`verify_apply_url` still fails it. Shipping a link we could not confirm is earned by three attempts
+over seven seconds; without retries, "when in doubt, don't ship" still stands.
+
+**Item 4 of `docs/21` (re-admitting previously quarantined postings) is dropped by decision, not
+deferred** — Hayden's call that days-old roles are waste to re-mail. The 564 stuck pairs stay lost.
+That also keeps this change away from `_unreported_clause`, the predicate D-108 just fixed, which
+was where the real risk sat.
+
+**Verification.** Both regression tests written first and confirmed red (403 quarantined, 500
+quarantined) before any `src/` change. Full gate green: **pytest 933** (+14), ruff/format/mypy
+clean, `lint-imports` kept. The D-008 control is pinned at both levels — a 404 still quarantines and
+is never retried — the integration one through the real verifier rather than a `Callable` stub. No
+migration, no SQL change, no frontend change.
+
+**Honest limit:** no 429 was ever observed, because nothing recorded the status code. Throttling is
+inferred from burst shape plus clean re-checks. The fix does not depend on that inference —
+retry-on-inconclusive is cause-agnostic — and the logging lands in the same PR, so tomorrow's
+residue will name its own cause.
+
+**Next:** Hayden reviews, commits and merges D-110. The morning after it deploys, check the
+`digests` rows' quarantine counts against today's baseline of **25**, read the new
+`apply-link verification:` summary line for the first real status codes, confirm a
+Coinbase/Akuna/Tower Research role finally reaches an inbox, and confirm a genuine 404 is still
+quarantined. Then **`docs/21` PR 3** (actionable match advice — the only one needing a manual Neon
+migration and a manual quality signoff), and re-apply the lost D-109 measurement note.
+
+---
+
+## 2026-08-05 — Update 1.2 PR 2: a posting older than 3 weeks stops being shown (`feat/posting-age-cap`, D-109) + the digest loss re-diagnosed
 
 **Housekeeping: the previous entry's `**Next:**` is done.** D-108 merged as **#122** (`77e65a2`) and
 is live. The two corrections that entry added (no-backfill-by-decision, quarantine-is-not-a-

@@ -8,6 +8,8 @@ a relevant match (verdict maybe/yes/strong_yes) for *this* profile, ordered by s
 
 from datetime import UTC, datetime, timedelta
 
+import httpx
+import respx
 from sqlalchemy import Engine
 
 from vja.db.engine import begin
@@ -15,6 +17,7 @@ from vja.db.matches import save_match
 from vja.db.profiles import Profile, active_profiles, upsert_profile
 from vja.db.schema import digests, employers, postings
 from vja.digest.assembly import build_digest, last_sent_at
+from vja.digest.verification import ApplyLinkVerifier
 
 _PASS = lambda _url: True  # noqa: E731  (tiny test stub; a def would be noisier)
 _EMAIL = "me@example.com"
@@ -296,6 +299,43 @@ def test_dead_links_are_quarantined(migrated_engine: Engine) -> None:
 
     assert {p.external_id for p in contents.new} == {"good"}
     assert {p.external_id for p in contents.quarantined} == {"dead"}
+
+
+@respx.mock
+def test_the_real_verifier_quarantines_only_the_dead_link(migrated_engine: Engine) -> None:
+    """End to end through `ApplyLinkVerifier`, not a `Callable` stub (D-110).
+
+    The unit tests pin the classifier; this pins the wiring — that a `DEAD` result still reaches
+    `contents.quarantined` while a block and an unreachable host now reach `contents.new`. Those
+    last two are the ~21% of matched roles the digest was silently dropping.
+    """
+    emp = _employer(migrated_engine)
+    prof = _profile(migrated_engine)
+    now = datetime(2026, 6, 16, tzinfo=UTC)
+    urls = {
+        "good": "https://ok.example.com/1",
+        "gone": "https://gone.example.com/2",
+        "blocked": "https://waf.example.com/3",
+        "flaky": "https://flaky.example.com/4",
+    }
+    for external_id, url in urls.items():
+        _match(
+            migrated_engine,
+            _posting(migrated_engine, emp, external_id, first_seen=now, apply_url=url),
+            prof,
+        )
+    respx.head(urls["good"]).mock(return_value=httpx.Response(200))
+    respx.head(urls["gone"]).mock(return_value=httpx.Response(404))
+    respx.head(urls["blocked"]).mock(return_value=httpx.Response(403))
+    respx.head(urls["flaky"]).mock(return_value=httpx.Response(429))
+
+    with ApplyLinkVerifier(httpx.Client(), sleep=lambda _s: None) as verify:
+        contents = build_digest(
+            migrated_engine, "grid_power_software", profile=prof, now=_NOW, verify=verify
+        )
+
+    assert {p.external_id for p in contents.new} == {"good", "blocked", "flaky"}
+    assert {p.external_id for p in contents.quarantined} == {"gone"}
 
 
 def test_other_verticals_are_excluded(migrated_engine: Engine) -> None:

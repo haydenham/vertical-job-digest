@@ -194,8 +194,34 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Digest & delivery
 
-- **Verification before digest:** every apply link must resolve before a posting ships.
-  One fake posting costs more trust than ten real ones earn. (D-008)
+- **Verification before digest, and only a definitive 404/410 quarantines (D-110, narrowing
+  D-008).** One fake posting still costs more trust than ten real ones earn — but a check we could
+  not *complete* is not a dead job. A `401`/`403` ships (a WAF refused **us**; the page loads in
+  the user's browser, and no retry clears it), and a `429`/`5xx`/timeout is retried twice with
+  widening backoff and then ships. Decisive: **Layer 1 already evidences the posting** — the ATS
+  listed it within the last 4 hours or the diff would have closed it — so D-008 is a *second*
+  opinion, and an inconclusive second opinion must not override the first. Shipping an
+  unverifiable link is earned by the retries, so the single-shot `verify_apply_url` (assembly's
+  fallback) still fails an `UNKNOWN` while `ApplyLinkVerifier` ships it; `BLOCKED` ships on both.
+  The old bare `bool` made 404, 429 and a timeout one answer, and a forward-only `last_sent_at`
+  made that answer permanent: **564 of 2,703 pairs (one in five matched roles) were held out of
+  every future digest while the dashboard, which verifies nothing, kept showing them.** (D-110,
+  D-008, D-009)
+- **All apply-link verification in a Job runs through one `ApplyLinkVerifier`:** one check per URL
+  however many recipients matched it, a 250ms minimum gap per host (the standing politeness rule
+  this path was violating), two retries, and a **300s ceiling on total retry time** — retries are
+  worth seconds, never the send, since 462 URLs × 7s would push a 6-minute job past the digest
+  Job's 1h task timeout and a timed-out digest sends *nothing*. Per-recipient clients made **2,727
+  requests for 462 distinct URLs** (5.9x), 1,251 at two Greenhouse hosts, and the quarantine spikes
+  landed exactly on the big baseline digests. Every non-`ALIVE` outcome is logged **with its status
+  code** — nothing recorded it before, so throttling was inferred from burst shape, never an
+  observed 429. The per-job summary line is also the only durable record of an all-quarantine
+  morning: that send returns `skipped` and writes no `digests` row (D-028). `vja-digest` calls
+  `logging.basicConfig` for the same reason; it was the one CLI without it. (D-110, D-028)
+- **Quarantine is never recovered retrospectively.** A posting held out of a digest is not
+  re-admitted later: fresh delivery is the product, and a role rescued days after the fact is
+  waste. This is why the fix stays out of `_unreported_clause`, the predicate D-108 fixed. (D-110,
+  D-108)
 - **A posting is `new` when it was first seen since the last send *or* the pipeline matched it since
   the last send** — `first_seen_at > since OR (matches.created_at > since AND trigger = nightly)`
   (`digest/assembly.py::_unreported_clause`). The `first_seen_at` half alone silently lost any posting
@@ -211,8 +237,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `first_seen_at` to re-enter the `new` set (D-053) but reuses its old match row. **The `trigger=nightly`
   gate is not optional:** a résumé re-upload or vertical switch writes `backfill` matches with a fresh
   `created_at` over postings of any age, which without the gate mails a hundred-row digest of
-  already-read roles. **Still open:** a D-008 quarantine drops a posting permanently once a send that
-  ships anything else advances `sent_at`; closing it needs a durable sent-ledger + migration. (D-108,
+  already-read roles. **A quarantine is still permanent** — once a send that ships anything else
+  advances `sent_at`, the held posting fails both halves forever — but D-110 attacked the *cause*
+  rather than adding recovery: only a definitive 404/410 quarantines now, so the roles this used to
+  strand mostly stop being quarantined at all. Re-admitting one after the fact is **decided
+  against**, not pending (D-110), which is what keeps this predicate untouched. (D-110, D-108,
   D-103, D-053, D-028, D-008)
 - **Digest recipient is the matched profile's `user_email`.** `VJA_DIGEST_RECIPIENT` is the
   **ops/alert** recipient (failure alerts), NOT the digest recipient. (D-027, D-037)
