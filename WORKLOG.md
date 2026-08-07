@@ -81,8 +81,26 @@ saves forward only. The real offset is inside this PR: capping fits/gaps and dro
 **output** tokens, the expensive side. Net may be near flat, and it is unmeasured until a live run.
 
 **Verification.** Full gate green: **pytest 943** (+10), ruff/format/mypy clean, `lint-imports`
-kept, tsc/eslint clean, **vitest 229** (+5). The quality half is deliberately *not* gated (D-020 as
-amended by D-090/D-093).
+kept, eslint + `tsc -b` clean, **vitest 229** (+5). The quality half is deliberately *not* gated
+(D-020 as amended by D-090/D-093).
+
+**A verification failure worth recording, because it produced a false green.** The typecheck was
+first run as `npx tsc --noEmit` and reported clean. It was not clean — `frontend/tsconfig.json` is a
+solution file (`"files": []` + project references), so a bare `tsc --noEmit` checks **nothing** and
+exits 0. CI runs `npm run typecheck` (`tsc -b`), which walks the referenced projects and does see
+the test files; it failed on three fixtures that build a `PostingRow` without the new columns
+(`PostingsTable.test.tsx`, `postingsView.test.ts`, `Dashboard.test.tsx`). Fixed by adding
+`resume_actions: null` + `application_notes: null` to each, and the trap is now written down in
+`docs/09` so the next session does not repeat it.
+
+**The suggested fix was to make the fields optional on `PostingRow`, and that was declined.** The
+API's `PostingRow` declares both as required pydantic fields with no default, so the response
+*always* carries them and `string[] | null` is the accurate contract; widening to `| undefined`
+would misdescribe the API to spare three fixtures. Optionality is already modelled where it
+belongs — `DisplayPosting` is `BasePostingRow & Partial<Omit<PostingRow, …>>` precisely because the
+shared table/panel also render public rows that have no match fields at all. Loosening `PostingRow`
+would collapse that distinction. The type was right; the fixtures were stale, and the error was
+saying so.
 
 **Honest limit: the manual quality sample has not been run.** The local `data/vja.db` was four
 migrations behind (confirmed: `c4e8a7d9132f` vs head) and, more to the point, every description in

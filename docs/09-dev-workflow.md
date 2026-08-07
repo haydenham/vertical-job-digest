@@ -55,7 +55,14 @@ merge red.
 | Tests | `pytest` (unit+integration+system) | green; `live`/`e2e` excluded (`08`) |
 | Secrets | `gitleaks` (config: root `.gitleaks.toml` — default rules + a narrow public-fixture-value allowlist) | no findings. Scans the pushed range on push/PR but **full history on `workflow_dispatch`**, so a finding in an old blob needs an allowlist entry — scrubbing the tracked file alone can't green a manual-dispatch deploy |
 | Lockfile | `uv lock --check` | lock in sync with `pyproject.toml` (D-014) |
-| **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
+| **Frontend** (path-filtered) | `npm run lint` + `typecheck` + `test` in `frontend/` | green — eslint + `tsc -b --noEmit` + vitest; pre-commit runs it only when `frontend/**.{ts,tsx}` is staged, CI as a parallel `frontend` job (D-042) |
+
+> **Run `npm run typecheck`, never a bare `npx tsc --noEmit`.** `frontend/tsconfig.json` is a
+> solution file — `"files": []` plus references to `tsconfig.app.json` / `tsconfig.node.json` — so a
+> bare `tsc --noEmit` type-checks **nothing** and exits 0. It looks exactly like a passing gate. Only
+> `tsc -b` (what `npm run typecheck` and CI both run) walks the referenced projects, and it is the
+> only one that sees the test files. `tsc -b` is also incremental: if a run is ever suspicious,
+> delete `frontend/*.tsbuildinfo` and re-run.
 
 Pre-commit mirrors CI so failures surface in seconds, not after a push. CI is the gate that can't be bypassed.
 

@@ -2949,7 +2949,8 @@ over inside about three weeks. The exception is a long-lived posting a board kee
 holds its original match indefinitely. No backfill, no corpus-wide re-match.
 
 **Verification.** Full gate green: pytest **943** (+10), ruff/format/mypy clean, `lint-imports`
-kept, tsc/eslint clean, vitest **229** (+5). Deterministic behavior is pinned normally — the
+kept, eslint + `tsc -b` clean, vitest **229** (+5). (`tsc -b`, not a bare `tsc --noEmit` — the
+latter checks nothing against this repo's solution-style `tsconfig.json` and exits 0; see `docs/09`.) Deterministic behavior is pinned normally — the
 truncation keeps the head, a bodyless candidate still matches, `"[]"` and NULL both read as
 `None`, the advice reaches an authed row and reaches no public one, the panel renders in the agreed
 order and renders nothing when empty, and the digest is pinned structurally unchanged. **The quality
