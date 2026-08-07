@@ -641,6 +641,27 @@ summary:focus-visible {
 .gaps li {
   color: var(--accent-tint-text);
 }
+/* ---- advice blocks (D-111): what to change, above the fits/gaps argument ----
+   Deliberately weightier than fits/gaps: full-strength text rather than the two tinted colours,
+   and a left rule so the two advice blocks read as one region distinct from the evidence below.
+   No new colour is introduced (red stays the error family, D-105). */
+.advice {
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+}
+.advice ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.advice li {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.advice li:last-child {
+  margin-bottom: 0;
+}
 /* ---- salary block (F2 Phase A, D-087) ---- */
 .panel-salary .salary-value {
   margin: 6px 0 0;

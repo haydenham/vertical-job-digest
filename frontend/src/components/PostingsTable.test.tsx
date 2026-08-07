@@ -26,6 +26,8 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     fits: ["power markets"],
     gaps: ["no SCADA"],
     rationale: "Strong on dispatch optimization.",
+    resume_actions: null,
+    application_notes: null,
     ...over,
   };
 }

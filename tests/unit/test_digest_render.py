@@ -8,6 +8,7 @@ quarantined postings are kept out of the user-facing body, and that `contents_to
 
 import json
 from collections.abc import Sequence
+from dataclasses import fields
 from datetime import UTC, datetime
 
 from vja.digest.assembly import DigestContents, DigestPosting
@@ -110,6 +111,21 @@ def test_fits_and_gaps_stay_out_of_the_body() -> None:
     # fits/gaps are persisted in the audit dict but deliberately not rendered (scannability).
     assert "SCADA" not in rendered.html and "SCADA" not in rendered.text
     assert "ERCOT domain" not in rendered.html
+
+
+def test_digest_carries_no_match_advice_at_all() -> None:
+    """The email is structurally unchanged by D-111, and that was a decision, not an oversight.
+
+    `docs/21` originally planned to add the single best résumé action to each digest row; it was
+    dropped because the inbox is a *triage* surface (decide whether to click) while advice is
+    *execution* and needs the panel's full context. Pinned structurally rather than by string
+    search: `DigestPosting` does not declare the fields, so no future render change can leak them
+    into the body by accident, exactly as `PublicPostingRow` does for the demo board.
+    """
+    assert not hasattr(_matched("a"), "resume_actions")
+    assert not hasattr(_matched("a"), "application_notes")
+    assert "resume_actions" not in {f.name for f in fields(DigestPosting)}
+    assert "application_notes" not in {f.name for f in fields(DigestPosting)}
 
 
 def test_closed_roles_appear_without_links() -> None:

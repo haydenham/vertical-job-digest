@@ -50,6 +50,10 @@ _MAX_TOKENS = 4096  # room for reasoning + the structured rationale
 # Matching is a bounded, schema-constrained judgment task. The D-090 comparison found Luna `low`
 # preserved trust while beating both Luna `medium` and Sonnet `medium` on latency and cost.
 _DEFAULT_MATCH_EFFORT = "low"
+# Posting-body budget for the match prompt (D-111). Bodies average ~3 KB, so this clips only the
+# long ones — and clips their tail, which is boilerplate. ~1,000 volatile (uncached) input tokens
+# at the ceiling; the cached resume prefix is unaffected.
+_DEFAULT_DESCRIPTION_CHARS = 4000
 
 
 def _match_effort() -> str:
@@ -75,27 +79,58 @@ def _match_model() -> str:
 
 
 _SYSTEM_PROMPT = """\
-You are matching one early-career candidate against one job posting. You are given the candidate's
-resume and the posting's structured fields, and you write an honest argument, not a sales pitch.
+You are advising one early-career candidate on one job posting. You are given their resume and the
+posting, and you write an honest assessment plus advice they can act on before they apply.
+
+Write to the candidate directly, as "you" and "your", in every field. Never describe them in the
+third person ("the candidate", "they") — this text is read by the person it is about.
 
 State, grounded only in what the resume and posting actually say:
-- fits: concrete reasons this candidate fits the role (skills, domain, level). Non-empty.
-- gaps: concrete reasons this candidate does NOT fit, or risks (missing skill, seniority/level
-  mismatch, location/work-auth friction, domain distance). Non-empty — every real role has gaps;
-  if you cannot find one you are not looking hard enough.
+- fits: AT MOST 3 concrete reasons you fit (skills, domain, level). Non-empty. Choose the strongest
+  and stop; do not pad to three.
+- gaps: AT MOST 3 concrete reasons you do not fit, or real risks (missing skill, seniority/level
+  mismatch, domain distance). Non-empty — every real role has gaps; if you cannot find one you are
+  not looking hard enough.
 - verdict: strong_yes | yes | maybe | no. Saying no when warranted is required — a recommender
   that never says no is useless. Weigh level and domain fit heavily for an early-career candidate.
 - score: 0-100 overall match strength, consistent with the verdict (no≈0-35, maybe≈35-60,
   yes≈60-85, strong_yes≈85-100).
-- rationale: one or two sentences justifying the verdict — the line a busy job-seeker reads first.
+- rationale: one or two sentences naming what DOMINATED the judgment — the consideration that set
+  the score. It is not a summary of the lists above, which are displayed right beside it. Do not
+  restate the verdict or score in words ("overall this is a plausible match", "so this is a maybe");
+  they are already shown as a label. Name the deciding factor and stop.
+- resume_actions: AT MOST 3 specific edits to your resume for THIS application. Every action must
+  point at something already on your resume: experience worth leading with, real work buried under
+  "projects" that belongs higher, or wording to change because the posting says the same thing
+  differently. Where the posting has its own term for something you have done, quote that term.
+- application_notes: AT MOST 2 notes on what the application itself should address — how to frame a
+  real gap, what a cover letter or screening answer should confront rather than leave for them to
+  find. This is where a gap you cannot fix by editing belongs.
+
+Never tell the candidate to add a skill, tool, or experience their resume does not already
+evidence. That is advice to lie, and it is the worst thing this product can do. The honest response
+to a real gap is how to ADDRESS it, never how to hide it.
+
+Both advice lists may be empty, and empty is the right answer more often than padding. When the
+mismatch is fundamental — a different engineering discipline, a hard eligibility conflict — say so
+in the rationale and return empty lists. "Nothing you change about your resume makes this fit" is a
+complete, useful answer; an invented bridge to an impossible role is not.
+
+Do not spend a fits or gaps bullet on facts that are true of you for every posting — your
+graduation date, where you live relative to the role, or that your level suits an early-career job.
+Those repeat on every role and say nothing about this one. Raise such a fact only where it is
+genuinely decisive here, such as a hard eligibility conflict.
 
 Calibrate experience against the role's stated level. For new-grad and early-career roles,
 relevant internships, coursework, and substantial projects are valid evidence; do not cap an
-otherwise excellent match below strong_yes merely because the candidate lacks production depth.
+otherwise excellent match below strong_yes merely because you lack production depth.
 For a US role, an unstated willingness to relocate or work onsite is neutral: you may mention the
 location logistics, but never lower the verdict or score for that uncertainty. Only an explicit
 geographic or work-authorization incompatibility counts negatively. Preserve maybe or no for
 mid/senior level mismatches and hard eligibility conflicts.
+
+When the posting includes a description, it is the source for the posting's own vocabulary: prefer
+its exact words over your paraphrase when advising a wording change.
 
 Report only what the inputs support; never invent experience the resume doesn't state."""
 
@@ -105,9 +140,26 @@ class MatchResult(BaseModel):
 
     verdict: Verdict = Field(description="strong_yes | yes | maybe | no.")
     score: int = Field(ge=0, le=100, description="Overall match strength, 0-100.")
-    fits: list[str] = Field(description="Concrete reasons this candidate fits. Non-empty.")
-    gaps: list[str] = Field(description="Concrete reasons this candidate does not fit. Non-empty.")
-    rationale: str = Field(description="One or two sentences justifying the verdict.")
+    fits: list[str] = Field(description="At most 3 concrete reasons you fit. Non-empty.")
+    gaps: list[str] = Field(description="At most 3 concrete reasons you do not fit. Non-empty.")
+    rationale: str = Field(description="One or two sentences naming what decided the verdict.")
+    # The advice fields (D-111). Both default to empty rather than being required: an impossible
+    # match has no honest advice, and the prompt says so explicitly — a model that returns nothing
+    # here is obeying, not failing. `fits`/`gaps` stay required for the opposite reason (D-007).
+    resume_actions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "At most 3 edits to your resume for this application, each grounded in something the "
+            "resume already contains. Empty when there is nothing honest to change."
+        ),
+    )
+    application_notes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "At most 2 notes on what the application should address about a gap you cannot fix by "
+            "editing. Empty when there is nothing useful to say."
+        ),
+    )
 
     @field_validator("score", mode="before")
     @classmethod
@@ -203,18 +255,44 @@ def check_backfill_budget(engine: Engine, now: datetime | None = None) -> None:
 
 
 def fields_to_columns(result: MatchResult) -> dict[str, Any]:
-    """Map a `MatchResult` to `matches` column values (lists → JSON text; enum → its value)."""
+    """Map a `MatchResult` to `matches` column values (lists → JSON text; enum → its value).
+
+    The advice lists are stored as JSON text like `fits`/`gaps`, and an **empty list is stored as
+    `"[]"`, not NULL** — the two mean different things on the read side. `"[]"` is this model
+    saying there is no honest advice for this role (D-111); NULL is a row matched before the
+    fields existed. Both render nothing, but only one of them is a judgment.
+    """
     return {
         "verdict": result.verdict.value,
         "score": result.score,
         "fits": json.dumps(result.fits, ensure_ascii=False),
         "gaps": json.dumps(result.gaps, ensure_ascii=False),
         "rationale": result.rationale,
+        "resume_actions": json.dumps(result.resume_actions, ensure_ascii=False),
+        "application_notes": json.dumps(result.application_notes, ensure_ascii=False),
     }
 
 
+def _max_description_chars() -> int:
+    """Character budget for the posting body in the match prompt (`VJA_MATCH_DESCRIPTION_CHARS`).
+
+    Read at call time so tightening it after a cost measurement is a config change, not a deploy
+    (the `VJA_MAX_POSTING_AGE_DAYS` pattern, D-109).
+    """
+    raw = os.environ.get("VJA_MATCH_DESCRIPTION_CHARS")
+    return int(raw) if raw else _DEFAULT_DESCRIPTION_CHARS
+
+
 def _posting_text(candidate: MatchCandidate) -> str:
-    """The volatile per-posting half of the prompt — the structured fields, compactly."""
+    """The volatile per-posting half of the prompt — the structured fields, compactly.
+
+    The body is included last and **head-truncated** (D-111): advice of the form "the posting calls
+    this a data pipeline and your resume says ETL" is impossible without the posting's own words,
+    and the extracted `stack` list is too thin to carry them. Head, not tail, because a posting
+    front-loads its responsibilities and back-loads its boilerplate (EEO, benefits, legal) — so the
+    truncation drops the part that was never worth tokens. Rows with no stored body (D-095 fills
+    forward, never backfills) simply omit it and still match.
+    """
     lines = [f"Title: {candidate.title or '(unknown)'}"]
     if candidate.level:
         lines.append(f"Level: {candidate.level}")
@@ -229,6 +307,8 @@ def _posting_text(candidate: MatchCandidate) -> str:
     comp = candidate.comp_raw or _comp_range(candidate.comp_min, candidate.comp_max)
     if comp:
         lines.append(f"Compensation: {comp}")
+    if candidate.description:
+        lines.append(f"\nDescription:\n{candidate.description[: _max_description_chars()]}")
     return "\n".join(lines)
 
 

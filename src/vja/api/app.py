@@ -161,6 +161,10 @@ class PostingRow(BaseModel):
     fits: list[str] | None
     gaps: list[str] | None
     rationale: str | None
+    # The advice fields (D-111). Declared here and deliberately NOT on `PublicPostingRow` below —
+    # that omission is the anti-leak guarantee, not an oversight.
+    resume_actions: list[str] | None
+    application_notes: list[str] | None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -186,8 +190,9 @@ class PublicPostingRow(BaseModel):
     """One row on the login-free demo board (D-105) — **the second structural anti-leak layer.**
 
     This is `PostingRow` minus every match field, and the omission is the point: it does not
-    *declare* `verdict`/`score`/`fits`/`gaps`/`rationale`, so even a query that wrongly selected
-    them could not serialize them to an anonymous caller. Match text is résumé-derived commentary
+    *declare* `verdict`/`score`/`fits`/`gaps`/`rationale`, nor the D-111 advice fields
+    (`resume_actions`/`application_notes`), so even a query that wrongly selected them could not
+    serialize them to an anonymous caller. Match text is résumé-derived commentary
     about named beta users; D-067 turned `VJA_AUTH_REQUIRED` on and this PR does not weaken it.
     The first layer is `db.postings.dashboard_statement`, which never joins `matches` without a
     profile.

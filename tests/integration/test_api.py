@@ -105,14 +105,28 @@ def _profile(engine: Engine, *, email: str = "me@example.com") -> Profile:
     return next(p for p in active_profiles(engine, _VERTICAL) if p.user_email == email)
 
 
-def _match(engine: Engine, posting_id: int, profile: Profile, *, verdict: str = "yes") -> None:
+def _match(
+    engine: Engine,
+    posting_id: int,
+    profile: Profile,
+    *,
+    verdict: str = "yes",
+    advice: dict[str, str] | None = None,
+) -> None:
     with begin(engine) as conn:
         save_match(
             conn,
             posting_id,
             profile.id,
             profile.resume_version,
-            {"verdict": verdict, "score": 70, "fits": "[]", "gaps": "[]", "rationale": "ok"},
+            {
+                "verdict": verdict,
+                "score": 70,
+                "fits": "[]",
+                "gaps": "[]",
+                "rationale": "ok",
+                **(advice or {}),
+            },
             model="claude-sonnet-4-6",
             trigger="nightly",
             now=_NOW,
@@ -223,6 +237,45 @@ def test_location_display_is_served_beside_the_raw_location(migrated_engine: Eng
     assert rows["messy"]["location_display"] == "Seal Beach, California"
     assert rows["clean"]["location_display"] is None
     assert rows["nowhere"]["location_display"] is None
+
+
+def test_match_advice_is_served_to_the_authenticated_row(migrated_engine: Engine) -> None:
+    """The D-111 advice reaches a logged-in reader, parsed back into real lists.
+
+    The three cases are the three storage states, and they are not interchangeable: a row with
+    advice, a row the model declined to advise on (`"[]"`), and a row matched before the columns
+    existed (NULL). Only the first renders anything; the other two must both arrive as `null` so
+    the panel has one absence to handle rather than two.
+    """
+    prof = _profile(migrated_engine)
+    emp = _employer(migrated_engine)
+    _match(
+        migrated_engine,
+        _posting(migrated_engine, emp, "advised"),
+        prof,
+        advice={
+            "resume_actions": '["Lead with the dispatch simulator"]',
+            "application_notes": '["Name the missing production experience"]',
+        },
+    )
+    _match(
+        migrated_engine,
+        _posting(migrated_engine, emp, "declined"),
+        prof,
+        advice={"resume_actions": "[]", "application_notes": "[]"},
+    )
+    _match(migrated_engine, _posting(migrated_engine, emp, "legacy"), prof)
+
+    body = _client(migrated_engine).get("/api/postings", params={"vertical": _VERTICAL}).json()
+    rows = {p["title"]: p for p in body["postings"]}
+
+    assert rows["advised"]["resume_actions"] == ["Lead with the dispatch simulator"]
+    assert rows["advised"]["application_notes"] == ["Name the missing production experience"]
+    # Declined and legacy are indistinguishable to the reader, by design.
+    assert rows["declined"]["resume_actions"] is None
+    assert rows["declined"]["application_notes"] is None
+    assert rows["legacy"]["resume_actions"] is None
+    assert rows["legacy"]["application_notes"] is None
 
 
 def test_cleaned_view_param(migrated_engine: Engine) -> None:

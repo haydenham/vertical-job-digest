@@ -467,6 +467,11 @@ class DashboardPosting:
     fits: list[str] | None
     gaps: list[str] | None
     rationale: str | None
+    # Actionable advice (D-111). `None` covers both "matched before these existed" and "the model
+    # had nothing honest to say"; the panel renders nothing either way, so the distinction stays a
+    # storage concern rather than a display one.
+    resume_actions: list[str] | None
+    application_notes: list[str] | None
 
 
 @dataclass(frozen=True)
@@ -508,10 +513,16 @@ def posting_description(engine: Engine, posting_id: int, vertical: str) -> Posti
 
 
 def _loads(value: Any) -> list[str] | None:
-    """Parse a `matches` JSON-text list column (`fits`/`gaps`) back into a list."""
+    """Parse a `matches` JSON-text list column (`fits`/`gaps`/the D-111 advice) back into a list.
+
+    A stored `"[]"` collapses to `None` along with NULL — deliberately. The two differ in the DB
+    (see `match.fields_to_columns`) but not to any reader: an empty list and an absent one both
+    render nothing, and flattening them here keeps every consumer from having to know that.
+    """
     if not value:
         return None
-    return cast("list[str]", json.loads(value))
+    parsed = cast("list[str]", json.loads(value))
+    return parsed or None
 
 
 def dashboard_statement(
@@ -564,6 +575,8 @@ def dashboard_statement(
             matches.c.fits,
             matches.c.gaps,
             matches.c.rationale,
+            matches.c.resume_actions,
+            matches.c.application_notes,
         ]
         source = source.outerjoin(
             matches,
@@ -660,6 +673,8 @@ def open_postings_with_match_quality(
             fits=_loads(row.get("fits")),
             gaps=_loads(row.get("gaps")),
             rationale=row.get("rationale"),
+            resume_actions=_loads(row.get("resume_actions")),
+            application_notes=_loads(row.get("application_notes")),
         )
         for row in rows
     ]

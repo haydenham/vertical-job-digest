@@ -2752,6 +2752,14 @@ Matching a posting that can never be displayed or mailed buys nothing. The night
 otherwise date-uncapped by design (D-039), so this qualifies that rule rather than replacing it;
 it is a no-op on the backfill path, whose 5-day `since` is already stricter.
 
+> **Correction, measured after this ADR was first written (re-applied 2026-08-06 — the note was
+> lost in a branch switch and never reached `main`).** The saving is **$0 on the existing corpus**:
+> all 358 rows the floor hides already carried a match, so the money was spent before the floor
+> existed. It saves **forward only**, per new `(profile, resume_version)` — a new signup, a résumé
+> re-upload, or a vertical switch no longer pays to reason about roles nobody can see. The claim
+> above is right in principle and was wrong about the immediate number; D-111's cost paragraph
+> depends on this correction, since `docs/21` had used it to argue PR 2 pre-paid for PR 3.
+
 **`now` is a required argument, not a default.** Every fixture in the test suite is dated months
 behind the wall clock, so a floor reading `datetime.now(UTC)` internally would have emptied
 `test_dashboard_query`, `test_api`, `test_public_api`, `test_matching_run` and `test_digest_*`
@@ -2848,3 +2856,106 @@ the integration level, the latter through the real verifier rather than a `Calla
 migration, no SQL change, no frontend change.
 
 References D-008, D-009, D-028, D-037, D-053, D-103, D-105, D-108, D-109.
+
+---
+
+### D-111 · Matching/Product · The write-up says what to change, not only whether you fit · accepted · 2026-08-06
+
+**Decision.** The match write-up gains **two** advice fields and sheds the padding that was
+crowding them out.
+
+- `matches.resume_actions` (≤3) — edits to the résumé for **this** application, each grounded in
+  something the résumé already contains: work worth leading with, real experience buried under
+  "projects", wording to change because the posting says the same thing differently.
+- `matches.application_notes` (≤2) — what the application itself should address about a gap that
+  **cannot** be fixed by editing: how to frame it, what a cover letter or screening answer should
+  confront rather than leave to be discovered.
+- `fits` and `gaps` cap at **3 each** and may no longer restate profile-constant facts (graduation
+  date, home location vs role location, "your level suits an early-career role").
+- `rationale` stays 1-2 sentences and loses its verdict-restating tail.
+- Every field is written in the **second person**.
+- The posting's `description` reaches the model, **head-truncated** at `VJA_MATCH_DESCRIPTION_CHARS`
+  (default 4,000 chars).
+
+**Why two fields rather than one.** They license different acts, and that is the whole safety
+argument. `resume_actions` is definitionally about content already on the résumé;
+`application_notes` is definitionally about content that is not there and cannot be added honestly.
+Blended into one list the model has no boundary to respect, and the failure mode is *"add valuation
+to your skills section"* — advice to lie, with our name on it. The schema makes that hard to say by
+accident; a prompt rule alone only asks nicely.
+
+**Why the subtraction is part of the feature.** Read against real production rows, a `maybe · 42`
+carried 6 fits and 7 gaps, and its rationale was a four-sentence recap of the bullets directly
+beneath it. The same profile-constant bullets recurred on nearly every posting — true, restated
+every time, wallpaper by the third role, and paid for in output tokens on every match. Hayden's
+framing was the right one: **this is mostly a reallocation of a few bullets from fits/gaps into
+actionable résumé updates**, not a coaching product bolted onto a matcher.
+
+**What the paragraph still does that the lists cannot: weight.** Two lists of equal-looking bullets
+cannot say *which* gap was disqualifying. "The stack gap is a real risk" is why the score is 42 and
+not 65. That sentence is the reason `rationale` survives at all, and the recap around it is what
+went. Note the constraint that kept this conservative: `rationale` is a **single column** rendered
+in both the panel and the digest body, so it cannot be short in one and full in the other without a
+second column. Capping fits/gaps at 3 is what actually resolved the redundancy — at 6 bullets
+instead of 13 the paragraph stops being a recap.
+
+**Advice is written for every verdict, including `no`, and may be empty.** An earlier proposal to
+suppress it on `no` was wrong twice over. On cost: the reasoning tokens are spent *before* the
+verdict exists, so suppression saves only the list's own output tokens. On quality: a `no` row is
+visible in the Cleaned view, where a blank block reads as broken. The real hazard runs the other
+way — a model asked for three bullets against a hopeless match manufactures bridging advice
+("highlight your analytical coursework to position for the transition"), which is precisely the
+fabrication these fields exist to prevent. So the prompt explicitly permits nothing: *"nothing you
+change about your resume makes this fit"* is a complete answer.
+
+**Empty and absent differ in the DB and not to the reader.** `fields_to_columns` stores `"[]"` for
+a deliberate non-answer; NULL means the row was matched before these columns existed. `_loads`
+flattens both to `None` on the way out, so every consumer has one absence to handle, and the panel
+renders nothing either way. The distinction is recorded where it can be recorded and nowhere it
+would leak complexity.
+
+**The description is what makes the advice specific.** Advice of the form "the posting calls this a
+data pipeline and your résumé says ETL" is impossible without the posting's own words, and the
+extracted `stack` list is far too thin to carry them. Head-truncated, not tail: a posting
+front-loads responsibilities and back-loads boilerplate (EEO, benefits, legal), so the cap drops
+the part that was never worth tokens. No boilerplate stripping — heuristic cleanup is a second
+feature with its own failure modes. Rows with no stored body still match; D-095 fills descriptions
+forward and never backfills, so they simply lose the vocabulary grounding.
+
+**Digest body unchanged, by decision.** `docs/21` planned to add the single best résumé action to
+each digest row. Dropped: the inbox is a **triage** surface (decide whether to click) while advice
+is **execution** and needs the panel's full context. The email keeps carrying `rationale` and
+nothing else, so it inherits the shortening and changes in no other way. Pinned structurally —
+`DigestPosting` does not declare the fields, the same shape of guarantee `PublicPostingRow` gives
+the demo board.
+
+**Anti-leak, unchanged and extended.** `PostingRow` declares the two fields; `PublicPostingRow`
+deliberately does **not**. Advice is the most personal text the matcher produces — it quotes the
+résumé back at the reader — so it joined `_MATCH_FIELDS` in the public-API test the day it existed.
+D-105's two structural layers are untouched.
+
+**Cost, stated honestly.** This adds volatile (uncached) input tokens to every match call. **A
+correction to `docs/21`'s sequencing argument:** it claimed PR 2 pre-paid for this by shrinking the
+candidate set, but the D-109 measurement found all 358 age-floored rows already carried a match, so
+the age floor saved **$0 on the existing corpus** and only saves forward. The real offset is inside
+this change — capping fits/gaps and dropping the recap cut **output** tokens, the expensive side —
+and net may land near flat. Unmeasured until a live run; if it is material, the answer is a tighter
+`VJA_MATCH_DESCRIPTION_CHARS`, not dropping the feature.
+
+**Old rows are not recomputed.** Matching is idempotent per `(posting, profile, resume_version)`, so
+third-person write-ups will sit beside second-person ones. D-109 bounds that better than it looks: a
+posting stops being displayed once its activity date passes 21 days, so the visible corpus turns
+over inside about three weeks. The exception is a long-lived posting a board keeps re-dating, which
+holds its original match indefinitely. No backfill, no corpus-wide re-match.
+
+**Verification.** Full gate green: pytest **943** (+10), ruff/format/mypy clean, `lint-imports`
+kept, eslint + `tsc -b` clean, vitest **229** (+5). (`tsc -b`, not a bare `tsc --noEmit` — the
+latter checks nothing against this repo's solution-style `tsconfig.json` and exits 0; see `docs/09`.) Deterministic behavior is pinned normally — the
+truncation keeps the head, a bodyless candidate still matches, `"[]"` and NULL both read as
+`None`, the advice reaches an authed row and reaches no public one, the panel renders in the agreed
+order and renders nothing when empty, and the digest is pinned structurally unchanged. **The quality
+half is not a merge gate** (D-020 as amended by D-090/D-093): it is Hayden's signoff on a manual
+sample spanning strong_yes → no, run against real postings with a real résumé, which doubles as the
+measurement of how many rows actually carry a description.
+
+References D-004, D-007, D-020, D-090, D-093, D-095, D-105, D-109, D-110.

@@ -60,6 +60,8 @@ function response(over: Partial<PostingsResponse> = {}): PostingsResponse {
         fits: [],
         gaps: [],
         rationale: null,
+        resume_actions: null,
+        application_notes: null,
       },
     ],
     ...over,

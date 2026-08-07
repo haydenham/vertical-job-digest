@@ -36,6 +36,10 @@ class MatchCandidate:
     comp_min: int | None
     comp_max: int | None
     comp_raw: str | None
+    # The posting's own words (D-111), head-truncated by `match._posting_text` before it reaches
+    # the model. `None` for a row whose body was never captured — D-095 fills forward and never
+    # backfills, so those postings still match, just without vocabulary-grounded advice.
+    description: str | None = None
 
 
 def postings_needing_match(
@@ -62,6 +66,11 @@ def postings_needing_match(
     it buys nothing — this is the first place in the project where LLM spend falls by declining to
     ask the question. It is a no-op on the backfill path, whose 5-day `since` is already stricter.
 
+    The saving is **forward-looking**, and it is worth being exact about that: when the floor
+    shipped, all 358 rows it hid had *already* been matched, so it saved $0 on the corpus that
+    existed. What it saves is per new `(profile, resume_version)` — a signup, a résumé re-upload,
+    or a vertical switch no longer pays to reason about roles nobody can see (D-109, D-111).
+
     Ordered freshest-first so that callers which *count*-cap the result truncate a defined set.
     """
     already_matched = (
@@ -85,6 +94,7 @@ def postings_needing_match(
             postings.c.comp_min,
             postings.c.comp_max,
             postings.c.comp_raw,
+            postings.c.description,
         )
         .select_from(postings.join(employers, postings.c.employer_id == employers.c.id))
         .where(
@@ -117,6 +127,7 @@ def postings_needing_match(
             comp_min=row["comp_min"],
             comp_max=row["comp_max"],
             comp_raw=row["comp_raw"],
+            description=row["description"],
         )
         for row in rows
     ]
