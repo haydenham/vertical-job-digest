@@ -44,10 +44,14 @@ class _FakeClient:
         self._fail_titles = fail_titles
         self._result_payload = result_payload
         self.calls = 0
+        # What actually reached the model, so a test can assert on the prompt rather than only on
+        # the rows that came back (D-111 sends the posting body; nothing else would catch it).
+        self.user_texts: list[str] = []
 
     def parse(self, **kwargs: Any) -> StructuredResult[MatchResult]:
         self.calls += 1
         content = kwargs["user"]
+        self.user_texts.append(content)
         if any(t in content for t in self._fail_titles):
             raise ValueError("LLM returned no structured content")
         elif self._result_payload is not None:
@@ -93,6 +97,7 @@ def _posting(
     extracted: bool = True,
     first_seen: datetime | None = None,
     source_updated: datetime | None = None,
+    description: str | None = None,
 ) -> None:
     with begin(engine) as conn:
         conn.execute(
@@ -102,6 +107,7 @@ def _posting(
                 content_hash=f"h-{external_id}",
                 raw_payload={},
                 title=title,
+                description=description,
                 level=level if extracted else None,
                 location=location if extracted else None,
                 stack=["Python"] if extracted else None,
@@ -163,6 +169,69 @@ def test_matches_only_in_scope_stage_b_survivors(migrated_engine: Engine) -> Non
     assert row["verdict"] == "yes" and row["score"] == 70
     assert row["trigger"] == "nightly"
     assert row["model_version"] == "claude-sonnet-4-6-actual"  # upstream response, not route
+
+
+def test_the_posting_body_reaches_the_model_and_the_advice_is_persisted(
+    migrated_engine: Engine,
+) -> None:
+    """End to end for D-111: the description goes up, the advice comes back and lands in columns.
+
+    Asserted on the prompt the client received, not only on the stored row — the body is an
+    *input*, so a row-only assertion would pass even if `_posting_text` silently dropped it.
+    """
+    emp = _employer(migrated_engine, vertical=_VERTICAL, name="GridCo")
+    _posting(
+        migrated_engine,
+        emp,
+        "swe",
+        "Software Engineer",
+        description="You will build nodal dispatch pipelines in Python.",
+    )
+    upsert_profile(
+        migrated_engine,
+        user_email=_CONFIG.user_email,
+        vertical=_VERTICAL,
+        resume_text=_CONFIG.resume_text,
+        domain_vocabulary=_CONFIG.domain_vocabulary,
+    )
+    client = _FakeClient(
+        result_payload={
+            "verdict": "yes",
+            "score": 70,
+            "fits": ["fits"],
+            "gaps": ["gaps"],
+            "rationale": "ok",
+            "resume_actions": ["Lead with the dispatch simulator"],
+            "application_notes": ["Address the missing production experience"],
+        }
+    )
+    _run(migrated_engine, client)
+
+    assert "You will build nodal dispatch pipelines in Python." in client.user_texts[0]
+
+    with migrated_engine.connect() as conn:
+        row = conn.execute(select(matches)).mappings().one()
+    assert row["resume_actions"] == '["Lead with the dispatch simulator"]'
+    assert row["application_notes"] == '["Address the missing production experience"]'
+
+
+def test_a_posting_with_no_stored_body_still_matches(migrated_engine: Engine) -> None:
+    """D-095 fills descriptions forward and never backfills, so a NULL body must not block a match
+    or crash the prompt builder — it just costs the advice its vocabulary grounding."""
+    emp = _employer(migrated_engine, vertical=_VERTICAL, name="GridCo")
+    _posting(migrated_engine, emp, "swe", "Software Engineer", description=None)
+    upsert_profile(
+        migrated_engine,
+        user_email=_CONFIG.user_email,
+        vertical=_VERTICAL,
+        resume_text=_CONFIG.resume_text,
+        domain_vocabulary=_CONFIG.domain_vocabulary,
+    )
+    client = _FakeClient()
+    summary = _run(migrated_engine, client)
+
+    assert (summary.total, summary.matched, summary.failed) == (1, 1, 0)
+    assert "Description:" not in client.user_texts[0]
 
 
 def test_rerun_is_idempotent(migrated_engine: Engine) -> None:

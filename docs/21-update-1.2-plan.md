@@ -7,10 +7,10 @@ release record: when the work lands it gets `docs/updates/1.2.md`
 here becomes an ADR in `DECISIONS.md`. Live rules go to `docs/INVARIANTS.md` in the same session
 that changes them.*
 
-**Status: PR 1 merged (#121, D-107). PR 2 built (`feat/posting-age-cap`, D-109). PR 3 planned. PR 4
-added 2026-08-05 and planned, not built** — it was not in the original three; it is the quarantine
-defect, diagnosed with production evidence on 2026-08-05 and written up below. The update itself
-opened at #120 and its record is `docs/updates/1.2.md`.
+**Status: PR 1 merged (#121, D-107). PR 2 merged (#123, D-109). PR 4 merged (#124, D-110). PR 3 is
+the last one open** — its scope was settled in conversation on 2026-08-06 and this document was
+rewritten to match before any code was written. The update itself opened at #120 and its record is
+`docs/updates/1.2.md`.
 
 ---
 
@@ -188,6 +188,11 @@ by making the sizing query a blocking first step rather than a post-merge check.
 
 **Branch:** `feat/actionable-match-advice`
 
+> **Scope settled 2026-08-06, in conversation, before any code.** The section below is the agreed
+> version; five decisions moved from what was first written here, and each is marked **[decided]**
+> where it lands. The framing that drove them: *we are mainly reallocating a few bullets of fits and
+> gaps into actionable résumé updates* — not bolting a coaching product onto the side of a matcher.
+
 ### The problem
 
 The current write-up answers "should I apply?". A user reading `gaps: ["no Kubernetes experience"]`
@@ -196,14 +201,32 @@ has **read the posting and read your résumé** — so it can say which of your 
 lead with, which words the posting uses that your résumé does not, and what the application should
 address head-on. That is advice; the rest is commentary.
 
+**And the write-up is longer than its content.** Read against real rows: a `maybe · 42` carries 6
+fits and 7 gaps, and its rationale paragraph is a four-sentence recap of the bullets directly
+beneath it. Worse, the same *profile-constant* bullets recur on nearly every posting — "expected
+graduation May 2027", "candidate is in Madison, WI; role is onsite in X, relocation required",
+"early-career level aligns with candidate's student/intern status". True, restated every time,
+wallpaper by the third role, and paid for in output tokens on every match.
+
+**The one job the paragraph does that the lists cannot: weighting.** Two lists of equal-looking
+bullets cannot say *which* gap was disqualifying. "The stack gap is a real risk" is why the score is
+42 and not 65. That sentence stays; the recap around it goes.
+
 ### Scope
 
 **Schema (migration).** `matches` gains two nullable columns:
 
 | Column | Type | Holds |
 |---|---|---|
-| `resume_actions` | `Text` (JSON list) | Concrete edits for *this* application: bullets to lead with, real experience to surface, posting vocabulary the résumé is missing. |
-| `application_notes` | `Text` (JSON list) | What to address in the application itself: how to frame a gap, what the cover letter or screening answer should say. |
+| `resume_actions` | `Text` (JSON list) | Edits to the document, for things you **have** but present badly: bullets to lead with, real experience buried under "projects", posting vocabulary your résumé words differently. |
+| `application_notes` | `Text` (JSON list) | What to say about things you **don't** have: how to frame a real gap, what the cover letter or screening answer should address head-on. |
+
+**Two fields, not one, and the reason is structural rather than tidiness** *(considered and kept)*.
+They split on *what act they license*: `resume_actions` is definitionally about content already in
+the résumé, `application_notes` definitionally about content that is not. Blended into one list the
+model has no boundary to respect, and the failure mode is *"add valuation to your skills section"* —
+advice to lie, with our name on it. The schema makes that hard to say by accident; a prompt rule
+alone only asks nicely.
 
 Nullable because **old rows stay as they are** — matching is idempotent per
 `(posting, profile, resume_version)`, so a prompt change never recomputes an existing judgment. The
@@ -212,12 +235,36 @@ forward, exactly as `postings.description` did in D-095. **This is a manual Neon
 (export `VJA_DATABASE_URL` → `alembic current` → `upgrade head` → `current`) run *before* the PR
 merges, per D-068/D-083.
 
-**The prompt.** `_SYSTEM_PROMPT` and `MatchResult` gain the two fields with tight instructions:
-every action must be grounded in something the résumé actually contains or the posting actually
-says; never invent experience; never advise the user to claim a skill they lack — the correct
-advice for a real gap is how to *address* it, not how to hide it. `fits` / `gaps` / `verdict` /
-`score` keep their current meaning; this adds a layer, it does not repurpose one. The honesty rules
-in the current prompt (say no when warranted, D-007) are load-bearing and stay untouched.
+**The prompt** — five changes, and four of them are subtractive.
+
+1. **[decided] Second person throughout** — rationale, fits, gaps, and both new fields. Today's
+   output is written *about* the reader ("The candidate has a solid early-career foundation"),
+   a leftover from the prompt's "one candidate, one posting" framing. It reads as a dossier on you
+   rather than advice to you. It also makes dishonest advice harder to write: *"you should claim
+   Spring Boot"* is more obviously wrong than *"the candidate should list Spring Boot"*.
+2. **[decided] `fits` and `gaps` cap at 3 each**, and may not restate profile-constant facts
+   (graduation date, home location vs role location, "early-career level aligns"). This is the
+   reallocation: the bullets that go are the repeated ones, and the space they free is the advice.
+3. **[decided] `rationale` stays 1-2 sentences and loses only its verdict-restating tail.** The
+   closing clause of most lines today — *"Overall this is a plausible but not highly direct match"* —
+   sits beside a rendered `[maybe · 56]` tag and carries nothing. Name what dominated, then stop.
+   Note the constraint that forces this to be conservative: **`rationale` is a single column**
+   rendered in both the panel and the digest body, so it cannot be short in one and full in the
+   other without a second column, which is not worth it. Cutting fits/gaps to 3 each is what
+   actually resolves the paragraph's redundancy — at 6 bullets instead of 13 it stops being a recap.
+4. **[decided] Advice is written for every verdict, including `no`** — and "nothing you change makes
+   this fit; this is a domain mismatch" is a **valid, complete answer**. The earlier proposal to
+   suppress advice on `no` was wrong on cost and dangerous on quality: the reasoning tokens are
+   spent before the verdict exists, so suppression saves only the list's own output tokens, and a
+   `no` row is visible in the Cleaned view where a blank block reads as broken. The real risk is the
+   opposite one — a model asked for three bullets against a hopeless match will manufacture bridging
+   advice ("highlight your analytical coursework to position for the transition"), which is the
+   exact fabrication these fields exist to prevent. Permitting emptiness is the guard.
+5. Grounding, unchanged in spirit and now load-bearing for two more fields: every action must be
+   grounded in something the résumé actually contains or the posting actually says; never invent
+   experience; **never advise claiming a skill the résumé does not evidence** — the correct advice
+   for a real gap is how to *address* it, not how to hide it. `verdict` / `score` keep their current
+   meaning and the D-007 honesty rules (say no when warranted) stay untouched.
 
 **The posting body reaches the model — and this is the substantive change.** `_posting_text`
 currently sends title, level, location, remote, work-auth, stack and comp. It does **not** send the
@@ -225,27 +272,46 @@ description. Advice of the form "the posting names Kafka twice and your résumé
 impossible without the body. `postings.description` has existed since D-095 and is filled forward
 (no backfill), so:
 
-- Include the description when present, **truncated** to a bounded character budget.
+- Include the description when present, **head-truncated at ~4,000 characters** (~1,000 tokens),
+  a module constant with an env override so tightening it after the cost measurement is a config
+  change rather than a deploy (the `VJA_MAX_POSTING_AGE_DAYS` pattern). **[decided]** Head, not
+  tail: bodies average ~3 KB so the cap clips only the long ones, and what it clips is the boilerplate
+  tail (EEO statements, benefits, legal) while responsibilities and the posting's own vocabulary are
+  front-loaded. **No boilerplate stripping** — heuristic cleanup is a second feature with its own
+  failure modes.
 - The cached prefix (résumé + instructions) is unchanged, so this adds volatile input tokens to
-  every match call — roughly 750 tokens for a ~3 KB body. **Measure the real per-match cost
-  before and after** on a small live sample and record it; if it is material, tighten the
-  truncation rather than dropping the feature, because the feature is the point.
+  every match call. **Measure the real per-match cost before and after** on a small live sample and
+  record it; if it is material, tighten the truncation rather than dropping the feature, because the
+  feature is the point.
 - Rows without a stored description still match, just without body-grounded actions. Do not
   backfill 12k descriptions to enable this.
 
+**How many rows actually have a body, and why this is not a blocking query.** `description` fills at
+insert, on a content change, on reopen, or at extraction, and shipped 2026-07-24 with no backfill —
+so rows that entered before that date and have not changed since carry a NULL. Two things bound
+that to a tail: a row is only displayable if its activity date is inside 21 days (D-109), and
+in-scope rows pick up a body at extraction from the detail the list-only fetchers already fetch.
+What remains is a posting that entered before 2026-07-24 and has been **re-dated without its body
+changing** — `update_changed` only writes the description when content actually moved. **The manual
+quality sample is the measurement**: bodyless rows are self-evident in the output, so this costs
+nothing and needs no separate read-only Neon pass.
+
 **Render surfaces.**
 
-- `PostingPanel` gains an actions block, placed **above** fits/gaps: the actionable part is what the
-  user opened the panel for, and fits/gaps is now the supporting argument. Absent fields render
-  nothing at all (same discipline as the description block).
+- `PostingPanel` order is **verdict line → what to change → application notes → fits/gaps**
+  **[decided]**: the actionable part is what the user opened the panel for, and fits/gaps is now the
+  supporting argument. Absent or empty fields render nothing at all (same discipline as the
+  description block).
 - `PostingRow` gains the two fields. **`PublicPostingRow` must NOT declare them** — the D-105
   anti-leak guarantee is structural precisely because the public model does not *have* the
   match-derived fields, and adding them there would silently convert a structural guarantee into a
   filtering one.
-- The **digest body currently carries only `rationale`**, not fits/gaps. Add **one** line: the
-  single highest-value résumé action. A digest is a scannable list, not a coaching session — the
-  full advice lives one click away in the panel, behind the dashboard link every digest now carries
-  (D-102). No em dashes (D-099).
+- **[decided — this reverses what this plan first said] The digest body is structurally unchanged:
+  summary only, no action line.** The original plan added the single highest-value résumé action to
+  each digest row. Dropped on the reasoning that the inbox is a **triage** surface — you are deciding
+  whether to click — while advice is **execution** and needs the panel's full context to be usable.
+  The email keeps carrying `rationale` and nothing else, so it inherits the shortening in point 3
+  above and changes in no other way. No em dashes (D-099).
 
 ### Verification, and why the gate is different here
 
@@ -265,29 +331,51 @@ actions are grounded, specific, and would actually change what the user submits.
 - **Re-matching existing rows.** Decided: leave them. If reading the mixed output turns out to be
   jarring, backfilling one profile (Hayden's) is a cheap follow-up in 1.3 — not a reason to spend
   on a corpus-wide re-match now.
+- **Backfilling `postings.description`.** Prospective only, per D-095. Rows without a body still
+  match; their advice is just not vocabulary-grounded.
+
+### The mixed-voice window, and why it needs no backfill
+
+Matching is idempotent per `(posting, profile, resume_version)`, so no existing row is rewritten:
+third-person write-ups will sit beside second-person ones. **D-109 bounds this better than it
+looks** — a posting stops being displayed once its activity date passes 21 days, so the *visible*
+corpus turns over on its own inside about three weeks. The exception is a long-lived posting a board
+keeps re-dating, which stays visible carrying its original third-person match indefinitely. Thin
+tail, named here so it is recognized as expected rather than as a bug.
 
 ### Definition of Done
 
 Green full gate; the migration written, run against Neon, and confirmed with `alembic current`
 before merge; API tests pinning the new fields on `PostingRow` **and** their absence from
-`PublicPostingRow`; panel tests for present/absent/partial; digest render + no-em-dash test; the
+`PublicPostingRow`; panel tests for present/absent/partial/empty-list; a prompt-level test that the
+description reaches `_posting_text` truncated and that a bodyless candidate still matches; digest
+render test proving the body is **structurally unchanged** plus the standing no-em-dash test; the
 manual sample reviewed and signed off; an ADR in `DECISIONS.md`; INVARIANTS' *Matching & extraction*
 section updated (the "every rationale must state fits, gaps, and a verdict" line becomes fits, gaps,
-verdict **and actions**).
+verdict **and actions**, and gains the second-person + 3-bullet rules).
 
 ### Risk
 
 **Low to medium, and the honest risk is cost, not quality.** Every match call gains the truncated
-description as volatile (uncached) input — roughly 750 tokens for a ~3 KB body, on top of a cached
-résumé prefix that does not change. That is the one item in 1.2 that pushes spend *up*; PR 2 pushes
-it down, which is most of why they are sequenced that way. It is measurable in a single run, and if
-it is material the answer is a tighter truncation budget, not dropping the feature.
+description as volatile (uncached) input, on top of a cached résumé prefix that does not change.
+
+**Correction to this plan's own sequencing argument:** it claimed PR 2 pre-paid for that increase by
+shrinking the candidate set. That is now known to be wrong — the D-109 measurement found all 358
+age-floored rows **already carried a match**, so the age floor saved **$0 on the existing corpus**
+and only saves forward, per new `(profile, resume_version)`. The offset is real but smaller and
+later than the sequencing claimed.
+
+What genuinely offsets it is inside this PR: capping fits/gaps at 3 and dropping the rationale's
+recap cut **output** tokens on every match, and output is the expensive side. Net may land near
+flat. It is measurable in a single run, and if it is material the answer is a tighter truncation
+budget, not dropping the feature.
 
 The quality risk is real but thinner than it first looks: the prompt's existing honesty rules
 (ground everything in the inputs, never invent experience, say no when warranted — D-007) already
-carry that weight, and the new fields inherit them rather than competing with them. The manual
-sample review is the check, and it is a check on whether the advice is *useful*, not on whether it
-is safe.
+carry that weight, and the new fields inherit them rather than competing with them. The sharpest
+remaining edge is manufactured bridging advice on a hopeless match, which permitting an empty
+advice list is specifically there to prevent. The manual sample review is the check, and it is a
+check on whether the advice is *useful*, not on whether it is safe.
 
 ---
 

@@ -132,8 +132,33 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   own shape (`ListOnlyFetcher` protocol + `extract._DETAIL_DESCRIPTIONS`, parallel to
   `_DETAIL_RESOLVERS`); Oracle reads only its `External*Str` fields. **No backfill** — rows fill as
   they insert, change, reopen, or re-extract. (D-095, D-088, D-043, D-038)
-- **Matching is reasoning, not similarity.** Every rationale must state fits, gaps, and a
-  verdict + score. Willingness to say *no* is a product requirement. (D-007, D-036)
+- **Matching is reasoning, not similarity.** Every write-up must state fits, gaps, a verdict +
+  score, **and what to do about it**. Willingness to say *no* is a product requirement. The shape
+  since D-111: `fits`/`gaps` cap at **3 each** and may not restate profile-constant facts
+  (graduation date, home vs role location, "your level suits an early-career role") — they repeat
+  on every posting and say nothing about this one; `rationale` is 1-2 sentences naming what
+  **dominated** the judgment, never a recap of the lists beside it and never a restatement of the
+  verdict label; everything is written in the **second person**. (D-111, D-007, D-036)
+- **Advice splits into two fields because they license different acts, and that split is the
+  honesty guard.** `matches.resume_actions` (≤3) is definitionally about content **already on the
+  résumé** — what to lead with, what to reword because the posting says it differently;
+  `matches.application_notes` (≤2) is definitionally about content that is **not there and cannot
+  be added honestly** — how to frame a real gap. Blended into one list the model has no boundary to
+  respect and the failure mode is advising the user to claim a skill they lack. **Never tell a user
+  to add experience the résumé does not evidence.** Advice is produced for **every** verdict
+  including `no`, and **empty is a valid, complete answer** — a model asked for three bullets
+  against a hopeless match manufactures bridging advice, which is the exact fabrication these
+  fields exist to prevent. In storage `"[]"` (a deliberate non-answer) and NULL (matched before
+  D-111) differ; `_loads` flattens both to `None`, so every reader has one absence to handle and
+  the panel renders nothing either way. Old rows are never recomputed — matching is idempotent per
+  `(posting, profile, resume_version)` — so voice and shape stay mixed until the age floor turns
+  the visible corpus over (~21 days, D-109). (D-111, D-007, D-095)
+- **The posting body reaches the match model, head-truncated.** `VJA_MATCH_DESCRIPTION_CHARS`
+  (default 4,000) bounds it; **head, not tail**, because a posting front-loads responsibilities and
+  back-loads boilerplate. Vocabulary-grounded advice ("they call it a data pipeline, your résumé
+  says ETL") is impossible without it and the extracted `stack` is too thin to carry it. Rows with
+  no stored body still match, just without that grounding — D-095 fills descriptions forward and
+  never backfills. No boilerplate stripping. (D-111, D-095)
 - **A match score is always 0–100, including at the model boundary.** Anthropic structured output
   guarantees an integer but not JSON-Schema numeric bounds; a returned integer outside the range is
   clamped to the nearest boundary and logged before strict final validation. Wrong types and every
@@ -276,6 +301,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   retries stay off there too until the skip-if-running guard has proven itself — pairing an untested
   overlap guard with automatic retries can wedge a run. A process-level failure is operator-reviewed
   and manually rerun. (D-103, D-086)
+- **The digest body carries `rationale` and nothing else of the write-up — no fits/gaps, no
+  advice.** The inbox is a **triage** surface (decide whether to click); advice is *execution* and
+  needs the panel's full context, one click away behind the dashboard link every digest carries
+  (D-102). `fits`/`gaps` and the full advice still land in the `digests` audit blob. Pinned
+  structurally rather than by string search: **`DigestPosting` does not declare the advice fields**,
+  the same shape of guarantee `PublicPostingRow` gives the demo board. (D-111, D-037, D-102)
 - **Closures roll up by company above 10 in the digest body** — ≤10 enumerate per role, >10 render
   `N roles across C companies` + top-10 + "…and M more". Subject keeps the true count and the audit
   blob keeps the full closed list; only the human-facing body summarizes. (D-056)
@@ -309,6 +340,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   **Rows advertise the detail panel** with a persistent right-edge chevron that rotates when the row
   opens — decorative (`aria-hidden`; the row already carries `role="button"` + `aria-expanded`) — and
   the `.table-guide` line names what the panel holds. The title stays an apply link (D-095).
+  **Panel order is verdict line → what to change → what to address → fits/gaps → description →
+  apply** (D-111): the actionable part is what the user opened the panel for, and fits/gaps became
+  the supporting evidence beneath it rather than the headline. An absent *or empty* advice list
+  renders nothing at all — never a bare heading over nothing, since "no honest advice" is a real
+  answer for a hopeless role.
   **The panel loads the posting body on open** — `GET /api/postings/{id}?vertical=…` per open, aborted
   when the panel switches rows, never cached client-side; the body renders last (after the match
   write-up, before apply) as `white-space: pre-wrap`. A body that is absent, still loading, or failed
@@ -408,7 +444,11 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   guarantee is **structural at two independent layers**: `dashboard_statement(profile_id=None)`
   builds SQL that never references `matches` (pinned by compiling it and asserting the table name is
   absent), and the public endpoints serialize `PublicPostingRow`, which does not *declare*
-  `verdict`/`score`/`fits`/`gaps`/`rationale`. Endpoints: `GET /api/public/postings?vertical=&window=`
+  `verdict`/`score`/`fits`/`gaps`/`rationale` **nor `resume_actions`/`application_notes`** — advice
+  is the most personal text the matcher produces, since it quotes the résumé back at the reader, so
+  it joined the public-API test's `_MATCH_FIELDS` the day it existed (D-111). The `locked` panel
+  additionally gates the advice blocks on the flag, not just on the data.
+  Endpoints: `GET /api/public/postings?vertical=&window=`
   (no `view` axis — always the in-scope universe), `/api/public/postings/{id}?vertical=`, and
   `/api/public/verticals` → `[{vertical, count}]`, which unlike `/api/verticals` **omits verticals
   with zero open rows** (the picker must stay joinable at zero; a toggle must not open onto an empty

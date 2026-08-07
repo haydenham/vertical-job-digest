@@ -46,6 +46,8 @@ function row(over: Partial<PostingRow> = {}): PostingRow {
     fits: ["power markets"],
     gaps: ["no SCADA"],
     rationale: "Strong on dispatch optimization.",
+    resume_actions: null,
+    application_notes: null,
     ...over,
   };
 }
@@ -210,6 +212,57 @@ describe("PostingPanel", () => {
     expect(mockFetch).toHaveBeenLastCalledWith(2, "energy_software", expect.any(AbortSignal));
   });
 
+  // --- actionable advice (D-111) ---------------------------------------------------------------
+
+  describe("advice", () => {
+    const advised = {
+      resume_actions: ["Lead with the dispatch simulator", "Say 'nodal pricing', not 'LMP'"],
+      application_notes: ["Address the missing production experience"],
+    };
+
+    it("renders both advice blocks above the fits/gaps argument", () => {
+      renderPanel(row(advised));
+
+      expect(screen.getByText("Lead with the dispatch simulator")).toBeInTheDocument();
+      expect(screen.getByText("Say 'nodal pricing', not 'LMP'")).toBeInTheDocument();
+      expect(screen.getByText("Address the missing production experience")).toBeInTheDocument();
+
+      // Order is the decision, not an accident: what to change comes before the evidence for it.
+      const panel = screen.getByRole("dialog");
+      const text = panel.textContent ?? "";
+      expect(text.indexOf("Lead with the dispatch simulator")).toBeLessThan(
+        text.indexOf("power markets"),
+      );
+      expect(text.indexOf("what to change on your resume")).toBeLessThan(
+        text.indexOf("what to address in your application"),
+      );
+    });
+
+    it("renders nothing at all when the model had no honest advice", () => {
+      // An empty list is a real answer for a hopeless role (the prompt asks for it), and it must
+      // not surface as a bare heading over nothing.
+      renderPanel(row({ resume_actions: [], application_notes: [] }));
+
+      expect(screen.queryByText(/what to change on your resume/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/what to address in your application/i)).not.toBeInTheDocument();
+      expect(screen.getByText("power markets")).toBeInTheDocument(); // the rest still renders
+    });
+
+    it("renders nothing for a row matched before the fields existed", () => {
+      renderPanel(row({ resume_actions: null, application_notes: null }));
+
+      expect(screen.queryByText(/what to change on your resume/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/what to address in your application/i)).not.toBeInTheDocument();
+    });
+
+    it("renders one block when only the other is empty", () => {
+      renderPanel(row({ resume_actions: ["Lead with the simulator"], application_notes: [] }));
+
+      expect(screen.getByText("Lead with the simulator")).toBeInTheDocument();
+      expect(screen.queryByText(/what to address in your application/i)).not.toBeInTheDocument();
+    });
+  });
+
   // --- the public demo board (D-105) -----------------------------------------------------------
 
   describe("locked", () => {
@@ -220,6 +273,23 @@ describe("PostingPanel", () => {
         </MemoryRouter>,
       );
     }
+
+    it("never renders advice, even when the row somehow carries it", () => {
+      // The API cannot send these to an anonymous caller (PublicPostingRow does not declare them),
+      // so this is the component's own belt-and-braces: `locked` gates the render, not the data.
+      renderLocked(
+        row({
+          resume_actions: ["Lead with the dispatch simulator"],
+          application_notes: ["Address the missing production experience"],
+        }),
+      );
+
+      expect(screen.queryByText("Lead with the dispatch simulator")).not.toBeInTheDocument();
+      expect(screen.queryByText(/what to change on your resume/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Address the missing production experience"),
+      ).not.toBeInTheDocument();
+    });
 
     it("offers sign-in in the match slot rather than a verdict", () => {
       renderLocked();

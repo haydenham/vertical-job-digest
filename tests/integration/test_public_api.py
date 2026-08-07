@@ -32,7 +32,17 @@ _NOW = datetime.now(UTC)
 _VERTICAL = "grid_power_software"
 _OTHER_VERTICAL = "aviation_software"
 
-_MATCH_FIELDS = ("verdict", "score", "fits", "gaps", "rationale")
+_MATCH_FIELDS = (
+    "verdict",
+    "score",
+    "fits",
+    "gaps",
+    "rationale",
+    # The D-111 advice fields. Advice is the most personal text the matcher produces — it quotes
+    # the résumé back at the reader — so it belongs on this list from the day it exists.
+    "resume_actions",
+    "application_notes",
+)
 
 
 def _client(engine: Engine) -> TestClient:
@@ -119,6 +129,8 @@ def _match(engine: Engine, posting_id: int, profile: Profile) -> None:
                 "fits": '["five years of grid telemetry work"]',
                 "gaps": '["no Rust in the r\\u00e9sum\\u00e9"]',
                 "rationale": "Their SCADA background maps directly onto this team.",
+                "resume_actions": '["Lead with the SCADA telemetry work"]',
+                "application_notes": '["Address the missing Rust head-on"]',
             },
             model="claude-sonnet-4-6",
             trigger="nightly",
@@ -154,6 +166,7 @@ def test_public_postings_carry_no_match_fields_even_when_matches_exist(
         assert field not in row
     # Belt and braces: the personal text is nowhere in the serialized payload at all.
     assert "SCADA" not in str(body)
+    assert "Lead with the SCADA telemetry work" not in str(body)  # D-111 advice, same rule
 
 
 def test_anonymous_statement_never_references_the_matches_table() -> None:

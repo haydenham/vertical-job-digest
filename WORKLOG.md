@@ -5,7 +5,164 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-06 (last) — Update 1.2 PR 4: a link check we could not complete stops reading as a dead job (`fix/digest-quarantine`, D-110)
+## 2026-08-06 (last) — Update 1.2 PR 3: the write-up tells you what to change (`feat/actionable-match-advice`, D-111)
+
+**Housekeeping: the previous entry's `**Next:**` is partly done.** D-110 merged as **#124** and
+`docs/updates/1.2.md` now carries its row. **The production verification of D-110 has not
+happened** — nobody has read the morning-after quarantine counts against the baseline of 25, the
+new `apply-link verification:` summary line, or confirmed a Coinbase/Akuna/Tower Research role
+reached an inbox. That is still owed and it is a read-only Neon check. The other two debts that
+entry named are cleared here: the lost D-109 measurement note is re-applied (to the ADR as a marked
+correction and to the `postings_needing_match` docstring), and #124 is recorded.
+
+### The session started as a scope argument, not a build, and that was the right call
+
+Hayden's opening question: the summary paragraph reasons about *why* the score was given — isn't
+that what fits and gaps already do? Mostly yes. Read against real production rows, a `maybe · 42`
+carries 6 fits and 7 gaps and its rationale is a four-sentence recap of the bullets directly
+beneath it.
+
+**But not entirely, and the exception set the shape of the PR.** The one thing the paragraph does
+that two lists of equal-looking bullets structurally cannot is **weight** — say which gap was
+disqualifying. "The stack gap is a real risk" is why the score is 42 and not 65. So the rationale
+survives as one or two sentences that name what dominated, and the recap around it goes.
+
+Two things surfaced in the discussion that were not in `docs/21` at all:
+
+- **The bigger noise source was fits/gaps, not the paragraph.** The same profile-constant bullets
+  recur on nearly every posting: graduation date, Madison WI vs the role's city, "early-career level
+  aligns". True, restated every time, wallpaper by the third role, and paid for in output tokens on
+  every match. Capping at 3 each and banning those is most of the readability win — and it is what
+  let the rationale stay roughly as long as it is, since at 6 bullets instead of 13 the paragraph
+  stops being a recap of anything.
+- **Everything is now written in the second person.** The output described the reader in the third
+  person ("The candidate has a solid early-career foundation"), a leftover from the prompt's framing.
+  It read as a dossier about you rather than advice to you, and "you should claim Spring Boot" is
+  more obviously wrong than "the candidate should list Spring Boot".
+
+**Hayden corrected me on `no` verdicts, and the correction was right.** I had proposed suppressing
+advice there to save output tokens. Wrong twice: the reasoning tokens are spent *before* the verdict
+exists, so suppression saves almost nothing, and a `no` row is visible in the Cleaned view where a
+blank block reads as broken. The real hazard runs the other way — a model asked for three bullets
+against a hopeless match manufactures bridging advice ("highlight your analytical coursework to
+position for the transition"), which is exactly the fabrication these fields exist to prevent. So
+advice is produced for every verdict and **empty is an explicitly permitted, complete answer**.
+
+### Why two fields and not one
+
+`resume_actions` is definitionally about content **already on the résumé**; `application_notes` is
+definitionally about content that is **not there and cannot be added honestly**. Blended into one
+list the model has no boundary to respect, and the failure mode is *"add valuation to your skills
+section"* — advice to lie, with our name on it. The schema makes that hard to say by accident.
+
+### What shipped
+
+Two nullable `matches` columns (`b2d94f6ac103`), the prompt rewrite, the posting `description`
+reaching `_posting_text` head-truncated at `VJA_MATCH_DESCRIPTION_CHARS` (4,000), the read path
+through to `PostingRow`, and two panel blocks above fits/gaps. **Head not tail** on the truncation:
+a posting front-loads responsibilities and back-loads boilerplate, so the cap drops what was never
+worth tokens.
+
+**The digest is structurally unchanged, by decision** — `docs/21` had planned to add one action line
+per row and it was dropped: the inbox is triage (decide whether to click), advice is execution and
+needs the panel. Pinned by asserting `DigestPosting` does not *declare* the fields, the same shape
+of guarantee `PublicPostingRow` gives the demo board — where the advice fields are also deliberately
+absent, and joined `_MATCH_FIELDS` in the public-API test the day they existed.
+
+**One storage decision worth knowing:** `"[]"` (the model declining to advise) and NULL (a row
+matched before D-111) differ in the DB and are flattened to `None` by `_loads`. The distinction is
+recorded where it can be, and leaks no complexity to any reader.
+
+### Correction carried into the ADR
+
+`docs/21` argued PR 2 pre-paid for PR 3's cost by shrinking the candidate set. **That is wrong** —
+all 358 age-floored rows already carried a match, so D-109 saved **$0 on the existing corpus** and
+saves forward only. The real offset is inside this PR: capping fits/gaps and dropping the recap cut
+**output** tokens, the expensive side. Net may be near flat, and it is unmeasured until a live run.
+
+**Verification.** Full gate green: **pytest 943** (+10), ruff/format/mypy clean, `lint-imports`
+kept, tsc/eslint clean, **vitest 229** (+5). The quality half is deliberately *not* gated (D-020 as
+amended by D-090/D-093).
+
+**Honest limit: the manual quality sample has not been run.** The local `data/vja.db` was four
+migrations behind (confirmed: `c4e8a7d9132f` vs head) and, more to the point, every description in
+it is NULL — D-095 fills forward and this corpus stops at 2026-06-30 — so a local sample cannot
+exercise the body-grounded half of the advice, which is the half most likely to be wrong. That
+sample needs prod data and a live model call.
+
+### Read-only Neon measurements, taken after the build
+
+**1. Description coverage is good enough to ship, and uneven.** Of the displayable corpus (open,
+in-scope, inside the 21-day floor): **449 of 542 rows carry a body, 83%** — trading **100%** (220/220),
+robotics **89%** (127/143), aviation **64%** (39/61), grid **53%** (63/118). Grid is the weak spot
+and the reason is structural, not a bug: it is the oldest vertical and the most Workday-heavy, so
+it holds the most rows extracted before D-095 shipped, and `update_changed` only writes a
+description when the body actually moves. **Forward coverage is the number that matters more:
+88% of rows first seen in the last 7 days have a body**, so the advice will be vocabulary-grounded
+on roughly nine of ten new roles.
+
+**2. Nothing currently on the dashboard will gain advice, and this is the expectation to set.**
+Displayable rows with no match yet: **zero**. Every visible posting has already been judged, and
+matching is idempotent per `(posting, profile, resume_version)`, so after merge the advice appears
+only on roles discovered from that point forward. The dashboard fills in over ~21 days as the age
+floor turns the corpus over. The one way to see it broadly right away is a **new `resume_version`**
+(a résumé re-upload or a vertical switch), which re-matches the recent set under the new prompt —
+that is also the cheapest way to produce the manual quality sample.
+
+**3. D-110's production verification could not be done today, and the numbers say why.** #124
+merged at **15:11 UTC**; today's digest sent at **11:04 UTC**, four hours earlier. (#123/D-109
+merged at 13:13 UTC, so today's send predates the age floor too.) Today's quarantine total is
+**exactly 25** across all recipients — precisely the pre-fix baseline the last entry recorded, which
+is the consistent reading. **The check moves to tomorrow's 11:00 UTC send.**
+
+**5. D-110 is verified in production (2026-08-07), and it worked.** The first send on the fixed
+image logged the new summary line: **`176 URLs checked (alive=174 dead=2), 163 repeat lookups
+served from cache`**. Quarantine across all 35 recipients today is **2**, against a baseline of
+**25** on 08-06 and ~125 on 08-05 — and both survivors are genuine dead links, the D-008 control
+still working. The dedupe is real: 339 would-be lookups collapsed to 176 actual requests. Note the
+line reports no `BLOCKED` or `UNKNOWN` at all today, so the 403 class that motivated the fix simply
+shipped rather than being counted.
+
+**6. The `vja-digest did not run` alert that fired on 08-06 is a false positive, but *not* the one
+its own documentation describes.** Checked three ways: `digests` rows land daily for 8 straight
+days (today 11:04 UTC, 35 rows); Cloud Run shows **10 executions, all succeeded, zero failed, zero
+cancelled**; and the metric the policy keys on has a **max gap of 24.00h against its 26h window**
+over 16 days. The live policy config is correct and was created 2026-07-29 16:33 and never mutated.
+So the documented escape hatch ("created within the last 26h and has not run yet") **does not
+apply** — the Job has run ten times, and anyone following that clause would have been misled.
+No incident record is retrievable (Monitoring v3 exposes none, and Cloud Logging has nothing), so
+the cause is not provable after the fact; the consistent explanation is a **transient absence at
+evaluation time** — a late-arriving sample against a condition with **`duration: 0s`**, which fires
+on a single evaluation and self-resolves, leaving backfilled data that looks clean. **The real
+finding is that both windows are thinner than they read:** the digest has 2h of margin on a 24h
+gap, and **`vja-nightly` has 16 minutes** (worst gap since policy creation 4.73h against 5h).
+Recommended and *not* done without a decision: digest 26h → 30h, nightly 5h → 6h, a non-zero
+`duration` on both so one transient evaluation cannot page, and a rewrite of the false-positive
+clause. All of it requires **delete-then-recreate** — `alerts.sh` is idempotent by `displayName`
+and re-running it after an edit is a silent no-op (the documented trap).
+
+**4. One measurement that does not fit the throttling story, recorded rather than smoothed over.**
+Comparing two big baseline digests, *both* pre-fix: 08-05 `erik.paulson.work` **160 new / 106
+quarantined (66%)**, versus 08-06 `brianmeng6` **263 new / 23 quarantined (8%)**. A pure
+burst-throttling explanation predicts the larger digest should fare at least as badly, and it fared
+far better. This does not undermine D-110 — retry-on-inconclusive is cause-agnostic, and the 403
+WAF class was directly observed — but it does mean the burst inference was weaker than it looked.
+D-110's status-code logging is what will finally answer this, tomorrow, for the first time.
+
+**Next:** the manual Neon migration (`export VJA_DATABASE_URL` → `alembic current` → `upgrade head`
+→ `current`) **before** merging, per D-068/D-083 — and note the ordering constraint the measurements
+expose: the sample needs the columns to exist, so migrate first, then produce the sample via a
+résumé re-upload (a new `resume_version` re-matches the recent set under the new prompt; nothing
+already matched will re-run). Read a dozen spanning strong_yes → no, preserve the outputs, and sign
+off or send it back. **Tomorrow morning, separately:** D-110's real first check — the
+`apply-link verification:` summary line with actual status codes, quarantine against today's
+baseline of 25, and whether a Coinbase/Akuna/Tower Research role reaches an inbox. That line should
+also settle the 66%-vs-8% anomaly in item 4 above. Then 1.2 closes — `docs/updates/1.2.md` needs its
+theme confirmed, the measured before/after, the known-and-not-fixed ledger and the open human items.
+
+---
+
+## 2026-08-06 — Update 1.2 PR 4: a link check we could not complete stops reading as a dead job (`fix/digest-quarantine`, D-110)
 
 **Housekeeping: the previous entry's `**Next:**` is done.** D-109 merged as **#123** and is live;
 `docs/updates/1.2.md` now carries its row. One casualty of the branch switch worth knowing about:

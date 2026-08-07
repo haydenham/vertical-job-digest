@@ -119,6 +119,33 @@ export function PostingPanel({
           response rather than of this component. */}
       {!locked && p.rationale && <p className="rationale">{p.rationale}</p>}
 
+      {/* The advice, above fits/gaps (D-111): what to change is what the user opened the panel
+          for, and the fits/gaps argument is now the supporting evidence beneath it. An empty or
+          absent list renders nothing at all — for a hopeless role the model is instructed to
+          return nothing rather than manufacture a bridge, so "no advice" is a real answer here
+          and must not become an empty heading. */}
+      {!locked && !!p.resume_actions?.length && (
+        <div className="advice advice-resume">
+          <span className="label">what to change on your resume</span>
+          <ul>
+            {p.resume_actions.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!locked && !!p.application_notes?.length && (
+        <div className="advice advice-application">
+          <span className="label">what to address in your application</span>
+          <ul>
+            {p.application_notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {!locked && (p.fits?.length || p.gaps?.length) && (
         <div className="fits-gaps">
           <div className="fits">

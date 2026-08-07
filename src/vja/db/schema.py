@@ -271,6 +271,14 @@ matches = Table(
     Column("fits", Text),
     Column("gaps", Text),
     Column("rationale", Text),
+    # Actionable advice (D-111), JSON lists like fits/gaps. Two columns rather than one blended
+    # list because they license different acts: `resume_actions` is definitionally about content
+    # already on the resume, `application_notes` about content that is not there and cannot be
+    # added honestly. Nullable — rows matched before D-111 keep NULL and are never recomputed
+    # (matching is idempotent per posting/profile/resume_version). An empty JSON list is a
+    # different thing from NULL: it is the model saying this role has no honest advice.
+    Column("resume_actions", Text),
+    Column("application_notes", Text),
     Column("model_version", String, nullable=False),
     Column("trigger", _enum(MatchTrigger, "match_trigger"), nullable=False),
     Column("created_at", UTCDateTime(), nullable=False),

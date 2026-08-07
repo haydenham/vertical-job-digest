@@ -45,6 +45,11 @@ export interface PostingRow extends BasePostingRow {
   fits: string[] | null;
   gaps: string[] | null;
   rationale: string | null;
+  // Actionable advice (D-111). Null both for rows matched before the fields existed and for a role
+  // the model had nothing honest to say about; the panel renders nothing in either case. These are
+  // absent from `PublicPostingRow` by design — the demo board can never carry match text (D-105).
+  resume_actions: string[] | null;
+  application_notes: string[] | null;
 }
 
 // A row on the public demo board: the same posting, with no match data of any kind.
