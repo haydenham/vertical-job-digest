@@ -52,14 +52,16 @@ Rippling row's `endpoint` is ignored and its slug always wins. For Workday, Payl
 `raptor-maps-inc`), not the company name. Rippling lists one row per (job × work location), so the
 fetcher collapses them into one posting per job and joins the locations (D-096).
 
-## Current seed status (grid/power vertical, 56 employers)
+## Current seed status (grid/power vertical, 57 employers)
 After the ATS-identification pass (see `docs/07-ats-routing.md`) + the P4.2 Workday + Phase-8
 iCIMS/Workable/SmartRecruiters/Oracle/Radancy onboards:
-- **36 verified**: Greenhouse (6), Lever (3), Ashby (2), 15 Workday, **2 Workable (Vortexa, Energy
+- **37 verified**: Greenhouse (5), Lever (3), Ashby (3 — SPAN, WeaveGrid, **Base Power Company,
+  curated 2026-08-08**), 15 Workday, **2 Workable (Vortexa, Energy
   Aspects — Phase 8)**, **4 iCIMS/Jibe (Constellation, Exelon, SIG, ICE — Phase 8)**,
   **1 SmartRecruiters (Vitol — Phase 8, D-050)**, **1 Oracle ORC (Southern Company — Phase 8, D-051)**,
   **1 Radancy/TalentBrew (NextEra — Phase 8, D-052)**, **1 Pinpoint (Aurora Energy Research —
-  D-079)**. All 36 are **fetchable today**.
+  D-079)**, **1 Rippling (Camus Energy, moved off Greenhouse 2026-07-28 — D-096)**. All 37 are
+  **fetchable today**.
 - **8 detected** (platform known, no fetchable endpoint yet): Jobvite (2), SuccessFactors, Avature,
   UKG, Eightfold, **+2 Radancy parked (NRG, National Grid — generic fetcher exists but their
   search base isn't live-confirmed yet; onboard config-only once verified, D-052)**.

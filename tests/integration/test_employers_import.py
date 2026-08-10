@@ -136,16 +136,18 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
 
     fetchable = active_fetchable_employers(migrated_engine)
 
-    # Grid: 5 Greenhouse + 3 Lever + 2 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
-    # + 1 Oracle + 1 Radancy + 1 Pinpoint + 1 Rippling = 36. (Camus Energy moved Greenhouse →
+    # Grid: 5 Greenhouse + 3 Lever + 3 Ashby + 15 Workday + 4 iCIMS + 2 Workable + 1 SmartRecruiters
+    # + 1 Oracle + 1 Radancy + 1 Pinpoint + 1 Rippling = 37. (Base Power Company is the third grid
+    # Ashby row, curated 2026-08-08: an Austin home-battery fleet + Texas retail electricity
+    # provider, slug `base-power`, 171 open at verification. Camus Energy moved Greenhouse →
     # Rippling: its Greenhouse board began 404ing 2026-07-28 and the tenant now embeds a Rippling
     # board, slug `camus-energy`, re-verified live 2026-07-29. Config-only — D-096's fetcher already
     # existed, so grid's total is unchanged and only the per-ATS split moves.)
     # Aviation: 2 Greenhouse + 1 Lever +
     # 1 Ashby + 5 Workday + 2 iCIMS
     # + Southwest/Thales Workday config onboards + United Phenom + Honeywell Oracle
-    # + Comply365/Vistair BambooHR (D-096, the D-078 item-5 add) = 16. Total 51,
-    # of which 8 are Greenhouse, 3 Ashby, 22 Workday, 6 iCIMS/Jibe, 2 Workable,
+    # + Comply365/Vistair BambooHR (D-096, the D-078 item-5 add) = 16. Grid + aviation = 53,
+    # of which 7 are Greenhouse, 4 Ashby, 22 Workday, 6 iCIMS/Jibe, 2 Workable,
     # 1 SmartRecruiters (Vitol),
     # 2 Oracle ORC (Southern Company + Honeywell, canonical host found at the 2026-07-12 coverage
     # audit), 1 Radancy (NextEra), and 1 Pinpoint (Aurora) — Phase 8. (Collins/RTX exceeds the ~4000
@@ -156,10 +158,10 @@ def test_active_fetchable_employers_returns_only_layer1(migrated_engine: Engine)
     # Trading adds 36 (D-097): 26 Greenhouse, 1 Lever, 4 Ashby, 3 Workday, 2 iCIMS — five of them
     # (Jane Street, DRW, SIG, CME, ICE) are second rows for companies grid already fetches, so the
     # corpus total counts them twice on purpose: one employer row per (vertical, name).
-    assert len(fetchable) == 112
+    assert len(fetchable) == 113
     assert sum(1 for e in fetchable if e.ats_type == AtsType.GREENHOUSE) == 43
     assert sum(1 for e in fetchable if e.ats_type == AtsType.LEVER) == 10
-    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 15
+    assert sum(1 for e in fetchable if e.ats_type == AtsType.ASHBY) == 16
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKDAY) == 26
     assert sum(1 for e in fetchable if e.ats_type == AtsType.ICIMS) == 8
     assert sum(1 for e in fetchable if e.ats_type == AtsType.WORKABLE) == 2
