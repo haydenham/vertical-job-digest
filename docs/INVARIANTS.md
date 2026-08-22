@@ -175,7 +175,23 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   are parked and will annotate the write-up rather than the score; today's prompt is universal. (D-023, D-093)
 - **Provider failures crossing `vja.llm` are secret-safe.** The public exception retains only the
   configured model route, provider exception class, and integer HTTP status; provider response text,
-  headers, prompts, and API keys never remain in the raised exception or chained traceback. (D-090)
+  headers, prompts, and API keys never remain in the raised exception or chained traceback. This
+  covers *transport* failures (`LLMRequestError`). A response that arrived and then failed our schema
+  is `StructuredOutputError`, which **does** chain its `ValidationError` — that is already-parsed
+  model output about a job posting, and the chained field name is the only thing that makes a
+  provider schema drift diagnosable. (D-112, D-090)
+- **A response that fails our schema is repaired once, at `vja.llm`, before it is rejected.** When a
+  provider returns structured output with values serialized as strings (`'["Python", "Go"]'` for a
+  list, `'191000'` for an int — the 2026-08-18 regression), the fields pydantic rejected are decoded
+  and validation is retried **once**. Repair is **error-driven, never blanket**: a well-formed
+  response is untouched and a declared `str` field holding `"191000"` is never turned into an
+  integer. Separately and **unconditionally**, top-level `'null'`/`'None'` *strings* are dropped so
+  each field falls back to its own default — `comp_min` fails loudly on a string but `comp_raw` is
+  `str | None`, so the literal text "null" validated cleanly and reached the user (D-095 renders it
+  verbatim). Living at the boundary rather than in `ExtractedFields` is what gives matching the same
+  protection and keeps provider quirks out of `extract`/`match`. Logged once per model. The request
+  format is deliberately **not** pinned: repairing the response survives the next change of
+  mechanism. (D-112, D-035, D-095)
 - **Resume input abstracts to `resume_text`;** non-text formats are a signup-time adapter,
   not pipeline concern. `vja.resume` owns both entry points — `extract_resume_text` (bytes, the file
   upload) and `clean_resume_text` (an already-decoded string, the paste path) — sharing one tail
@@ -466,8 +482,10 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 - **A posting older than `VJA_MAX_POSTING_AGE_DAYS` (default 21) is not shown anywhere, and the row
   is never touched.** `db.postings.age_floor_clause(now)` — one more `activity_window_clause`, so it
   keys on the same `COALESCE(source_updated_at, first_seen_at)` the recency windows use — is applied
-  in four places: `dashboard_statement` (both views, which gets `/demo` **structurally**, the point
-  of D-105's split), `postings_needing_match`, the digest's `new` set, and
+  in five places: `dashboard_statement` (both views, which gets `/demo` **structurally**, the point
+  of D-105's split), `postings_needing_match`, **`postings_needing_extraction`** (D-112 — extracting
+  a row that can never be displayed is the same waste as matching it, and on 2026-08-22 that was 55%
+  of the untouched backlog), the digest's `new` set, and
   `open_posting_counts_by_vertical` (the toggle's count is a promise about the table it opens).
   **A display floor, never a status change:** `status` stays `open` and lifespan stats stay honest,
   because age-*closing* would fight the diff — the ATS still lists the job, so the next 4-hourly run
@@ -601,8 +619,18 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
 
 ## Cost & safety
 
+- **A billed call is metered whether or not we can use its answer, and a systematically failing
+  Layer 2 stops itself.** `StructuredOutputError` carries `usage`/`cost_usd` and `run_extraction`
+  adds them before continuing — metering only the success path is what let the 2026-08-18 regression
+  bill **$24.12** across three days while `pipeline_runs` recorded `extraction_calls = 0` and
+  ~$0.08. Extraction also aborts after **20 consecutive failures with no success**, surfaced as
+  `ExtractionSummary.aborted` → `Layer2Summary.extract_aborted` → an `ERROR` nightly line. Nothing
+  bounded this before (`VJA_PIPELINE_MAX_MATCHES` is matching; the daily ceiling is signup backfills
+  only), and the cost *grows* unbounded because a failed extraction never stamps `extracted_at`
+  while Layer 1 keeps adding ~500 rows/day. (D-112, D-035, D-101, D-103)
 - **Cost discipline from day one:** LLM only where structure runs out; cache by content
-  hash; meter LLM spend. **Metering is real, not a proxy:** every LLM call's `TokenUsage`
+  hash; meter LLM spend. **Metering is real, not a proxy** — for calls that succeed *and*, since
+  D-112, for calls that are billed and then discarded: every LLM call's `TokenUsage`
   (input/output/cache_read/cache_write) is summed per stage and **persisted to `pipeline_runs`**
   (four token columns) + logged as a per-stage nightly line with the matching cache-hit %. The
   `$0.01`-per-match figure survives **only** as the backfill budget-guard proxy (below), not as the spend

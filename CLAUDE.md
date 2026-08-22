@@ -356,6 +356,10 @@ high-volume meaningful jobs live there; it's pure Layer 1 and independent of mat
   hard 3-week posting age floor → actionable match advice), each with scope, DoD, out-of-scope, and risk, plus
   the sequencing argument (2 before 3 so the cost increase lands on the smaller candidate set). Read with the
   WORKLOG top entry to continue.
+- `docs/22-cost-and-health-audit-2026-08.md` — point-in-time read-only audit (2026-08-22): what the system costs
+  (Anthropic/OpenAI/GCP, measured), and the production incident it surfaced — Layer-2 extraction failing 100% since
+  2026-08-18 while still being billed, invisible to the meter because `run_extraction` only counts successful calls.
+  Ranked fix list + candidate ADRs at the end. A measurement artifact, not a spec: it is never edited to stay current.
 - `docs/updates/` — one doc per shipped **update** (a group of fixes/features released together) + a `README.md` holding the convention and the index. **`1.1.md`** = the funnel update (#111 → D-106): vertical switching, the `/demo` board, the 4-hourly split, favicon, location normalization — with the measured before/after and the carried-forward ledger. Read it to answer "what changed since launch" without replaying WORKLOG.
 - `DECISIONS.md` — decision log (D-001…). `WORKLOG.md` — session log.
 - `data/seed/employers_seed.csv` (+ README) — the curated employer universe.

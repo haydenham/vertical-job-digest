@@ -7,13 +7,14 @@ spread provider response shapes, token semantics, or pricing tables through the 
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from vja.models import TokenUsage
 
@@ -27,6 +28,27 @@ class LLMRequestError(RuntimeError):
     def __init__(self, *, model: str, error_type: str, status_code: int | None) -> None:
         status = f" status={status_code}" if status_code is not None else ""
         super().__init__(f"LLM request failed: model={model} error={error_type}{status}")
+
+
+class StructuredOutputError(ValueError):
+    """A response that arrived and was billed, but does not satisfy the requested schema.
+
+    Distinct from `LLMRequestError`, which is a call that never produced a response. The
+    distinction is a *cost* distinction, not a taxonomy one: this call is on the invoice, so the
+    exception carries its `usage` and `cost_usd` and callers are expected to meter it before
+    moving on. Metering only the successful path is what let the 2026-08-18 extraction regression
+    bill four days of traffic while `pipeline_runs` recorded `extraction_calls = 0`.
+
+    Unlike `LLMRequestError` this deliberately chains the underlying `ValidationError` (D-090
+    covers provider transport failures, which can carry keys and headers; this is already-parsed
+    model output about a job posting). The chained detail names the offending field and value,
+    which is how a schema drift like the 2026-08-18 one gets diagnosed at all.
+    """
+
+    def __init__(self, *, model: str, usage: TokenUsage, cost_usd: float | None) -> None:
+        super().__init__(f"LLM response failed schema validation: model={model}")
+        self.usage = usage
+        self.cost_usd = cost_usd
 
 
 @dataclass(frozen=True)
@@ -105,6 +127,58 @@ def _token_usage(usage: object) -> TokenUsage:
     )
 
 
+#: JSON's null literal arriving as a *string* value. Never a legitimate value in any of our
+#: schemas (a location, a pay range, a rationale), and a real hazard where the field is declared
+#: `str | None`: pydantic accepts it happily and the four characters "null" are persisted and
+#: rendered to the user verbatim (D-095 renders `comp_raw` as written).
+_NULL_LITERALS = frozenset({"null", "None"})
+
+
+def _repaired(payload: dict[str, Any], error: ValidationError) -> dict[str, Any] | None:
+    """Re-type the fields pydantic rejected, when the value is a JSON string of the right thing.
+
+    Providers may return structured output with every value serialized as a string — a list comes
+    back as `'["Python", "Go"]'`, an integer as `'191000'`, a null as `'null'`. The content is
+    correct and only the encoding is wrong, so decoding the offending field recovers the answer
+    without a second paid call.
+
+    Deliberately **error-driven rather than blanket**: only fields that actually failed validation
+    are touched, so a well-formed response is returned byte-for-byte as the model sent it, and a
+    declared `str` field holding `"191000"` is never silently turned into an integer. Returns None
+    when nothing could be repaired, so the caller doesn't retry validation for free.
+    """
+    repaired = dict(payload)
+    changed = False
+    for detail in error.errors():
+        location = detail["loc"]
+        if len(location) != 1 or not isinstance(field := location[0], str):
+            continue  # nested failures are a schema mismatch, not a stringified scalar
+        value = repaired.get(field)
+        if not isinstance(value, str):
+            continue
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            continue
+        repaired[field] = decoded
+        changed = True
+    return repaired if changed else None
+
+
+def _denulled(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop top-level keys whose value is the *string* `'null'`/`'None'` before validation.
+
+    Unconditional, unlike `_repaired`, because this failure mode is silent on exactly the fields
+    where it does the most damage: `comp_min` errors loudly (a string is not an int) while
+    `comp_raw` validates as the literal text "null" and reaches the user.
+
+    Dropping rather than setting `None` so each field falls back to *its own* declared default —
+    `None` for an optional scalar, `[]` for a list. Forcing `None` would satisfy the first and
+    break the second.
+    """
+    return {k: v for k, v in payload.items() if not (isinstance(v, str) and v in _NULL_LITERALS)}
+
+
 def sum_catalog_costs(*costs: float | None) -> float | None:
     """Sum catalog estimates, or preserve ``None`` when any estimate is unavailable."""
     if any(cost is None for cost in costs):
@@ -137,6 +211,56 @@ class LiteLLMClient:
         self._completion_cost = completion_cost
         self._clock = clock
         self._missing_cost_models: set[str] = set()
+        self._repaired_models: set[str] = set()
+
+    def _validate(
+        self,
+        message: object,
+        response_model: type[T],
+        *,
+        model: str,
+        usage: TokenUsage,
+        cost_usd: float | None,
+    ) -> T:
+        """Turn the provider's message into a validated `response_model`, repairing if needed.
+
+        The SDK's own `parsed` value is trusted as-is when present. Otherwise the JSON content is
+        validated, and on failure re-validated once against `_repaired`, which decodes fields the
+        provider stringified. One repair attempt only: if the decoded payload still doesn't fit,
+        the schema and the response genuinely disagree and a second pass would just be slower.
+        """
+        parsed = _field(message, "parsed")
+        if isinstance(parsed, response_model):
+            return parsed
+        if parsed is not None:
+            payload: Any = parsed
+        else:
+            content = _field(message, "content")
+            if not isinstance(content, str) or not content:
+                raise ValueError("LLM returned no structured content")
+            payload = json.loads(content)
+        if not isinstance(payload, dict):
+            payload = {}  # not an object: let validation report the schema mismatch
+        payload = _denulled(payload)
+        try:
+            return response_model.model_validate(payload)
+        except ValidationError as first:
+            repaired = _repaired(payload, first)
+            if repaired is None:
+                raise StructuredOutputError(model=model, usage=usage, cost_usd=cost_usd) from first
+            try:
+                value = response_model.model_validate(repaired)
+            except ValidationError as second:
+                raise StructuredOutputError(model=model, usage=usage, cost_usd=cost_usd) from second
+            if model not in self._repaired_models:
+                logger.warning(
+                    "repaired stringified structured output from model %s (fields: %s) — the "
+                    "provider is not honouring the declared types",
+                    model,
+                    ", ".join(sorted(str(e["loc"][0]) for e in first.errors() if e["loc"])),
+                )
+                self._repaired_models.add(model)
+            return value
 
     def parse(
         self,
@@ -181,16 +305,6 @@ class LiteLLMClient:
         if not isinstance(choices, list) or not choices:
             raise ValueError("LLM returned no choices")
         message = _field(choices[0], "message")
-        parsed = _field(message, "parsed")
-        if isinstance(parsed, response_model):
-            value = parsed
-        elif parsed is not None:
-            value = response_model.model_validate(parsed)
-        else:
-            content = _field(message, "content")
-            if not isinstance(content, str) or not content:
-                raise ValueError("LLM returned no structured content")
-            value = response_model.model_validate_json(content)
 
         raw_usage = _field(response, "usage")
         if raw_usage is None:
@@ -221,6 +335,12 @@ class LiteLLMClient:
             else:
                 logger.debug("catalog cost still unavailable for model %s", actual_model)
             cost = None
+
+        # Validation last, and only once usage and cost are known: a response that fails the
+        # schema was still generated and still billed, so the error has to be able to report it.
+        value = self._validate(
+            message, response_model, model=actual_model, usage=usage, cost_usd=cost
+        )
         return StructuredResult(
             value=value,
             usage=usage,

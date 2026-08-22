@@ -5,7 +5,142 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-06 (last) — Update 1.2 PR 3: the write-up tells you what to change (`feat/actionable-match-advice`, D-111)
+## 2026-08-22 (last) — The extraction fix: repair the response, meter the failure, bound the loop (`fix/extraction-schema-drift`, D-112)
+
+**Same session as the audit below.** The audit found it; this fixed it. Both are on one branch.
+
+**Root cause, reproduced live before any code changed.** The provider now returns structured output
+with **every value serialized as a string** — `stack` as `'["Python", "Go"]'`, `comp_min` as
+`'191000'`, a null as the four characters `'null'`. Pydantic's lax mode coerces `'191000'` → int
+silently, which is why only `stack` (list) and `'null'` (int) surfaced as errors and why the failure
+looked narrower than it was.
+
+**That masked a second, worse bug.** `comp_raw` is `str | None`, so `'null'` validated *cleanly* as
+the literal text "null" — and D-095 renders `comp_raw` verbatim to users. It would have outlived the
+outage and shipped "null" into the salary line on every posting with no stated pay.
+
+### What shipped
+
+Four changes, all in the `vja.llm` boundary and `extract`:
+
+1. **Repair at the boundary, not in `ExtractedFields`.** `vja.llm` validates, and on failure decodes
+   the fields pydantic rejected and validates once more. **Error-driven, not blanket** — a
+   well-formed response is untouched and a declared `str` holding `"191000"` is never turned into an
+   int. Separately and *unconditionally*, top-level `'null'`/`'None'` strings are **dropped** (not
+   set to `None`) so each field falls back to its own default: `None` for an optional scalar, `[]`
+   for a list. Living at the boundary is what gives **matching** the same protection for free.
+2. **`StructuredOutputError` carries `usage`/`cost_usd`**, and `run_extraction` meters it. The old
+   code accumulated usage *after* the `try`, so billed-then-discarded calls counted as free — the
+   meter read ~$0.08 while the provider billed $24.12.
+3. **Circuit breaker**: 20 consecutive failures with no success aborts the stage, surfaced as
+   `ExtractionSummary.aborted` → `Layer2Summary.extract_aborted` → an `ERROR` nightly line.
+4. **The age floor now applies to `postings_needing_extraction`** (D-109's argument, one stage
+   earlier). This is not housekeeping — **8,715 of the 15,899 untouched rows (55%) are already past
+   the floor**, so the recovery run would otherwise pay to extract more than twice what it can ever
+   display.
+
+**Deliberately not done: pinning the request format.** We still pass `response_format=response_model`
+and let LiteLLM choose. Repairing the *response* is provider-neutral and survives the next change of
+mechanism; pinning would be a guess at LiteLLM internals that breaks again on the next upgrade. If
+the native path returns, repair stops firing and the log line stops appearing.
+
+**Verification.** Regression tests written first and confirmed red against the observed payload.
+Full gate green: **pytest 951** (+8), ruff/format/mypy clean, `lint-imports` kept. **Live against
+the production model: 5/5 real postings extracted**, repair warning firing once per model, and
+`comp_raw` correctly `None` on the posting that would previously have stored "null". No migration,
+no schema change, no frontend change.
+
+**Next — and the ordering matters.** (1) **Top up the Anthropic credit balance first**: it was
+**$5.58** at audit time against a $14.26 day, so the fix would otherwise deploy into an account that
+402s. (2) Merge → CD deploys automatically. (3) Watch the first run: expect a **large one-off
+recovery batch** (~7,200 rows within the floor, roughly 20% surviving Stage A ⇒ ~1,400 extractions,
+~$9) and a `repaired stringified structured output` warning. (4) Confirm new roles reappear in the
+next digest — 3 across all 36 recipients on 08-21 is the number to beat. Still open from the audit:
+alert-on-silence, the GCP budget alert, the `raw_payload` scan, and run duration.
+
+---
+
+## 2026-08-22 — Cost + health audit: extraction has been dead and billing for four days (`docs/cost-and-health-audit`)
+
+**No code changed this session.** Read-only audit across the repo, Neon, Cloud Logging, the Anthropic
+and OpenAI consoles, GCP billing, and the live site. Full write-up with every number:
+**`docs/22-cost-and-health-audit-2026-08.md`**. Dates below are UTC (the session ran as UTC crossed
+into 08-22).
+
+**Housekeeping: the previous entry was two weeks stale and its `**Next:**` is partly done.** D-111
+merged as **#125** and #126 (base-power employer) landed after it; neither was recorded. Still owed
+from that entry: the **D-111 manual quality signoff** (needs prod data and a live model call) and
+the **1.2 close-out** — `docs/updates/1.2.md` still marks item 6 `pending` and has four
+`*Filled at close.*` sections.
+
+### What the audit found
+
+**1. Layer-2 extraction has failed 100% since 2026-08-18 06:19 UTC — and is billed for every
+failure.** Zero postings extracted since (keyed on `extracted_at`; 08-19 → 08-22 return no rows).
+Every call reaches Anthropic, succeeds at the provider, and dies at the Pydantic boundary: the model
+now returns **strings where the schema wants structured types** — `stack` as `'["Excel",
+"PowerPoint"]'` (a `str`, not a list), `comp_min`/`comp_max` as the literal string `'null'`.
+
+**It is not ours.** The deployed image `rolefeed:b237028` was built **08-10**; the break is **08-18**
+on a byte-identical image with a pinned LiteLLM. Upstream change in the structured-output path.
+Hypothesis (unverified, needs one live reproduction): LiteLLM's `response_format` is falling back to
+JSON-mode/tool emulation instead of native constrained decoding.
+
+**Cost, from the Anthropic console:** Aug 19 **$5.20**, Aug 20 **$4.66**, Aug 21 **$14.26**, against
+a ~$0.90/weekday baseline. **$35.65 MTD, ~$22 of it waste.** It accelerates by construction — a
+failed extraction never stamps `extracted_at`, so the row returns to the candidate set forever while
+Layer 1 adds ~500/day. Failed calls/day: **191 → 932 → 1,710 → 2,545**. Nothing in the code bounds
+it (`VJA_PIPELINE_MAX_MATCHES` is matching; the daily ceiling is signup backfills only, D-101).
+**Anthropic credit balance is $5.58** — less than yesterday alone.
+
+**2. The meter could not see any of it.** `run_extraction` accumulates `usage`/`cost_usd` *after* the
+`try`, so a billed-then-rejected call contributes zero tokens and zero dollars. For 08-19→21
+`pipeline_runs` records `extraction_calls = 0` and ~**$0.08** total while the provider billed
+**$24.12**. INVARIANTS' "metering is real, not a proxy" is true only for calls that succeed. This is
+the finding with the longest tail — the bug is an afternoon; the blind spot is why it ran four days.
+
+**3. The product stopped delivering and the UI hides it.** No extraction ⇒ no `in_scope` stamp ⇒
+nothing reaches dashboard, digest, or `/demo`. New roles mailed across all 36 recipients: 85 (08-18)
+→ 21 → 16 → **3** (08-21), against 4,500–5,600 closure entries. **A digest that fails to send is an
+alert (D-037); a digest that sends nothing is not.** Dashboard is draining: 436 displayable, 9 first
+seen in the last four days, 83 aging out within a week. **`/demo` still looks fresh** — the activity
+column keys on `COALESCE(source_updated_at, first_seen_at)`, and reopens (D-053) reset
+`first_seen_at` while keeping an old `extracted_at`, so re-dated and reopened rows sail past the
+floor and sit at the top looking new. 1.2's ledger already carries this as cosmetic; the outage makes
+it consequential. **Layer 1 is healthy throughout** (~500 rows/day, ~3 known fail-closed failures per
+run).
+
+**4. Steady-state spend, outage removed: ~$50/mo** — Anthropic ~$20, OpenAI ~$6, GCP ~$25 (forecast
+$24.62, +633% vs July, which is D-103's 4-hourly cadence and D-101's `--no-cpu-throttling` being paid
+for, not a regression). **Extraction costs 3–4× matching**, inverting the architecture's intuition:
+the strong model is gated twice and capped at 400/run, the cheap one runs on ~500 postings/day
+uncapped behind a *title* check.
+
+**5. Smaller things.** `pipeline_runs.finished_at == started_at` to the microsecond on all 84 runs
+(same `now` passed to both) — we have no run-duration data at all. All 84 runs are `partial`, never
+`success`, so the status field carries no signal. The **GCP budget alert still doesn't exist**
+(`billingbudgets.googleapis.com` not enabled) — the one control that would have caught this from the
+cost side. Alert windows remain thin (nightly 16 min of slack). `/demo`'s anti-leak guard holds when
+signed in.
+
+**Also re-read the whole rejected corpus six times a day** (pre-existing, not on fire):
+`postings_needing_extraction` selects `raw_payload` for every open unextracted row and Stage-A
+filters in Python afterward — ~41 MB/pass × 6/day ≈ 250 MB/day of Neon reads to re-reject the same
+titles, 10,682 of which are already past the age floor.
+
+**Next:** Hayden reviews this branch (docs only — audit doc + doc-map line). Then, in order:
+(1) **stop the burn** — extraction needs a circuit breaker so a broken Layer 2 costs one run, not
+four days; (2) **fix extraction**, regression test on the observed payload shape first per D-021;
+(3) **close the metering hole** — count the failure path; (4) **alert on silence** (zero extractions
+with a non-empty backlog; zero new roles across every recipient); (5) **enable the GCP budget alert
+and watch the $5.58 Anthropic balance**. Then the deferred items: age floor on extraction, the
+`raw_payload` scan, run duration. Candidate ADRs are listed at the end of the audit doc. The 1.2
+close-out and the D-111 quality sample are still owed and are now blocked behind the extraction fix
+(the sample needs a working extraction path to produce body-grounded advice).
+
+---
+
+## 2026-08-06 — Update 1.2 PR 3: the write-up tells you what to change (`feat/actionable-match-advice`, D-111)
 
 **Housekeeping: the previous entry's `**Next:**` is partly done.** D-110 merged as **#124** and
 `docs/updates/1.2.md` now carries its row. **The production verification of D-110 has not

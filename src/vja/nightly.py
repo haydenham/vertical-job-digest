@@ -62,6 +62,10 @@ class Layer2Summary:
     est_cost_usd: float | None
     extract_usage: TokenUsage = TokenUsage()
     match_usage: TokenUsage = TokenUsage()
+    #: Extraction's circuit breaker tripped for this vertical — a systemic Layer-2 fault, not a
+    #: handful of bad postings. Surfaced because the failure it guards against is *silent*: the
+    #: run still succeeds, the digest still sends, and only the missing rows give it away.
+    extract_aborted: bool = False
 
 
 # The per-vertical Layer-2 pass, injected so tests run fully offline (mirrors `resolve_fetcher`).
@@ -89,6 +93,7 @@ def _default_layer2(
         est_cost_usd=sum_catalog_costs(ext.est_cost_usd, mat.est_cost_usd),
         extract_usage=ext.usage,
         match_usage=mat.usage,
+        extract_aborted=ext.aborted,
     )
 
 
@@ -181,6 +186,13 @@ def run_nightly(
         # the matching prompt-cache signal: near-0 means the resume prefix isn't clearing the
         # 2048-token floor; the extraction line shows whether description input is uncacheable.
         estimated_cost = f"${l2.est_cost_usd:.4f}" if l2.est_cost_usd is not None else "unavailable"
+        if l2.extract_aborted:
+            logger.error(
+                "layer-2 [%s]: extraction ABORTED by the circuit breaker — Layer 2 is failing "
+                "systematically and no new posting can reach the dashboard or the digest until "
+                "it is fixed",
+                vertical,
+            )
         logger.info(
             "layer-2 [%s]: extracted=%d (in=%d out=%d) matched=%d (in=%d out=%d "
             "cache_read=%d cache_write=%d hit=%.0f%%) est_cost=%s",

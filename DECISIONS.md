@@ -2959,3 +2959,78 @@ sample spanning strong_yes → no, run against real postings with a real résum�
 measurement of how many rows actually carry a description.
 
 References D-004, D-007, D-020, D-090, D-093, D-095, D-105, D-109, D-110.
+
+---
+
+### D-112 · Layer 2 / Cost · A billed response that fails our schema is repaired, metered, and bounded · accepted · 2026-08-22
+
+**Context.** On 2026-08-18 at 06:19 UTC, Layer-2 extraction began failing 100% and did not stop for
+four days. Every call reached Anthropic, was answered, was billed, and then died at the Pydantic
+boundary because the provider started returning **every value as a JSON string** — a list as
+`'["Python", "Go"]'`, an integer as `'191000'`, a null as the four characters `'null'`. The
+deployed image (`rolefeed:b237028`) was built 2026-08-10 and never changed, so this is an upstream
+change in the structured-output path, not something we shipped. Reproduced live before any fix.
+
+Three separate defects turned a provider hiccup into a four-day outage, and each gets its own
+answer below. Full measurements: `docs/22-cost-and-health-audit-2026-08.md`.
+
+**1. Repair the encoding, at the one boundary both callers share.** `vja.llm` validates the
+response itself and, on failure, decodes the fields pydantic rejected and validates once more.
+**Error-driven, not blanket**: only fields that actually failed are touched, so a well-formed
+response is untouched and a declared `str` holding `"191000"` is never silently turned into an
+integer. Separately and *unconditionally*, top-level `'null'`/`'None'` **strings** are dropped so
+each field falls back to its own default. That half is not cosmetic: `comp_min` fails loudly on a
+string, but `comp_raw` is `str | None`, so `'null'` validated cleanly and the literal text "null"
+was being persisted and rendered to users verbatim (D-095 renders `comp_raw` as written). That
+second bug was hiding behind the first and would have outlived it.
+
+It lives in `vja.llm` rather than in `ExtractedFields` because that is the provider boundary
+(D-035): matching gets the same protection for free, and a provider quirk does not leak into
+`extract`/`match`. Repair is logged once per model — loud enough to notice the drift, quiet enough
+not to log per posting.
+
+**2. Meter the failure path.** `StructuredOutputError` carries the call's `usage` and `cost_usd`,
+and `run_extraction` adds them before moving on. Previously `run_extraction` accumulated usage
+*after* the `try`, so a billed-then-discarded call contributed zero tokens and zero dollars: across
+08-19→21 `pipeline_runs` recorded `extraction_calls = 0` and about **$0.08** while the provider
+billed **$24.12**. This amends D-035's "metering is real, not a proxy", which was true only for
+calls that succeed — the meter reported approximately nothing during the three most expensive days
+in the project's history.
+
+The new error deliberately **chains** its `ValidationError`, unlike `LLMRequestError`. D-090 is
+about provider *transport* failures, which can carry keys, headers and prompts; this is
+already-parsed model output describing a job posting, and the chained detail naming the offending
+field is the only reason the 2026-08-18 drift was diagnosable at all.
+
+**3. Bound a systemic failure.** Extraction stops after **20 consecutive failures with no success**
+(`_MAX_CONSECUTIVE_FAILURES`), surfaced as `ExtractionSummary.aborted` → `Layer2Summary` → an
+`ERROR` line in the nightly log. Nothing bounded this before: `VJA_PIPELINE_MAX_MATCHES` caps
+matching and the daily budget ceiling guards signup backfills only (D-101, D-103), so a broken
+Layer 2 paid for the entire backlog, every run, forever — and the backlog *grows*, because a failed
+extraction never stamps `extracted_at` while Layer 1 keeps adding ~500 rows/day. Billed failures per
+day ran 191 → 932 → 1,710 → 2,545. Twenty is well above the handful of genuine per-posting failures
+a healthy run sees (a Workday detail 404, a bad parse), so it only trips on a systemic fault.
+
+**4. The age floor now applies to extraction** (`postings_needing_extraction(…, now=…)`). This is
+D-109's own argument carried one stage earlier — matching already declines to spend on rows that can
+never be displayed, and extraction never got the same treatment. It matters most exactly when it is
+needed most: on 2026-08-22 the untouched backlog was 15,899 rows of which **8,715 (55%) were already
+past the floor**, so the recovery run would have paid to extract more than twice what it can ever
+show. `now` is required rather than defaulted, for the same reason as every other caller of
+`age_floor_clause` (D-109): a caller that forgets gets a type error, not a silently empty result.
+
+**What this does not do.** It does not pin the structured-output request format — we still pass
+`response_format=response_model` and let LiteLLM choose. Repairing the response is
+provider-neutral and survives the next change of mechanism; pinning would be a guess at LiteLLM's
+internals that could break again on the next upgrade. If the provider's native path returns, repair
+simply stops firing and the log line stops appearing.
+
+**Verification.** Regression tests written first and confirmed red against the observed payload
+(`'["Python", "Go"]'` as `str`, `'null'` as `str`, a well-formed response unchanged, a numeric-
+looking `str` field not coerced, an unrepairable response still reporting its tokens). Full gate
+green: pytest **951** (+8), ruff/format/mypy clean, `lint-imports` kept. **Verified live against
+the production model: 5/5 real postings extracted**, the repair warning firing once, and
+`comp_raw` correctly `None` on the posting that previously would have stored the string "null".
+No migration, no schema change, no frontend change.
+
+References D-035, D-069, D-090, D-095, D-101, D-103, D-109.
