@@ -5,16 +5,17 @@ out-of-scope and already-extracted are skipped; other verticals excluded; Workda
 detail resolver; fields persist; the run is idempotent; a content change re-opens extraction.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import pytest
 from sqlalchemy import Engine, select
 
 from vja.db import postings as postings_repo
 from vja.db.engine import begin
 from vja.db.schema import employers, postings
-from vja.extract import ExtractedFields, run_extraction
-from vja.llm import StructuredLLM, StructuredResult
+from vja.extract import _MAX_CONSECUTIVE_FAILURES, ExtractedFields, run_extraction
+from vja.llm import StructuredLLM, StructuredOutputError, StructuredResult
 from vja.models import Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig
 from vja.scope import ScopeConfig
@@ -326,3 +327,110 @@ def test_detail_body_is_normalized_to_plain_text(migrated_engine: Engine) -> Non
     )
 
     assert _row(migrated_engine, "/job/data-eng")["description"] == "Grid role.\n\nPython\nSQL"
+
+
+class _AlwaysRejectsClient:
+    """Every call reaches the provider, is billed, and then fails schema validation.
+
+    The 2026-08-18 shape: the model answered every time, so this is not a transport failure and
+    the tokens are on the invoice.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def parse(self, **kwargs: Any) -> StructuredResult[ExtractedFields]:
+        self.calls += 1
+        raise StructuredOutputError(
+            model="claude-haiku-4-5-actual",
+            usage=TokenUsage(input=800, output=120),
+            cost_usd=0.0014,
+        )
+
+
+def _run_with(engine: Engine, client: Any):  # type: ignore[no-untyped-def]
+    resolver, _ = _detail_resolver_factory()
+    return run_extraction(
+        engine,
+        "grid_power_software",
+        scope=_SCOPE,
+        prefilter=_PREFILTER,
+        client=cast("StructuredLLM", client),
+        resolve_detail=resolver,
+        now=_NOW,
+    )
+
+
+def test_systematic_validation_failure_trips_the_breaker_and_is_still_metered(
+    migrated_engine: Engine,
+) -> None:
+    """A broken Layer 2 must cost one bounded batch, and must not report itself as free."""
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    for i in range(60):
+        _posting(migrated_engine, gh, f"p{i}", "Software Engineer")
+
+    client = _AlwaysRejectsClient()
+    summary = _run_with(migrated_engine, client)
+
+    assert summary.aborted is True
+    assert client.calls == _MAX_CONSECUTIVE_FAILURES  # stopped early, did not walk the backlog
+    assert summary.extracted == 0
+    assert summary.failed == _MAX_CONSECUTIVE_FAILURES
+    # The billed tokens are reported rather than silently dropped (the D-035 hole).
+    assert summary.usage.input == 800 * _MAX_CONSECUTIVE_FAILURES
+    assert summary.est_cost_usd == pytest.approx(0.0014 * _MAX_CONSECUTIVE_FAILURES)
+    # Nothing was persisted: a failed extraction leaves the row for a later, working run.
+    assert _row(migrated_engine, "p0")["extracted_at"] is None
+
+
+def test_isolated_failures_do_not_trip_the_breaker(migrated_engine: Engine) -> None:
+    """The breaker must only fire on a systemic fault, never on the odd bad posting."""
+
+    class _FlakyClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def parse(self, **kwargs: Any) -> StructuredResult[ExtractedFields]:
+            self.calls += 1
+            if self.calls % 3 == 0:  # a third fail, but never 20 in a row
+                raise StructuredOutputError(
+                    model="m", usage=TokenUsage(input=800, output=120), cost_usd=0.0014
+                )
+            return _structured(_FIELDS)
+
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    for i in range(30):
+        _posting(migrated_engine, gh, f"p{i}", "Software Engineer")
+
+    summary = _run_with(migrated_engine, _FlakyClient())
+
+    assert summary.aborted is False
+    assert summary.extracted == 20 and summary.failed == 10  # whole backlog walked
+
+
+def test_a_posting_past_the_age_floor_is_never_extracted(migrated_engine: Engine) -> None:
+    """D-109's argument, one stage earlier: don't pay to extract what can never be displayed.
+
+    The boundary is pinned on both sides so the floor can't silently drift into an off-by-one.
+    """
+    gh = _employer(migrated_engine, vertical="grid_power_software", name="GridCo", ats="greenhouse")
+    _posting(
+        migrated_engine,
+        gh,
+        "fresh",
+        "Software Engineer",
+        source_updated_at=_NOW - timedelta(days=21),
+    )
+    _posting(
+        migrated_engine,
+        gh,
+        "stale",
+        "Software Engineer",
+        source_updated_at=_NOW - timedelta(days=21, seconds=1),
+    )
+
+    summary = _run_with(migrated_engine, _FakeClient())
+
+    assert (summary.total, summary.extracted) == (1, 1)  # exactly 21 days in, a second past is out
+    assert _row(migrated_engine, "fresh")["extracted_at"] is not None
+    assert _row(migrated_engine, "stale")["extracted_at"] is None

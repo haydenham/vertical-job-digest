@@ -7,7 +7,13 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from vja.llm import LiteLLMClient, LLMRequestError, _token_usage, sum_catalog_costs
+from vja.llm import (
+    LiteLLMClient,
+    LLMRequestError,
+    StructuredOutputError,
+    _token_usage,
+    sum_catalog_costs,
+)
 
 
 class _Answer(BaseModel):
@@ -93,6 +99,78 @@ def test_parse_accepts_sdk_parsed_value() -> None:
         response_model=_Answer,
         max_tokens=10,
     ).value == _Answer(label="parsed")
+
+
+class _Fields(BaseModel):
+    """Mirrors the shape `ExtractedFields` uses: a list, optional ints, optional strings."""
+
+    label: str
+    stack: list[str] = []
+    comp_min: int | None = None
+    comp_raw: str | None = None
+
+
+def _client_returning(content: str) -> LiteLLMClient:
+    return LiteLLMClient(
+        completion=lambda **_: _response(content=content),
+        completion_cost=lambda **_: 0.01,
+    )
+
+
+def _parse(client: LiteLLMClient) -> _Fields:
+    return client.parse(
+        model="anthropic/claude-haiku-4-5",
+        system="system",
+        user="user",
+        response_model=_Fields,
+        max_tokens=10,
+    ).value
+
+
+def test_parse_repairs_json_encoded_string_where_a_list_is_declared() -> None:
+    """The 2026-08-18 provider regression: every value arrives as a JSON string."""
+    value = _parse(
+        _client_returning('{"label":"yes","stack":"[\\"Python\\", \\"Go\\"]","comp_min":"191000"}')
+    )
+    assert value.stack == ["Python", "Go"]
+    assert value.comp_min == 191000
+
+
+def test_parse_maps_the_literal_string_null_to_none_on_every_field() -> None:
+    """`'null'` as a *string* must never reach a nullable column.
+
+    On an int field it fails loudly; on a `str | None` field pydantic accepts it and the text
+    "null" is persisted and rendered to the user (D-095 renders `comp_raw` verbatim). Both are
+    the same provider bug and both must normalize to None.
+    """
+    value = _parse(
+        _client_returning('{"label":"yes","comp_min":"null","comp_raw":"null","stack":"null"}')
+    )
+    assert value.comp_min is None
+    assert value.comp_raw is None
+    assert value.stack == []
+
+
+def test_parse_leaves_well_formed_responses_untouched() -> None:
+    value = _parse(
+        _client_returning('{"label":"yes","stack":["Python"],"comp_min":100,"comp_raw":"$100k"}')
+    )
+    assert value == _Fields(label="yes", stack=["Python"], comp_min=100, comp_raw="$100k")
+
+
+def test_parse_does_not_coerce_a_genuine_string_that_looks_numeric() -> None:
+    """Repair must not turn a declared `str` field into an int just because it parses as one."""
+    assert _parse(_client_returning('{"label":"yes","comp_raw":"191000"}')).comp_raw == "191000"
+
+
+def test_unrepairable_structured_output_still_fails_but_reports_its_token_cost() -> None:
+    """A billed call that we then discard must not be metered as free (the D-035 hole)."""
+    client = _client_returning('{"label":{"nested":"object"}}')
+    with pytest.raises(StructuredOutputError) as caught:
+        _parse(client)
+    assert caught.value.usage.input == 1000
+    assert caught.value.usage.output == 200
+    assert caught.value.cost_usd == pytest.approx(0.01)
 
 
 def test_provider_exception_is_replaced_without_rendering_secrets() -> None:

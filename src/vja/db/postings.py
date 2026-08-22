@@ -280,12 +280,24 @@ class ExtractionCandidate:
     employer: Employer
 
 
-def postings_needing_extraction(engine: Engine, vertical: str) -> list[ExtractionCandidate]:
-    """Open postings for `vertical` with no extraction yet (`extracted_at IS NULL`).
+def postings_needing_extraction(
+    engine: Engine, vertical: str, *, now: datetime
+) -> list[ExtractionCandidate]:
+    """Open, unextracted postings for `vertical` that are still inside the age floor.
 
     The free Stage-A scope filter is applied by the caller (`vja.extract.run_extraction`) on the
-    title — this query just bounds the set to open + unextracted, so the LLM only ever sees the
+    title — this query bounds the set to open + unextracted, so the LLM only ever sees the
     in-scope, uncached remainder (D-005).
+
+    **The age floor applies here too**, which is D-109's own argument carried one stage earlier:
+    extracting a posting that can never be displayed or mailed is pure waste, so the cheapest way
+    to cut Layer-2 spend is to decline to ask the question. It matters most exactly when it is
+    needed most — after an extraction outage, where the untouched backlog is majority stale (on
+    2026-08-22, 8,715 of 15,899 rows) and a recovery run would otherwise pay to extract all of it.
+
+    `now` is required rather than defaulted for the same reason as every other caller of
+    `age_floor_clause`: a caller that forgets gets a type error rather than a silently empty
+    result, and it is what makes the boundary pinnable in tests.
     """
     stmt = (
         select(
@@ -307,6 +319,7 @@ def postings_needing_extraction(engine: Engine, vertical: str) -> list[Extractio
             employers.c.vertical == vertical,
             postings.c.status == PostingStatus.OPEN.value,
             postings.c.extracted_at.is_(None),
+            age_floor_clause(now),
         )
     )
     with engine.connect() as conn:

@@ -48,7 +48,13 @@ from vja.fetchers.radancy import RadancyFetcher
 from vja.fetchers.rippling import RipplingFetcher
 from vja.fetchers.smartrecruiters import SmartRecruitersFetcher
 from vja.fetchers.workday import WorkdayFetcher
-from vja.llm import LiteLLMClient, StructuredLLM, StructuredResult, sum_catalog_costs
+from vja.llm import (
+    LiteLLMClient,
+    StructuredLLM,
+    StructuredOutputError,
+    StructuredResult,
+    sum_catalog_costs,
+)
 from vja.models import AtsType, Employer, Level, RemoteType, TokenUsage
 from vja.prefilter import PrefilterConfig, passes_prefilter
 from vja.scope import ScopeConfig, in_scope
@@ -59,6 +65,12 @@ logger = logging.getLogger("vja.extract")
 _DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 _MAX_TOKENS = 1024
 _MAX_SOURCE_CHARS = 12_000  # ~3-4k tokens; caps a pathologically large payload
+#: Consecutive per-posting failures that stop the stage. Bounds a systematically broken Layer 2 to
+#: one run's worth of billed calls instead of the whole backlog, every run, indefinitely — the
+#: 2026-08-18 regression cost four days and ~$22 because nothing here had a ceiling. Set well above
+#: the handful of genuine per-posting failures a healthy run sees (a Workday detail 404, a bad
+#: parse), so it only trips on a systemic fault.
+_MAX_CONSECUTIVE_FAILURES = 20
 
 
 def _extract_model() -> str:
@@ -157,6 +169,9 @@ class ExtractionSummary:
     failed: int
     est_cost_usd: float | None
     usage: TokenUsage = TokenUsage()
+    #: The circuit breaker tripped: the stage stopped early rather than pay for the whole
+    #: backlog against a systematically failing model. Never true on a healthy run.
+    aborted: bool = False
 
 
 def fields_to_columns(fields: ExtractedFields) -> dict[str, Any]:
@@ -246,10 +261,14 @@ def run_extraction(
     detail = resolve_detail or _default_detail_resolver
 
     candidates = [
-        c for c in postings_needing_extraction(engine, vertical) if in_scope(c.title, scope)
+        c
+        for c in postings_needing_extraction(engine, vertical, now=stamp)
+        if in_scope(c.title, scope)
     ]
     extracted = 0
     failed = 0
+    aborted = False
+    consecutive_failures = 0
     usage = TokenUsage()
     cost_usd: float | None = 0.0
     for candidate in candidates:
@@ -261,7 +280,24 @@ def run_extraction(
         ) as exc:  # deliberate per-posting isolation boundary (logged, not swallowed)
             logger.warning("extraction failed for posting %s: %r", candidate.posting_id, exc)
             failed += 1
+            consecutive_failures += 1
+            # A response that failed validation was still generated and still billed. Metering
+            # only successes is what made the 2026-08-18 regression invisible (D-035).
+            if isinstance(exc, StructuredOutputError):
+                usage = usage + exc.usage
+                cost_usd = sum_catalog_costs(cost_usd, exc.cost_usd)
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                logger.error(
+                    "extraction aborted for vertical %s after %d consecutive failures with no "
+                    "success — every call is still billed, so the stage stops rather than paying "
+                    "for the whole backlog",
+                    vertical,
+                    consecutive_failures,
+                )
+                aborted = True
+                break
             continue
+        consecutive_failures = 0
         fields = call.value
         usage = usage + call.usage
         cost_usd = sum_catalog_costs(cost_usd, call.cost_usd)
@@ -294,6 +330,7 @@ def run_extraction(
         failed=failed,
         est_cost_usd=cost_usd,
         usage=usage,
+        aborted=aborted,
     )
 
 
