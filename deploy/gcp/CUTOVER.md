@@ -179,19 +179,42 @@ gcloud run jobs create vja-digest \
   --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,VJA_DATABASE_URL=VJA_DATABASE_URL:latest,VJA_DIGEST_FROM=VJA_DIGEST_FROM:latest,VJA_DIGEST_RECIPIENT=VJA_DIGEST_RECIPIENT:latest,VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest"
 
 # --- Triggers. Pipeline at 01/05/09/13/17/21; digest at 06:00, one hour after a completed pass. --
+# The retry flags are NOT optional (D-113). Scheduler's retryCount defaults to 0, so one transient
+# UNAVAILABLE from the Jobs API drops the run with no execution ever created — which is how the
+# 2026-08-22 morning digest was lost. These are *trigger* retries, a different mechanism from the
+# `--max-retries 0` task retries above; see the task-attempt policy note below before changing either.
 gcloud scheduler jobs create http vja-nightly-trigger \
   --location "$REGION" \
   --schedule "0 1,5,9,13,17,21 * * *" --time-zone "America/Chicago" \
   --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vja-nightly:run" \
   --http-method POST \
-  --oauth-service-account-email "$RUNTIME_SA"
+  --oauth-service-account-email "$RUNTIME_SA" \
+  --max-retry-attempts 3 --min-backoff 60s --max-backoff 600s
 
 gcloud scheduler jobs create http vja-digest-trigger \
   --location "$REGION" \
   --schedule "0 6 * * *" --time-zone "America/Chicago" \
   --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vja-digest:run" \
   --http-method POST \
-  --oauth-service-account-email "$RUNTIME_SA"
+  --oauth-service-account-email "$RUNTIME_SA" \
+  --max-retry-attempts 3 --min-backoff 600s --max-backoff 1800s
+```
+
+**The digest's 600s minimum backoff is load-bearing (D-113).** `send.py` commits `mark_sent` per
+recipient, so a retry that lands *after* a completed send skips everyone (`new=0, closed=0`, D-028);
+two *concurrent* executions would both read `since` before either writes and both send. A measured
+digest run is ~3 minutes, so 600s puts any retry strictly outside a live one. Do not lower it while
+cross-execution delivery idempotency (D-086's follow-up) is unbuilt. `vja-nightly` is covered instead
+by D-103's skip-if-running guard, so it takes the short backoff.
+
+**Adding retries to an already-provisioned trigger** (what was actually run on 2026-08-22):
+
+```sh
+gcloud scheduler jobs update http vja-digest-trigger \
+  --location "$REGION" --max-retry-attempts 3 --min-backoff 600s --max-backoff 1800s
+
+gcloud scheduler jobs update http vja-nightly-trigger \
+  --location "$REGION" --max-retry-attempts 3 --min-backoff 60s --max-backoff 600s
 ```
 
 **Retargeting the already-provisioned `vja-nightly-trigger`** (the D-103 cutover, rather than a fresh
@@ -204,8 +227,13 @@ gcloud scheduler jobs update http vja-nightly-trigger \
 
 Prove the pipeline half before trusting the cron: `gcloud run jobs execute vja-nightly --region "$REGION"`
 and watch logs (`gcloud run jobs executions list --job vja-nightly`). It must complete and send **nothing** —
-check the `digests` row count either side. **Do not manually execute `vja-digest`: it sends real email to
-real users.** Its proof is the next scheduled 06:00 send.
+check the `digests` row count either side. **Do not manually execute `vja-digest` to test: it sends real
+email to real users.** Its proof is the next scheduled 06:00 send.
+
+`gcloud run jobs execute vja-digest` *is*, however, the documented **recovery** path when a trigger was
+dropped and no execution exists for the day (D-113). It is safe precisely because it is sequential: the
+send that never happened left `last_sent_at` unmoved, so the window is intact and nobody is double-mailed.
+Confirm no execution exists first (`gcloud run jobs executions list --job vja-digest`).
 
 Both Jobs need DB + Anthropic/OpenAI (extract/match) + Resend + `VJA_DIGEST_*`, and `VJA_SESSION_SECRET` +
 `VJA_PUBLIC_BASE_URL` (the digest's unsubscribe token/link — same secret the API verifies with, D-094).

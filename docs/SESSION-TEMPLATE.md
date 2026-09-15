@@ -8,6 +8,7 @@ before clearing; that entry is what the next session relies on.)
 
 Insert when using codex
 Pre step 1. CLAUDE.md - Follow all rules
+(CLAUDE.md auto-loads. Don't re-read whole files you won't change.)
 
 ---
 
@@ -15,15 +16,14 @@ Pre step 1. CLAUDE.md - Follow all rules
 Session handoff — vertical-job-agent-starter
 
 Read before doing anything (read them yourself, don't ask me to summarize):
-1. docs/INVARIANTS.md   — current cross-cutting rules (read first)
+1. docs/INVARIANTS.md    — current cross-cutting rules (read first)
 2. WORKLOG.md           — top entry = where we are
 3. DECISIONS.md         — only the ADRs the task touches
-(CLAUDE.md auto-loads. Don't re-read whole files you won't change.)
 
-Task this session: GPT powered discovery agent
+Task this session: Rolefeed wasn't successful last night. The extraction fix saved us from another 15 dollar spend but still 5 dollars which is too much. The job also didnt run 
 
-Process: plan mode first, run every decision through me, branch-only (I commit/PR),
-DoD = green gates + updated docs.
+
+Process: Now that Rolefeed is live -- We should consider a group of fixes/features an 'update'. We just finished 1.2. This doesnt really fit anywhere as it is not code changes.
 
 Give me a 3-line readback of where we are + your understanding of the task
 before proposing a plan. If WORKLOG's top entry looks stale or mid-thought, say so.

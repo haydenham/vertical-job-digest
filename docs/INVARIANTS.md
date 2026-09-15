@@ -308,15 +308,29 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   `itsdangerous` signatures over `{uid, email}` keyed on `VJA_SESSION_SECRET` (mounted on the
   nightly Job too), and the endpoint requires both to match the live row — invalid tokens get a
   generic 400, never user enumeration. (D-094)
-- **Both Cloud Run Jobs get one attempt, with cadence-sized task timeouts.** `ship.sh` reasserts
+- **Both Cloud Run Jobs get one *task* attempt, with cadence-sized task timeouts.** `ship.sh` reasserts
   `--max-retries 0` on both, `--task-timeout 10800` (3h) on the pipeline and `3600` (1h) on the digest.
   **The pipeline timeout must stay below the 4h interval** or one hung execution runs through the next
-  three windows; D-086's 6h was sized for a once-daily Job. Zero retries is *mandatory* on the digest
+  three windows; D-086's 6h was sized for a once-daily Job. Zero task retries is *mandatory* on the digest
   Job, which sends a vertical's email immediately after its Layer-2 pass and is not delivery-idempotent
   across whole-task retries. The pipeline half genuinely is retry-safe now that it sends nothing, but
-  retries stay off there too until the skip-if-running guard has proven itself — pairing an untested
+  task retries stay off there too until the skip-if-running guard has proven itself — pairing an untested
   overlap guard with automatic retries can wedge a run. A process-level failure is operator-reviewed
   and manually rerun. (D-103, D-086)
+- **The Scheduler *trigger* does retry, and it is a different mechanism from the task retry above
+  (D-113).** A task retry restarts the command inside an execution that may already be sending; a
+  trigger retry re-issues the `:run` API call and creates an execution **only if the first call did
+  not**. Both triggers carry `retryCount: 3` — `vja-digest-trigger` at 600s/1800s backoff,
+  `vja-nightly-trigger` at 60s/600s. Without it `retryCount` defaults to **0**, and on 2026-08-22 one
+  transient `UNAVAILABLE` (gRPC code 14) from the Jobs API dropped an entire morning's mail to 36
+  recipients with no execution ever created. **The digest's ten-minute minimum backoff is the safety
+  argument, not a tuning choice:** `send.py` commits `mark_sent` per recipient, so a retry landing
+  *after* a completed send computes `new=0, closed=0` and skips everyone (D-028), but two *concurrent*
+  runs both read `since` before either writes and both send. A measured run is ~3 minutes, so 600s puts
+  any retry strictly outside a live execution. `vja-nightly` needs no such margin — D-103's
+  skip-if-running guard already refuses an overlapping run. Durable cross-execution delivery
+  idempotency (D-086's named follow-up) remains unbuilt, which is *why* the backoff carries the
+  guarantee. (D-113, D-086, D-103, D-028)
 - **The digest body carries `rationale` and nothing else of the write-up — no fits/gaps, no
   advice.** The inbox is a **triage** surface (decide whether to click); advice is *execution* and
   needs the panel's full context, one click away behind the dashboard link every digest carries
