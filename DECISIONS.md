@@ -3034,3 +3034,70 @@ the production model: 5/5 real postings extracted**, the repair warning firing o
 No migration, no schema change, no frontend change.
 
 References D-035, D-069, D-090, D-095, D-101, D-103, D-109.
+
+### D-113 · Delivery/Ops · The Scheduler trigger retries; the Cloud Run task still does not · accepted · 2026-08-22
+
+**Context.** On 2026-08-22 the morning digest never went out. `vja-digest` has no execution for that
+day at all, and the trigger explains why:
+
+```
+vja-digest-trigger   0 6 * * *   ENABLED   CODE 14   last attempt 2026-08-22T11:00:01Z
+```
+
+Code 14 is gRPC `UNAVAILABLE`. Cloud Scheduler fired exactly on time, the Cloud Run Jobs `:run` API
+refused the call, and **no execution was ever created**. Both triggers were provisioned (CUTOVER §8)
+without `--max-retry-attempts`, and Scheduler's `retryCount` defaults to **0**, so a single transient
+API error silently drops the whole day's mail to 36 recipients. The pipeline half had the same gap
+and merely survives it, because a missed 4-hourly run is repaired by the next one four hours later.
+
+Detection worked but was slow and after the fact: the *did not run* policy is a 26h absence window
+against a ~24h cadence (D-101), so it cannot fire until roughly two hours after the miss, by which
+time the morning is gone. Recovery was a manual `gcloud run jobs execute vja-digest`, which sent 36
+digests carrying 219 new roles.
+
+**Decision. Retries belong on the Scheduler trigger, and they are a different mechanism from the
+Cloud Run task retries D-086 set to zero.** Conflating the two is the exact error that would
+re-introduce the 2026-07-14 double-send, so the distinction is the decision:
+
+- A **task retry** (`--max-retries`) restarts the whole command *inside* an execution that has
+  already begun sending. That is not delivery-idempotent, and it **stays at zero on both Jobs**
+  (D-086, D-103). Nothing here changes it.
+- A **trigger retry** re-issues the `:run` API call. It creates a second execution only if the first
+  call did not create one — which is precisely the observed failure.
+
+Applied to production:
+
+| Trigger | Attempts | Min backoff | Max backoff |
+|---|---:|---:|---:|
+| `vja-digest-trigger` | 3 | 600s | 1800s |
+| `vja-nightly-trigger` | 3 | 60s | 600s |
+
+**Why the digest's backoff is ten minutes and not five seconds.** The residual hazard is the
+ambiguous case: the API call succeeds server-side but the response is lost, so a retry starts a
+*second* execution. `send.py` commits `create_pending → send_email → mark_sent` per recipient, so a
+re-run that begins **after** a completed send finds `last_sent_at` advanced, computes `new=0,
+closed=0`, and skips everyone (D-028) — the duplicate is a no-op. That argument holds only if the
+two runs are **sequential**: two *concurrent* runs both read `since` before either writes `sent_at`,
+and both send. A measured digest run takes about three minutes (14:27:44 → 14:30:45 on the manual
+recovery), so a 600s minimum backoff puts the retry strictly outside any live execution and the
+sequential-safety argument is the one that applies. The cost is that a genuinely dropped digest
+arrives ten minutes late, which is nothing against a once-a-morning email.
+
+`vja-nightly` needs no such reasoning — D-103's skip-if-running guard already refuses a second run
+while one is in flight — so it takes a short backoff and gets its window repaired within the minute.
+
+**What this does not do.** It does not make the digest durably idempotent across concurrent
+executions; D-086's named follow-up (a delivery guard keyed to the execution boundary, e.g. a
+uniqueness claim on `(vertical, recipient, send date)`) is still open and still the only thing that
+would make retry timing irrelevant. It was deliberately not built here: it needs a migration, and
+the backoff closes the observed hole today at the cost of one config line. It also does not widen
+the alert margins — the 26h absence window still detects a miss about two hours late, and
+`alerts.sh` cannot express an edit (delete-then-recreate), so that stays on the ledger.
+
+**Verification.** Both triggers re-read from the API after the update: `retryCount: 3` with the
+backoffs above. The recovery execution `vja-digest-zd84l` completed exit 0 — 36 sent, 4 paused, 1
+skipped, **219 new roles** against 3 across all recipients the previous morning. Config only: no
+code, no migration, no test. The runbook (`deploy/gcp/CUTOVER.md` §8) now carries the flags so a
+fresh stand-up cannot reproduce the gap.
+
+References D-086, D-103, D-101, D-028, D-031, D-110.

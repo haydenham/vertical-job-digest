@@ -123,3 +123,39 @@ def test_unsubscribe_token_config_survives_every_deploy() -> None:
     # `ship.sh` can hold one JOB_SECRETS list for both.
     create_runbook = _CUTOVER.read_text(encoding="utf-8")
     assert create_runbook.count("VJA_SESSION_SECRET=VJA_SESSION_SECRET:latest") == 3
+
+
+def test_both_scheduler_triggers_retry() -> None:
+    """D-113: Scheduler's retryCount defaults to 0, so a trigger provisioned without the flag drops
+    its run on one transient API error — how the 2026-08-22 morning digest was lost (code 14
+    UNAVAILABLE, no execution created). This is the *trigger* retry, deliberately not the *task*
+    retry that `test_both_jobs_disable_unsafe_whole_task_retry` pins at zero.
+    """
+    create_runbook = _CUTOVER.read_text(encoding="utf-8")
+
+    # Both `jobs create http` blocks, plus the two `jobs update http` recovery recipes.
+    assert create_runbook.count("--max-retry-attempts 3") == 4
+
+
+def test_digest_trigger_backoff_cannot_race_a_live_send() -> None:
+    """D-113: the digest's minimum backoff is a safety argument, not a tuning choice.
+
+    `send.py` commits `mark_sent` per recipient, so a retry landing *after* a completed send skips
+    everyone (D-028). Two *concurrent* runs instead both read `since` before either writes, and both
+    send. A measured digest run is ~3 minutes, so the backoff must stay comfortably above it until
+    D-086's cross-execution idempotency follow-up exists.
+    """
+    create_runbook = _CUTOVER.read_text(encoding="utf-8")
+
+    digest_backoffs = re.findall(
+        r"vja-digest-trigger.*?--min-backoff (\d+)s", create_runbook, re.DOTALL
+    )
+    assert digest_backoffs, "digest trigger must declare an explicit --min-backoff"
+    assert all(int(s) >= 600 for s in digest_backoffs), digest_backoffs
+
+    # The pipeline half is covered by D-103's skip-if-running guard instead, so it may repair its
+    # window quickly. It still has to declare a backoff rather than inherit Scheduler's default.
+    nightly_backoffs = re.findall(
+        r"vja-nightly-trigger.*?--min-backoff (\d+)s", create_runbook, re.DOTALL
+    )
+    assert nightly_backoffs, "pipeline trigger must declare an explicit --min-backoff"

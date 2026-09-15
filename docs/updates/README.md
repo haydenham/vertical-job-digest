@@ -73,6 +73,7 @@ expected to act on (read INVARIANTS).
 
 | Update | Status | Span | Theme |
 |---|---|---|---|
-| [1.2](1.2.md) | in progress | #120 → | The walk-through update: what happens to the people the funnel let in (plan: `docs/21`) |
+| [1.3](1.3.md) | in progress | #127 → | The trust-the-pipeline update: the system was broken in production and reported success |
+| [1.2](1.2.md) | shipped 2026-08-10 · closed | #120 → #126 | The walk-through update: what happens to the people the funnel let in (plan: `docs/21`) |
 | [1.1](1.1.md) | shipped 2026-08-02 · closed | #111 → #118 | The funnel update: let strangers see the product, and make what they see read well |
 | 1.0 | shipped 2026-07-28 | through #110 (D-101) | Public launch. Recorded retroactively by `WORKLOG.md` 2026-07-28 and D-067/D-101; no update doc exists |

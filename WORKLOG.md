@@ -5,7 +5,89 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
-## 2026-08-22 (last) — The extraction fix: repair the response, meter the failure, bound the loop (`fix/extraction-schema-drift`, D-112)
+## 2026-08-22 (last) — The morning after: the fix worked, the digest never fired (`ops/scheduler-retry-guard`, D-113)
+
+**Closes the previous entry's `**Next:**`.** All four items are now answered: the balance was topped
+up, #127 merged at **02:43 UTC** and CD deployed it, the first run behaved, and the digest confirmed
+it. This entry records the outcome the previous one could only predict.
+
+### The $5 was real and is fully accounted for — none of it is ongoing waste
+
+Metered runs, now that D-112 counts the failure path:
+
+| Run (UTC) | Extractions | Matches | Cost |
+|---|---:|---:|---:|
+| 02:01 | 0 (blind meter) | 0 | ~$2 invisible — **started before the merge landed** |
+| 06:02 | 325 | 618 | **$2.44** — the recovery batch |
+| 10:02 | 102 | 125 | $0.65 — its tail |
+| 14:01 | 1 | 1 | $0.007 — steady state resuming |
+
+The merge landed at 02:43, so the 02:01 run was the last execution of the broken image and burned one
+final invisible ~$2 at 08-21's rate. **$3.10 metered + ~$2 invisible = the $5.** The prediction in the
+previous entry (~1,400 extractions, ~$9) overshot because D-112's own age floor removed 55% of the
+backlog before the run started.
+
+**Extraction is genuinely caught up, not silently stopped.** The 325 → 102 → 1 decay looks like a
+circuit breaker tripping; it is not. No abort fired, and running the real Stage-A gate against all
+**6,685** open unextracted rows inside the age floor returns **zero survivors** — the residue is
+permanent rejects re-scanned six times a day (the audit's finding 4), not unfinished work.
+
+**Two things worth knowing that were not in the plan.** First, **the repair is load-bearing right
+now**: `repaired stringified structured output (fields: stack)` fired **9 times on 08-22**, latest
+14:17. The provider is still intermittently returning stringified values, so D-112 is rescuing live
+extractions rather than having fixed a past event. Second, **Workday was in maintenance during the
+06:00 run** — detail fetches across ~20 employers 303-redirected to `community.workday.com/
+maintenance-page`. Those cost nothing (they fail before any LLM call) but they *do* increment D-112's
+consecutive-failure counter, so a long enough Workday outage could abort a vertical's extraction for
+a reason that has nothing to do with spend. Not observed to trip; logged to 1.3's ledger.
+
+### The job that did not run was `vja-digest`, and the cause was one line of missing config
+
+```
+vja-digest-trigger   0 6 * * *   ENABLED   CODE 14   last attempt 2026-08-22T11:00:01Z
+```
+
+Code 14 is `UNAVAILABLE`. Scheduler fired on time, the Jobs `:run` API refused, **no execution was
+ever created** — and both triggers were provisioned without `--max-retry-attempts`, where
+`retryCount` defaults to **0**. One transient API error dropped a whole morning's mail to 36 people.
+`vja-nightly` had the identical gap and merely survives it, because the next 4-hourly run repairs the
+miss. Detection worked but was slow: the 26h absence window cannot fire until ~2h after a ~24h
+cadence misses.
+
+**Recovered manually** (`gcloud run jobs execute vja-digest`, safe because the send that never
+happened left `last_sent_at` unmoved): 14:27→14:30, **36 sent · 4 paused · 1 skipped · 219 new roles**
+against **3** across all recipients on 08-21. Grid users got 27, 12, 10, 8. D-110's verifier behaved
+too — 60 URLs checked, 1 dead, 170 repeats served from cache, against a pre-fix 2,727 requests for
+462 URLs.
+
+### What shipped (D-113) — config plus docs, no code
+
+Both triggers now carry `retryCount: 3`: `vja-digest-trigger` at **600s/1800s** backoff,
+`vja-nightly-trigger` at 60s/600s. **The distinction from D-086 is the whole decision** — a *task*
+retry (`--max-retries 0`, unchanged on both Jobs) restarts the command inside an execution that may
+already be sending; a *trigger* retry re-issues the API call and creates an execution only if the
+first call did not. Conflating them is what would re-introduce the 2026-07-14 double-send.
+
+**Why 600s and not 5s:** `send.py` commits `mark_sent` per recipient, so a retry landing after a
+completed send computes `new=0, closed=0` and skips everyone (D-028) — but two *concurrent* runs both
+read `since` before either writes, and both send. A measured digest run is ~3 minutes, so 600s puts
+any retry strictly outside a live execution. `vja-nightly` needs no such margin: D-103's
+skip-if-running guard already refuses an overlap.
+
+Docs: D-113, the INVARIANTS task-vs-trigger retry pair, `CUTOVER.md` §8 (flags on the create commands
++ an update recipe + `jobs execute` documented as the *recovery* path, distinct from the standing
+"never execute it to test"), and **Update 1.2 closed / 1.3 opened**.
+
+**Next.** Nothing is on fire. In rough priority: (1) **alert-on-silence** — still the item most
+responsible for the four-day outage, and still needing design, since the permanent Stage-A residue
+makes "backlog non-empty" always true; (2) the **GCP budget alert**, now deferred across three
+updates; (3) the **D-111 quality signoff**, unblocked at last by a working extraction path; (4) the
+cheap audit wins — stop loading `raw_payload` for Stage-A rejects, and pass a fresh `now` to
+`finish_run` so run duration exists. Watch tomorrow's 06:00 CT digest fire on its own.
+
+---
+
+## 2026-08-22 — The extraction fix: repair the response, meter the failure, bound the loop (`fix/extraction-schema-drift`, D-112)
 
 **Same session as the audit below.** The audit found it; this fixed it. Both are on one branch.
 
