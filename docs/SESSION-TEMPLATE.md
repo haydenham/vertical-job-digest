@@ -20,10 +20,10 @@ Read before doing anything (read them yourself, don't ask me to summarize):
 2. WORKLOG.md           — top entry = where we are
 3. DECISIONS.md         — only the ADRs the task touches
 
-Task this session: Rolefeed wasn't successful last night. The extraction fix saved us from another 15 dollar spend but still 5 dollars which is too much. The job also didnt run 
+Task this session: Run an audit on the codebase. Recommend new updates and changes or bugs and fixes that are needed. I'd like to be able to track how many people have visisted/visit the site as well. 
 
 
-Process: Now that Rolefeed is live -- We should consider a group of fixes/features an 'update'. We just finished 1.2. This doesnt really fit anywhere as it is not code changes.
+Process: Now that Rolefeed is live -- We should consider a group of fixes/features an 'update'. This could be a new group
 
 Give me a 3-line readback of where we are + your understanding of the task
 before proposing a plan. If WORKLOG's top entry looks stale or mid-thought, say so.

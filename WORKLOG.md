@@ -5,6 +5,36 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-09-15 — Codebase audit + visitor measurement proposal (local `b7f08e9`)
+
+**Audit only; application and production unchanged.** Full ranked findings and proposed Update
+1.4 grouping: **`docs/23-codebase-audit-2026-09.md`**. The previous top entry was complete but 24 days
+stale; its production-health and billing claims were not re-verified this session. Update 1.3
+remains in progress until its closeout is reconciled; 1.4 is a proposal, not a shipped update.
+
+**Four backend findings reproduced offline:** extraction abort still returns `ok` without alert;
+the overlap guard is already cleared during Layer 2; billed matching schema failures meter zero;
+matches completed after the digest retain the pipeline start timestamp and can miss future
+digests. The same run-lifecycle reproduction records zero duration. Also reviewed the known digest
+delivery-idempotency gap, dashboard response races, empty-demo perpetual loading, and upload size
+checking after an unbounded read.
+
+**Visitor measurement:** no integration in the checked-in frontend; edge configuration unverified.
+Recommend Plausible for estimated visitors and explicit conversion events, with Cloudflare Web
+Analytics as the minimal traffic alternative. The report defines events, privacy boundaries,
+historical-count limitations and verification. No tracker/account/subscription was enabled.
+
+**Validation:** 953 backend tests + 229 frontend tests passed; ruff/format/mypy/import-linter,
+offline lockfile check, frontend lint/types and production build passed. Four additional defect
+reproductions used throwaway SQLite and fake models. No paid evals, production access or sends.
+
+**Next:** prioritize truthful stage failure/cost reporting, actual match timestamps, and whole-run
+ownership; then delivery idempotency, board/upload fixes and visitor instrumentation. Queue-based
+onboarding is a separate follow-up. The proposed grouping and per-item acceptance checks are in
+the audit; no new architectural decision is recorded as accepted.
+
+---
+
 ## 2026-08-22 (last) — The morning after: the fix worked, the digest never fired (`ops/scheduler-retry-guard`, D-113)
 
 **Closes the previous entry's `**Next:**`.** All four items are now answered: the balance was topped
