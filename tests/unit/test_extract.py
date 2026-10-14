@@ -84,7 +84,7 @@ def test_extract_system_prompt_carries_cache_control() -> None:
     client = _FakeClient(_FIELDS)
     extract_posting(cast("StructuredLLM", client), "some posting text")
     call = client.calls[0]
-    assert call["model"] == "anthropic/claude-haiku-4-5"
+    assert call["model"] == "anthropic/claude-haiku-5-5"
     assert call["cache_system"] is True  # stable instruction prefix (D-069)
     assert "You extract structured fields" in call["system"]
 
@@ -94,6 +94,20 @@ def test_extract_posting_model_env_override(monkeypatch: pytest.MonkeyPatch) -> 
     client = _FakeClient(_FIELDS)
     extract_posting(cast("StructuredLLM", client), "some posting text")
     assert client.calls[0]["model"] == "deepseek/test-extract"
+
+
+def test_extract_posting_effort_defaults_low_and_is_overridable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeClient(_FIELDS)
+    extract_posting(cast("StructuredLLM", client), "some posting text")
+    assert (
+        client.calls[0]["reasoning_effort"] == "low"
+    )  # Haiku 5.5 thinks at medium unless told (D-114)
+
+    monkeypatch.setenv("VJA_EXTRACT_EFFORT", "medium")
+    extract_posting(cast("StructuredLLM", client), "some posting text")
+    assert client.calls[1]["reasoning_effort"] == "medium"
 
 
 def test_extract_posting_raises_on_no_parsed_output() -> None:

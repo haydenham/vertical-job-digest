@@ -65,8 +65,8 @@ and can switch it themselves.
 
 Python 3 · `uv` toolchain · FastAPI (read API + serves the SPA same-origin) · SQLAlchemy Core + Alembic ·
 **Postgres on Neon** (SQLite for local dev, CI verifies both dialects) · **Vite + React + TypeScript**
-SPA · embedded **LiteLLM** behind the typed `vja.llm` boundary (extraction `anthropic/claude-haiku-4-5`,
-matching `openai/gpt-5.6-luna` at low effort) · direct OpenAI SDK for discovery · **Resend** for email ·
+SPA · embedded **LiteLLM** behind the typed `vja.llm` boundary (extraction `anthropic/claude-haiku-5-5`,
+matching `openai/gpt-6-luna` at low effort) · direct OpenAI SDK for discovery · **Resend** for email ·
 **Google Cloud Run** (one service + two Jobs) with **Cloud Scheduler** triggers and Cloud Monitoring
 alert pairs · Cloudflare in front · GitHub Actions CI/CD with keyless Workload Identity Federation.
 

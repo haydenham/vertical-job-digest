@@ -44,7 +44,7 @@ from vja.verticals import VerticalConfig
 
 logger = logging.getLogger("vja.match")
 
-_DEFAULT_MODEL = "openai/gpt-5.6-luna"
+_DEFAULT_MODEL = "openai/gpt-6-luna"
 _BACKFILL_WINDOW_DAYS = 5  # signup catch-up cap (D-024 as amended by D-039): recent roles only
 _MAX_TOKENS = 4096  # room for reasoning + the structured rationale
 # Matching is a bounded, schema-constrained judgment task. The D-090 comparison found Luna `low`

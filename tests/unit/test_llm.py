@@ -119,7 +119,7 @@ def _client_returning(content: str) -> LiteLLMClient:
 
 def _parse(client: LiteLLMClient) -> _Fields:
     return client.parse(
-        model="anthropic/claude-haiku-4-5",
+        model="anthropic/claude-haiku-5-5",
         system="system",
         user="user",
         response_model=_Fields,

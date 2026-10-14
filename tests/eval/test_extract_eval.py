@@ -18,7 +18,7 @@ load_dotenv()
 
 pytestmark = pytest.mark.eval
 
-_EVAL_MODEL = "anthropic/claude-haiku-4-5"
+_EVAL_MODEL = "anthropic/claude-haiku-5-5"
 
 
 @dataclass(frozen=True)
@@ -144,8 +144,27 @@ def _assert_all_terms(actual: str | None, expected: tuple[str, ...]) -> None:
     assert all(term in lowered for term in expected), actual
 
 
+# D-114: Haiku 5.5 drops the stated remote eligibility ("fully remote United States role") on
+# ~13/15 runs at every effort level; Haiku 4.5 passed it. Accepted rather than prompt-tuned — the
+# ATS location is authoritative when present and a null location still passes the prefilter.
+# Non-strict, so a model that gets it right shows up as XPASS, not hidden by a weaker assertion.
+_KNOWN_MISSES = {"new_grad_remote_annual_salary"}
+
+
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
-@pytest.mark.parametrize("case", _CASES, ids=lambda case: case.name)
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            case,
+            id=case.name,
+            marks=pytest.mark.xfail(reason="D-114 known Haiku 5.5 miss", strict=False)
+            if case.name in _KNOWN_MISSES
+            else (),
+        )
+        for case in _CASES
+    ],
+)
 def test_extract_representative_posting(monkeypatch: pytest.MonkeyPatch, case: _Case) -> None:
     monkeypatch.setenv("VJA_EXTRACT_MODEL", _EVAL_MODEL)
     monkeypatch.delenv("VJA_EXTRACT_EFFORT", raising=False)

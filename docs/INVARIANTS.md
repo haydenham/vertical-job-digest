@@ -165,10 +165,12 @@ ADR(s) in parentheses. If a rule here has no ADR, it's a core principle from `CL
   other malformed result still fail per posting; no corrective LLM retry is made. (D-089, D-007)
 - **Layer-2 model access is provider-neutral and configured.**
   `vja.llm` is the sole embedded-LiteLLM boundary; extraction/matching import its typed contract, never a
-  provider SDK. `VJA_EXTRACT_MODEL` defaults to `anthropic/claude-haiku-4-5`; matching defaults to
-  `VJA_MATCH_MODEL=openai/gpt-5.6-luna` at **`VJA_MATCH_EFFORT=low`** after the human-reviewed D-093
-  comparison. Extraction is cached by `content_hash`; matching's stable system prefix is prompt-cached.
-  (D-035, D-036, D-069, D-090, D-093)
+  provider SDK. `VJA_EXTRACT_MODEL` defaults to `anthropic/claude-haiku-5-5` at **`VJA_EXTRACT_EFFORT=low`** (Haiku 5.5
+  thinks by default; thinking shares the output cap); matching defaults to
+  `VJA_MATCH_MODEL=openai/gpt-6-luna` at **`VJA_MATCH_EFFORT=low`** (D-093's selection, version-bumped by
+  D-114). LiteLLM has no price for Haiku 5.5 yet, so run cost is `NULL` until it does. Extraction is
+  cached by `content_hash`; matching's stable system prefix is prompt-cached.
+  (D-035, D-036, D-069, D-090, D-093, D-114)
 - **Domestic location is match logistics, not match quality.** For a US role, unstated relocation or onsite
   willingness may be mentioned but never lowers verdict/score. Explicit country/work-authorization conflicts
   still count, and the deterministic Stage-B confirmed-non-US filter remains. Future city/region preferences

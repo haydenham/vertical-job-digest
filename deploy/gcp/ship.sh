@@ -58,10 +58,11 @@ set -euo pipefail
 # keyed to signups (D-101 decoupled the two on purpose).
 : "${PIPELINE_MAX_MATCHES:=400}"
 
-# D-090: matching cut over only after the human-reviewed eight-case Sonnet/Luna comparison.
+# D-090: matching cut over only after the human-reviewed eight-case Sonnet/Luna comparison;
+# D-114 moved the route to Luna 6 (same model family, version bump).
 # `--update-env-vars` preserves the auth/cookie/public-URL guards while making the exact route and
 # effort explicit on both Cloud Run targets; rollback remains a route change or prior revision.
-: "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"
+: "${MATCH_MODEL_ROUTE:=openai/gpt-6-luna}"
 : "${MATCH_REASONING_EFFORT:=low}"
 LAYER2_ENV="VJA_MATCH_MODEL=${MATCH_MODEL_ROUTE},VJA_MATCH_EFFORT=${MATCH_REASONING_EFFORT}"
 

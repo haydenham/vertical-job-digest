@@ -5,6 +5,30 @@ Newest entry on top. One entry per working session. Keep it terse: what changed,
 
 ---
 
+## 2026-10-13 — Model version bump: Haiku 5.5 + Luna 6 (`chore/model-bump-haiku55-luna6`, D-114)
+
+**Routes:** extraction `claude-haiku-4-5 → claude-haiku-5-5`, matching `gpt-5.6-luna → gpt-6-luna`
+(effort `low`). Changed in `extract.py`/`match.py`, `ship.sh` (CD runs it, so merge flips prod's
+explicit `VJA_MATCH_MODEL`), `.env.example`, READMEs, route-pinning tests. LiteLLM 1.93 → 1.105.
+
+**New knob `VJA_EXTRACT_EFFORT` (default `low`):** Haiku 5.5 thinks at `medium` unasked and thinking
+shares the 1,024-token cap. Measured: ~131 vs ~106 output tokens/posting — cost is input-dominated,
+≈ $0.24 per 1k extractions (~10x under Haiku 4.5).
+
+**Considered Luna 6 for extraction too — rejected:** identical $0.10/$0.50 per MTok, nothing to gain.
+
+**Validation:** 954 offline tests + ruff/format/mypy green. Live evals: matching 8/8; extraction 5/6 —
+Haiku 5.5 drops "fully remote United States" eligibility (~13/15 runs, every effort). Hayden accepted it
+(ATS location authoritative; null passes the prefilter); case is now a non-strict `xfail`.
+
+**Known gap:** LiteLLM 1.105 doesn't price Haiku 5.5 → `pipeline_runs.llm_cost_usd` is `NULL` on runs
+that extract, until a LiteLLM release adds it.
+
+**Next:** merge → confirm the first 4-hourly run's stored upstream model IDs; bump LiteLLM when Haiku 5.5
+pricing lands.
+
+---
+
 ## 2026-09-15 — Codebase audit + visitor measurement proposal (local `b7f08e9`)
 
 **Audit only; application and production unchanged.** Full ranked findings and proposed Update
