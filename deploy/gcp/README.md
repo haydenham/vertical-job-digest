@@ -109,8 +109,8 @@ Values to load:
 
 | Secret | Source |
 |---|---|
-| `ANTHROPIC_API_KEY` | extraction (`anthropic/claude-haiku-4-5`) |
-| `OPENAI_API_KEY` | matching (`openai/gpt-5.6-luna`) + manual Layer-3 discovery |
+| `ANTHROPIC_API_KEY` | extraction (`anthropic/claude-haiku-5-5`) |
+| `OPENAI_API_KEY` | matching (`openai/gpt-6-luna`) + manual Layer-3 discovery |
 | `RESEND_API_KEY` | existing (digest + alert email) |
 | `VJA_DATABASE_URL` | Neon, `+psycopg` rewritten (§3) |
 | `VJA_SESSION_SECRET` | `openssl rand -hex 32` (fresh for prod) |
@@ -124,8 +124,8 @@ Values to load:
 `VJA_FRONTEND_DIST=/app/frontend/dist` (already the image default, D-060). `VJA_CORS_ORIGINS` stays unset
 (SPA is same-origin in prod).
 
-Layer-2 routes default in code to `anthropic/claude-haiku-4-5` (extraction) and
-`openai/gpt-5.6-luna` at `low` effort (matching). D-090's approved matching cutover mounts the existing
+Layer-2 routes default in code to `anthropic/claude-haiku-5-5` (extraction) and
+`openai/gpt-6-luna` at `low` effort (matching). D-090's approved matching cutover mounts the existing
 OpenAI Secret Manager key in both complete `ship.sh` secret lists and explicitly preserves
 `VJA_MATCH_MODEL`/`VJA_MATCH_EFFORT` on both Cloud Run targets.
 

@@ -3101,3 +3101,35 @@ code, no migration, no test. The runbook (`deploy/gcp/CUTOVER.md` §8) now carri
 fresh stand-up cannot reproduce the gap.
 
 References D-086, D-103, D-101, D-028, D-031, D-110.
+
+
+### D-114 · LLM optimization · Version bump: Haiku 5.5 extracts (effort low), Luna 6 matches · accepted · 2026-10-13
+Same two model families D-090/D-093 selected, one version newer: extraction defaults to
+`anthropic/claude-haiku-5-5` (was `claude-haiku-4-5`) and matching to `openai/gpt-6-luna` at the
+unchanged `low` effort (was `gpt-5.6-luna`). Prompts, schemas, max tokens, caching and the D-112 repair
+boundary are unchanged. Hayden waived the full D-093 review for a same-family bump; the existing
+metered evals were still run.
+
+**Luna 6 for extraction was considered and rejected on price.** Haiku 5.5 and Luna 6 are both
+$0.10 / $0.50 per MTok (Haiku 5.5's ≤100K-token card), so a cross-provider swap buys nothing. Haiku 5.5
+is ~10x cheaper than Haiku 4.5: measured ≈ $0.24 per 1,000 extractions on the eval set.
+
+**Extraction pins `VJA_EXTRACT_EFFORT=low`.** Haiku 5.5 runs adaptive thinking by default at `medium`
+(4.5 did not think unasked), and thinking shares the 1,024-token cap. Measured on the six eval
+postings, thinking is small either way (~131 vs ~106 output tokens per posting, medium vs low) — `low`
+is chosen to keep headroom under the cap, not for cost. Effort is the lever rather than
+`thinking: disabled`, per Anthropic's migration guidance.
+
+**Eval results:** matching **8/8** on Luna 6. Extraction **5/6**: Haiku 5.5 returns `location=null`
+for a "fully remote United States role" on ~13/15 runs at every effort level (Haiku 4.5 passed). Hayden
+accepted the miss without prompt tuning: the ATS location is authoritative when present, and a null
+location passes the Stage-B prefilter, so the cost is a blank location on some remote rows, not lost
+roles. The eval case is a non-strict `xfail`, not a weakened assertion.
+
+LiteLLM moves `1.93 → 1.105` (pin `>=1.105,<1.106`) because 1.93 has no catalog entry for either model.
+1.105 prices Luna 6 but **not Haiku 5.5**, so per D-090's July amendment extraction calls warn, report
+`cost_usd=None`, and a run that extracts records a `NULL` `pipeline_runs.llm_cost_usd` until a LiteLLM
+release adds the price. No pricing overlay is added (D-090). Rollback is a route change
+(`VJA_EXTRACT_MODEL`; `MATCH_MODEL_ROUTE` in `ship.sh`). Discovery's priced 5.6 allowlist is untouched.
+
+References D-090, D-093, D-112, D-023.

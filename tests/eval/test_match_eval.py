@@ -216,7 +216,7 @@ def _assert_verdict_score_consistent(result: MatchResult) -> None:
 def _print_review_record(case: _Case, call: StructuredResult[MatchResult]) -> None:
     record = {
         "case": case.name,
-        "requested_model": os.environ.get("VJA_MATCH_MODEL", "openai/gpt-5.6-luna"),
+        "requested_model": os.environ.get("VJA_MATCH_MODEL", "openai/gpt-6-luna"),
         "actual_model": call.model,
         "effort": os.environ.get("VJA_MATCH_EFFORT", "low"),
         "verdict": call.value.verdict.value,
@@ -238,7 +238,7 @@ def _print_review_record(case: _Case, call: StructuredResult[MatchResult]) -> No
 
 @pytest.mark.parametrize("case", _CASES, ids=lambda case: case.name)
 def test_match_representative_case(case: _Case) -> None:
-    model = os.environ.get("VJA_MATCH_MODEL", "openai/gpt-5.6-luna")
+    model = os.environ.get("VJA_MATCH_MODEL", "openai/gpt-6-luna")
     key_name = _provider_key_name(model)
     if not os.environ.get(key_name):
         pytest.skip(f"needs {key_name}")

@@ -85,7 +85,7 @@ def test_pipeline_runaway_match_cap_survives_every_deploy() -> None:
 def test_luna_matching_route_and_secret_survive_every_deploy() -> None:
     script = _SHIP.read_text(encoding="utf-8")
 
-    assert ': "${MATCH_MODEL_ROUTE:=openai/gpt-5.6-luna}"' in script
+    assert ': "${MATCH_MODEL_ROUTE:=openai/gpt-6-luna}"' in script
     assert ': "${MATCH_REASONING_EFFORT:=low}"' in script
     assert script.count("OPENAI_API_KEY=OPENAI_API_KEY:latest") == 2
     # Both targets extend LAYER2_ENV rather than replacing it (SERVICE_ENV / JOB_ENV), so the route

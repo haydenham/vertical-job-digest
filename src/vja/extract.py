@@ -1,7 +1,7 @@
 """Layer-2 LLM extraction (P5.2) — the first model code in the system.
 
 Turns the unstructured postings Stage A kept in-scope into the structured fields matching needs,
-using the configured cheap tier (Haiku 4.5 by default — D-005/D-090) through the provider-neutral
+using the configured cheap tier (Haiku 5.5 by default — D-005/D-090) through the provider-neutral
 LLM boundary for a schema-validated result. Runs only on open postings with `extracted_at IS NULL`
 that pass the free Stage-A title gate, so it's the in-scope, uncached remainder — the ~1k backlog
 once, then pennies a night. Synchronous calls (latency lands in-process; the absolute spend is
@@ -62,8 +62,12 @@ from vja.text import html_to_text
 
 logger = logging.getLogger("vja.extract")
 
-_DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
+_DEFAULT_MODEL = "anthropic/claude-haiku-5-5"
 _MAX_TOKENS = 1024
+# Haiku 5.5 runs adaptive thinking by default at `medium`, and thinking shares `_MAX_TOKENS` with
+# the answer. Field extraction is not a reasoning task, so pin `low` (D-114) — Anthropic's
+# recommended lever over disabling thinking outright.
+_DEFAULT_EXTRACT_EFFORT = "low"
 _MAX_SOURCE_CHARS = 12_000  # ~3-4k tokens; caps a pathologically large payload
 #: Consecutive per-posting failures that stop the stage. Bounds a systematically broken Layer 2 to
 #: one run's worth of billed calls instead of the whole backlog, every run, indefinitely — the
@@ -76,6 +80,11 @@ _MAX_CONSECUTIVE_FAILURES = 20
 def _extract_model() -> str:
     """LiteLLM model route, read at call time so deployments can switch without code changes."""
     return os.environ.get("VJA_EXTRACT_MODEL") or _DEFAULT_MODEL
+
+
+def _extract_effort() -> str:
+    """Configured reasoning effort, read at call time (mirrors `match._match_effort`)."""
+    return os.environ.get("VJA_EXTRACT_EFFORT") or _DEFAULT_EXTRACT_EFFORT
 
 
 _SYSTEM_PROMPT = """\
@@ -104,8 +113,8 @@ Apply these literal rules:
   the posting says anything about pay, even when comp_min / comp_max are null.
 - posted_at: the posting/start date if present (ISO 8601 preferred); null otherwise."""
 
-# The instruction prefix is stable across every posting in a run, so mark it cacheable. NB: Haiku
-# 4.5's minimum cacheable prefix is 4096 tokens and this prompt is well under that, so it likely
+# The instruction prefix is stable across every posting in a run, so mark it cacheable. NB: Haiku's
+# minimum cacheable prefix (4096 tokens on 4.5) is well above this prompt, so it likely
 # won't trigger today — kept as the correct pattern (the token meter now shows whether it caches).
 # The real extraction lever (unique descriptions are uncacheable) is the Batch API, not caching.
 DetailResolver = Callable[[Employer, str], dict[str, Any]]
@@ -232,6 +241,7 @@ def extract_posting(client: StructuredLLM, source_text: str) -> StructuredResult
         system=_SYSTEM_PROMPT,
         user=source_text,
         response_model=ExtractedFields,
+        reasoning_effort=_extract_effort(),
         cache_system=True,
     )
 

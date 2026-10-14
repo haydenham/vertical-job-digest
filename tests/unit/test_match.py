@@ -197,7 +197,7 @@ def test_match_posting_passes_effort_default_and_env_override(
 ) -> None:
     client = _FakeClient(_RESULT)
     match_posting(cast("StructuredLLM", client), "resume", (), "Title: SWE")
-    assert client.calls[0]["model"] == "openai/gpt-5.6-luna"
+    assert client.calls[0]["model"] == "openai/gpt-6-luna"
     assert client.calls[0]["reasoning_effort"] == "low"  # D-090 selected default
 
     monkeypatch.setenv("VJA_MATCH_EFFORT", "medium")
